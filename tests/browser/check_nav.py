@@ -186,6 +186,17 @@ def main():
                 print(f"         prefetched tier {tier} "
                       f"(window is 1280 wide, so 1280 is right; 1600 would be waste)")
 
+        # A link is not a Back. Restoring a remembered position on an ordinary
+        # navigation dropped you into the middle of an album you had merely
+        # linked to, which is not what following a link means.
+        b.goto(URL)
+        b.eval("window.scrollTo(0, 2000)")
+        b.settle()
+        b.goto("about:blank")
+        b.goto(URL)
+        failures += not check("following a link starts at the top",
+                              b.eval("Math.round(window.scrollY)"), 0)
+
         # A photo opened cold must not send you off the site.
         b.goto("about:blank")
         b.goto(URL.rstrip("/").rsplit("/a/", 1)[0] + opened)

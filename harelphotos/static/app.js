@@ -120,12 +120,23 @@
       });
     }, { passive: true });
 
-    // Only on a fresh navigation: for Back and Forward the browser restores
-    // the position itself, and doing it twice fights with it.
+    // Only for Back and Forward, never for a fresh navigation.
+    //
+    // This was the other way round, from when Escape left a photo by
+    // navigating to the album rather than stepping back through history. The
+    // effect was that following an ordinary *link* to an album you had visited
+    // earlier dropped you somewhere in its middle, which is not what a link
+    // means -- and Back, the one case where restoring is wanted, was skipped.
+    //
+    // It is still needed for Back: the browser restores a position of its own,
+    // but the justified rows are laid out afterwards and change every height,
+    // so its guess lands in the wrong place. When the page comes back from the
+    // bfcache instead, none of this runs at all -- the document was never torn
+    // down, and the position was never lost.
     var entries = window.performance && window.performance.getEntriesByType
       ? window.performance.getEntriesByType("navigation") : [];
     var kind = entries.length ? entries[0].type : "navigate";
-    if (kind !== "navigate") return;
+    if (kind !== "back_forward") return;
 
     var y = 0;
     try { y = parseInt(sessionStorage.getItem(key), 10) || 0; } catch (e) { y = 0; }

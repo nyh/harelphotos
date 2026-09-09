@@ -280,7 +280,9 @@ and `show_gps = false` in `config.toml` suppresses both.
 
 `Esc`, a downward swipe and the browser's Back button all return you to the
 album **exactly where you left it**, in one step, however many photos you
-paged through first.
+paged through first. Following an ordinary link to an album always starts at
+the top, even one you were part-way down earlier — a link means the album, not
+where you happened to be in it last time.
 
 That last part is deliberate. Paging with the arrow keys replaces the current
 page rather than stacking a new one, so viewing twenty photos does not put
