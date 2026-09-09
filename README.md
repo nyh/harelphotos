@@ -4,8 +4,9 @@ A self-hosted photo gallery for a personal collection — a Google-Photos-like
 browsing experience over an ordinary directory tree of JPEGs, served from a
 small Linux server to a handful of invited family members.
 
-> **Status: in progress.** The indexing half works — see
-> [`MANUAL.md`](MANUAL.md). There is no web interface yet.
+> **Status: in progress.** Indexing, image generation, browsing and local
+> accounts all work — see [`MANUAL.md`](MANUAL.md). Still to come: Google
+> sign-in and the server deployment behind Apache with TLS.
 > [`DESIGN.md`](DESIGN.md) is the plan being followed.
 
 ## The problem

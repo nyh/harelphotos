@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% import "_chrome.html" as chrome %}
+{% import "_chrome.html" as chrome with context %}
 {% block title %}{{ photo.title or photo.name }} — {{ cfg.ui.site_title }}{% endblock %}
 {% block body %}
 <div class="viewer">
@@ -52,6 +52,8 @@
     </dl>
   </aside>
 </div>
+
+{{ chrome.footer(viewer) }}
 
 <script id="nav-data" type="application/json">
 {{ {"prev": prev.page_url if prev else none,

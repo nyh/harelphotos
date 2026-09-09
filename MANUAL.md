@@ -7,9 +7,9 @@ they are — the measurements, the alternatives rejected, the plan for what isn'
 built yet — see [DESIGN.md](DESIGN.md). Where the two disagree, this file is
 right and DESIGN.md is out of date.
 
-> **Implemented so far:** indexing a photo tree, generating its images, and
-> browsing them in a web interface. There is **no login yet** — anyone who can
-> reach the server sees everything, so keep it on `localhost` until M5.
+> **Implemented so far:** indexing a photo tree, generating its images,
+> browsing them in a web interface, and logging in with a local account. Not
+> yet: Google sign-in, and the real server deployment behind Apache with TLS.
 
 ---
 
@@ -78,6 +78,9 @@ harelphotos user add nyh --display-name Nadav --admin
 harelphotos scan
 harelphotos check
 ```
+
+The account is only needed once you want the login page (`serve --login`); the
+local server does not require one by default.
 
 ### Every time after that
 
@@ -220,7 +223,7 @@ photos that already have a place, after a dataset update.
 `scan` does not geocode automatically; run this once after the dataset is
 installed, and again when you add photos with GPS.
 
-### `harelphotos serve [--bind ADDR] [--port N]`
+### `harelphotos serve [--login] [--bind ADDR] [--port N]`
 
 Run the web interface. Listens on `127.0.0.1:5000` by default, so only your own
 machine can reach it:
@@ -244,10 +247,25 @@ After upgrading the software, run `scan` once: if the way images are produced
 has changed, it regenerates them by itself, without your having to know that
 anything changed.
 
-**There is no authentication yet.** Binding anywhere other than localhost hands
-your whole collection to anyone on the network; the command warns you if you
-do. Logging in arrives in M5, and the server deployment (Apache, TLS) in M8 —
-until then this is the development server and should stay on localhost.
+**No login is required by default.** This is the development server on your own
+machine, and typing a password to look at your own photos is friction for
+nothing. To exercise the real login page instead:
+
+```sh
+harelphotos serve --login
+```
+
+You will need an account first — see [`user add`](#harelphotos-user--creating-accounts).
+Pages served without a login carry a banner saying so, so a window left open
+for a week cannot be mistaken for the real thing.
+
+Binding anywhere other than `127.0.0.1` **without** `--login` is refused
+outright, because it would hand the whole collection to anyone who can reach
+the machine. Use `--login` (recommended), or `--insecure` if you really mean
+it — testing on a phone over your own LAN, say.
+
+This is still the development server; the real deployment behind Apache with
+TLS is not built yet.
 
 What you can do: browse albums, follow subdirectories, click a photo to see it
 large, move between photos with the arrow keys or by swiping, press `i` for
@@ -288,20 +306,41 @@ anything derived from it.
 Print the effective configuration — the quickest way to confirm the file you
 edited is the file being read.
 
-### `harelphotos user ...`
+### `harelphotos user ...` — creating accounts
 
-```
-harelphotos user add NAME [--display-name X] [--admin]
-                         [--google EMAIL] [--google-only]
-harelphotos user list
-harelphotos user passwd NAME
-harelphotos user del NAME
-harelphotos user revoke NAME     # invalidate that user's existing sessions
+```sh
+harelphotos user add nyh --display-name Nadav --admin
 ```
 
-`NAME` is the identity used in `.album.toml` access lists. For a Google-only
-account, use the email address as the name. (Nothing uses these accounts yet —
-logging in arrives with the web interface in M5.)
+That prompts for a password twice and writes the account to `users.toml`. To
+set one non-interactively — handy for a throwaway test account, but it lands in
+your shell history, so don't do it for a real password:
+
+```sh
+harelphotos user add nyh --password nyh --display-name Nadav --admin
+```
+
+Then log in at <http://127.0.0.1:5000/> with `nyh` / `nyh`, remembering that
+`serve` needs `--login` for the login page to appear at all.
+
+The rest:
+
+```sh
+harelphotos user list                        # who exists, and how they log in
+harelphotos user passwd NAME                 # change a password
+harelphotos user del NAME                    # remove an account
+harelphotos user revoke NAME                 # invalidate their live sessions
+harelphotos user add NAME --google EMAIL     # may also use Google sign-in
+harelphotos user add EMAIL --google-only     # Google only, no password
+```
+
+`NAME` is the identity that appears in `.album.toml` access lists, so keep it
+short and stable. For a Google-only account, use the email address as the name.
+
+`--admin` bypasses every access list — useful for yourself, and for nobody
+else. `revoke` is what to reach for if a phone is lost or a relative should
+stop having access; it invalidates their existing sessions everywhere without
+deleting the account.
 
 Three commands are still stubs and will say so: `cover` (set an album's cover
 photo from the command line), `acl` (inspect or set who may see a directory),
@@ -491,6 +530,29 @@ Names come from `users.toml`. `@name` refers to a group defined under
 `[groups]` in `config.toml`; groups may contain other groups.
 
 ---
+
+## Logging in
+
+With `serve --login`, everything requires an account: the only pages a stranger
+can reach are the front page, the login form, and the privacy and terms text.
+Requests for images or JSON are refused outright rather than answered with a
+login page, so a stale tab does not fill up with HTML where pictures should be.
+
+A few details that are deliberate:
+
+- **A link you send to family works when they are logged out.** Opening
+  `/a/2019/summer/` shows the login page and returns you to that album
+  afterwards, rather than dumping you at the top level.
+- **Logging out is a button, not a link.** A plain link would be followed by
+  link prefetchers, mail scanners and preview bots, each of which would
+  silently log you out.
+- **A wrong password never says which part was wrong**, and an unknown username
+  takes just as long as a real one, so the site does not reveal who has an
+  account.
+- **Repeated failures are slowed down** — a few seconds, growing to thirty —
+  per address and username. A relative mistyping their password is unaffected.
+- **Sessions last 30 days** and survive a restart. They stop working
+  immediately if you delete the account or run `user revoke`.
 
 ## Accounts: `users.toml`
 

@@ -194,7 +194,9 @@ def safe_next(raw: str | None) -> str | None:
     """
     if not raw:
         return None
-    if not raw.startswith("/") or raw.startswith("//"):
+    # "//host" is protocol-relative, and browsers also treat "/\host" that
+    # way, so both must go. This is why it cannot just be startswith("/").
+    if not raw.startswith("/") or raw[:2] in ("//", "/\\"):
         return None
     parts = urlsplit(raw)
     if parts.scheme or parts.netloc:
