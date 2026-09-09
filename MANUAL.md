@@ -293,9 +293,9 @@ thumbnails already loaded, so it appears instantly instead of being rebuilt.
 Arriving straight at a photo — a bookmark or a pasted link — has no album
 behind it, so `Esc` navigates to the album normally instead.
 
-The photo is sized to the space actually available, measured after the page is
-laid out rather than assumed, and the whole page is one screenful — bar, photo,
-nothing to scroll. When vertical space is scarce, a phone held sideways or a
+The photo fills whatever space is left over and is letterboxed inside it, so it
+appears at its final size immediately rather than settling a moment later, and
+the whole page is one screenful — bar, photo, nothing to scroll. When vertical space is scarce, a phone held sideways or a
 short window, the top bar shrinks to about a third of its height rather than
 floating over the photo: covering part of the picture to make the rest slightly
 bigger is the wrong trade on a page whose entire purpose is looking at it.

@@ -211,24 +211,37 @@ h2.section:first-child { margin-block-start: 0.25rem; }
   flex: 1;
   display: grid;
   place-items: center;
-  padding: 0.5rem;
   min-block-size: 0;
 }
+/* The photo fills the stage and `object-fit` letterboxes it inside.
+ *
+ * The obvious `max-block-size: 100%` does not work here: a percentage
+ * max-height needs a containing block with a definite height, and against a
+ * flex-sized one it silently resolves to no constraint at all -- so the image
+ * sized the stage instead of the stage bounding the image, and tall photos ran
+ * off the bottom of the screen.
+ *
+ * Filling the box also takes layout out of `sizes`' hands. With `width: auto`
+ * and a w-descriptor srcset the browser lays an image out at exactly the width
+ * `sizes` claims, which meant a wrong estimate was not a resolution question
+ * but a visibly wrong size -- and correcting it from JavaScript made the photo
+ * grow a moment after it appeared. Now `sizes` only chooses which file to
+ * fetch, and the geometry is settled before the first paint.
+ */
 .stage img {
-  max-inline-size: 100%;
-  /* 100% of the stage, which flex has already sized to exactly the space the
-     bar left over. The old `calc(100dvh - 8rem)` guessed at the bar's height,
-     so it both wasted space when the bar was shorter and overflowed when it
-     wrapped to two lines. */
-  max-block-size: 100%;
-  inline-size: auto;
-  block-size: auto;
+  position: absolute;
+  inset: 0.5rem;
+  inline-size: calc(100% - 1rem);
+  block-size: calc(100% - 1rem);
   object-fit: contain;
-  border-radius: 4px;
 }
 
 .nav {
   position: absolute;
+  /* Above the photo. The image is absolutely positioned too and comes after
+     the "previous" link in the document, so without this it paints over that
+     arrow and swallows the click. */
+  z-index: 1;
   inset-block: 0;
   display: flex;
   align-items: center;

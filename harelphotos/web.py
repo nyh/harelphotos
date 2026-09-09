@@ -495,16 +495,21 @@ def _register_filters(app: Flask, cfg: Config) -> None:
         viewed.
         """
         ar = max(0.2, min(5.0, photo.aspect))
-        # Only the pre-JavaScript fallback: app.js measures the stage and
-        # replaces this as soon as it runs, and again on rotation. It has to
-        # be an estimate here because the height of the chrome is not known
-        # until it has been laid out -- and being wrong is not just a
-        # resolution question, since the browser lays the image out at
-        # whatever width `sizes` claims.
+        # An upper bound, not an exact figure, and deliberately so.
         #
-        # dvh, not vh: on a phone vh is the height with the browser toolbar
-        # hidden, which overstates the space by around 10%.
-        return f"min(100vw, calc((100dvh - 7rem) * {ar:.3f}))"
+        # The CSS clamps the photo to the space left over, so this no longer
+        # decides how big it appears -- only which file is fetched. Erring
+        # slightly large therefore costs at most a tier, and never upscales.
+        # Erring *small* used to be the problem: the browser laid the image out
+        # at exactly what this claimed, so JavaScript had to measure and correct
+        # it afterwards, and the photo visibly grew a moment after appearing.
+        #
+        # Being a CSS expression in viewport units, the browser re-evaluates it
+        # on resize and rotation by itself. No JavaScript is involved at all.
+        #
+        # dvh, not vh: on a phone vh is the height with the toolbar hidden,
+        # which overstates the space by around 10%.
+        return f"min(100vw, calc(100dvh * {ar:.3f}))"
 
     @app.template_filter("grid_sizes")
     def grid_sizes(photo: Photo) -> str:
