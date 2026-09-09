@@ -1,5 +1,7 @@
 """End-to-end CLI behaviour for the M1 commands."""
 
+from pathlib import Path
+
 import pytest
 
 from harelphotos import cli, config as config_mod, db, users as users_mod
@@ -165,3 +167,21 @@ def test_check_env_fails_when_avif_is_missing(project, monkeypatch, capsys):
     monkeypatch.setattr(features, "check", lambda f: False if f == "avif" else True)
     assert cli.main(["check", "--env"]) == 1
     assert "avif=NO" in capsys.readouterr().out
+
+
+def test_check_env_works_with_no_config_at_all(tmp_path, monkeypatch, capsys):
+    """The first thing run on a fresh server, before 'init'.
+
+    Requiring a config here defeated the whole purpose: the machine-level
+    checks — python version, Pillow AVIF, Apache modules, SELinux — are
+    precisely what you want *before* configuring anything.
+    """
+    monkeypatch.delenv(config_mod.CONFIG_ENV, raising=False)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(config_mod, "CONFIG_SEARCH", (Path("config.toml"),))
+    assert cli.main(["check", "--env"]) in (0, 1)
+    out = capsys.readouterr()
+    assert "python" in out.out
+    assert "Pillow AVIF support" in out.out
+    assert "none yet" in out.out          # says what is missing, does not abort
+    assert "harelphotos init" in out.err

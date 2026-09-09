@@ -57,14 +57,20 @@ def _mode(path: Path) -> str:
         return "?"
 
 
-def run(cfg: Config, url: str | None = None) -> Report:
+def run(cfg: Config | None, url: str | None = None) -> Report:
+    """Check the machine. `cfg` may be None: this is meant to be the first
+    thing run on a new server, before anything is configured, and the
+    machine-level checks do not need a config to be useful."""
     r = Report()
     _python(r)
-    _paths(r, cfg)
-    _secrets(r, cfg)
-    _index(r, cfg)
     _apache(r, cfg)
     _selinux(r, cfg)
+    if cfg is None:
+        r.add(INFO, "configuration", "none yet — run 'harelphotos init' for the rest")
+    else:
+        _paths(r, cfg)
+        _secrets(r, cfg)
+        _index(r, cfg)
     if url:
         _live(r, url)
     return r
@@ -233,7 +239,7 @@ def _index(r: Report, cfg: Config) -> None:
           else "not installed (harelphotos init --geonames)")
 
 
-def _apache(r: Report, cfg: Config) -> None:
+def _apache(r: Report, cfg: Config | None) -> None:
     httpd = shutil.which("httpd") or shutil.which("apache2")
     if not httpd:
         r.add(INFO, "apache", "not installed here (fine on a workstation)")
@@ -256,11 +262,11 @@ def _apache(r: Report, cfg: Config) -> None:
         r.add(verdict, f"mod_{mod.replace('_module', '')}",
               ("loaded" if present else "not loaded") + f" — {why}")
 
-    if cfg.sendfile_header == "X-Sendfile" and "xsendfile_module" not in out:
+    if cfg and cfg.sendfile_header == "X-Sendfile" and "xsendfile_module" not in out:
         r.add(FAIL, "sendfile_header", "set to X-Sendfile but mod_xsendfile is not loaded")
 
 
-def _selinux(r: Report, cfg: Config) -> None:
+def _selinux(r: Report, cfg: Config | None) -> None:
     if not shutil.which("getenforce"):
         return
     try:
@@ -282,7 +288,7 @@ def _selinux(r: Report, cfg: Config) -> None:
         on = out.endswith("on")
         r.add(OK if on else FAIL, boolean, f"{'on' if on else 'off'} — {why}")
 
-    if cfg.sendfile_header == "X-Sendfile":
+    if cfg and cfg.sendfile_header == "X-Sendfile":
         for label, path in (("photos", cfg.photo_root), ("derived", cfg.derived_root)):
             ctx = _selinux_context(path)
             fine = ctx and ("httpd_sys_content_t" in ctx or "public_content" in ctx)

@@ -460,8 +460,15 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
 
 def cmd_check(args: argparse.Namespace) -> int:
-    cfg = _load_config(args)
     if args.env:
+        # Runnable before anything is configured: this is the first thing to
+        # run on a new machine, and the python/apache/selinux checks are
+        # exactly what you want at that point.
+        try:
+            cfg = _load_config(args)
+        except config_mod.ConfigError as e:
+            cfg = None
+            print(f"note: {e}\n", file=sys.stderr)
         r = envcheck.run(cfg, url=args.url)
         print(r.render())
         print()
@@ -472,6 +479,7 @@ def cmd_check(args: argparse.Namespace) -> int:
         else:
             print("everything checks out")
         return 1 if r.failures else 0
+    cfg = _load_config(args)
     conn = db.open_index(cfg.index_db, read_only=True)
     r = check_mod.run(cfg, conn, verify_files=args.verify_files)
     print(f"index          {cfg.index_db}")
