@@ -224,18 +224,27 @@ Local accounts in `users.toml` are enough, and nothing below is required. It
 exists so relatives can use a Google account they already have instead of
 another password.
 
-The server does not have to be on Google Cloud. You are only registering an
-OAuth client, which is free.
+Your server does not have to be on Google Cloud, and this costs nothing. All
+you are doing is registering an OAuth client: an entry that tells Google "this
+site may ask me to confirm who someone is". No Google service runs your code
+and nothing is billed.
 
-1. <https://console.cloud.google.com/> → create a project.
-2. **APIs & Services → OAuth consent screen** → External. Fill in the app name,
-   your email, and the two links your own site already serves:
-   `https://photos.example.org/privacy` and `/terms`. Edit the text of those
-   two pages in `/etc/harelphotos/` first.
-3. **Credentials → Create credentials → OAuth client ID → Web application.**
-   Authorised redirect URI, exactly:
+### Register the client
+
+1. <https://console.cloud.google.com/> → create a project (any name).
+2. Find the consent screen. Google has moved it around; it is under
+   **APIs & Services → OAuth consent screen**, or **Google Auth Platform →
+   Branding / Audience** in the newer layout. Choose **External**.
+   Fill in the app name, your email, and the two links your own site already
+   serves: `https://photos.example.org/privacy` and `/terms`. Edit the text of
+   those pages in `/etc/harelphotos/` first — they are template text.
+3. Scopes: add **`openid`** and **`email`**, nothing else. This matters; see
+   below.
+4. **Credentials → Create credentials → OAuth client ID → Web application.**
+   Authorised redirect URI, exactly, with no trailing slash:
    `https://photos.example.org/auth/google/callback`
-4. Put the client ID and secret in the config:
+   Google compares this character for character.
+5. Put the client ID and secret in `/etc/harelphotos/config.toml` and restart:
 
 ```toml
 [google]
@@ -244,19 +253,56 @@ client_id     = "....apps.googleusercontent.com"
 client_secret = "..."
 ```
 
-While the consent screen is in **Testing**, only accounts you list as test
-users can sign in, and their sessions expire after a week. To lift that, press
-**Publish app**. For the scopes used here — email address only — publishing is
-immediate and free: Google's verification review applies to sensitive scopes,
-which this does not request.
+The "Sign in with Google" button appears on the login page only when
+`enabled = true`, so nothing changes until you set it.
 
-Signing in with Google authenticates; it does not authorise. The email address
-still has to appear in `users.toml`, so nobody can grant themselves access by
-having a Google account:
+### Press "Publish app", or you will maintain two lists
+
+This is the part worth understanding, and the answer to "do I have to list
+everyone twice?"
+
+A consent screen starts in **Testing**. In that state Google will only let
+accounts on its own **Test users** list sign in at all — so every relative has
+to be added *both* in the Google console *and* in `users.toml`, and their
+sessions expire after seven days. That is the double bookkeeping, and it is
+not something you have to live with.
+
+Set the publishing status to **In production** ("Publish app"). Then Google
+maintains no list: anyone with a Google account can get as far as Google
+confirming who they are, and `users.toml` alone decides who is actually let in.
+One list, the one you already keep.
+
+Publishing is immediate and free **because of step 3 above**. Google's
+verification review — the one that takes weeks and asks for a demo video —
+applies to *sensitive* and *restricted* scopes, such as reading someone's Drive
+or their Google Photos. An email address is neither. Ask for nothing but
+`openid email` and there is nothing to review.
+
+The unverified-app warning screen is likewise a sensitive-scope thing. With
+these scopes your relatives see the ordinary Google account chooser.
+
+### Google authenticates; `users.toml` authorises
+
+Being published does **not** mean anyone can see your photos. All Google does
+is hand us a verified email address. That address must already be on an
+account here, or the sign-in is refused with "has not been invited":
 
 ```sh
-harelphotos user add someone@gmail.com --google
+harelphotos user add aunt --google aunt@gmail.com          # password too
+harelphotos user add cousin --google cousin@gmail.com --google-only
 ```
+
+`--google-only` means no password exists for that account at all: Google is
+the only way in. Use it for relatives you would rather not invent a password
+for.
+
+Two details the code insists on, both about not letting the wrong person in:
+
+- The address must be **verified** with Google. An unverified one is just a
+  string somebody typed into a signup form, so accepting it would let anyone
+  claim a relative's address.
+- The token must have been issued to *your* client ID. A genuine Google token
+  minted for some other site is not accepted here.
 
 
 ## Afterwards
