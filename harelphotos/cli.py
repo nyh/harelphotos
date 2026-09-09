@@ -246,6 +246,17 @@ def _progress(done: int, total: int, elapsed: float) -> None:
     _bar("reading metadata", done, total, elapsed)
 
 
+def _walk_progress(dirs: int, photos: int, elapsed: float, final: bool) -> None:
+    """Phase 1 has no total to count towards, so show what it has found."""
+    rate = photos / elapsed if elapsed > 0 else 0
+    sys.stderr.write(
+        f"\r\033[K  looking for photos: {dirs:,} director{'y' if dirs == 1 else 'ies'}, "
+        f"{photos:,} photos"
+        + (f" · {rate:,.0f}/s" if elapsed > 1 else "")
+    )
+    sys.stderr.flush()
+
+
 def _derive_progress(done: int, total: int, elapsed: float) -> None:
     _bar("generating images", done, total, elapsed)
 
@@ -258,6 +269,10 @@ def cmd_scan(args: argparse.Namespace) -> int:
     lock_path = cfg.state_dir / "scan.lock"
     if args.force_unlock and lock.break_lock(lock_path):
         print(f"removed stale lock {lock_path}")
+
+    if not args.quiet:
+        target = cfg.photo_root / args.dir if args.dir else cfg.photo_root
+        print(f"scanning {target}", file=sys.stderr)
 
     if args.dry_run:
         # A dry run must not touch the real index, so point the scanner at a
@@ -281,6 +296,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
                 full=args.full,
                 repair=args.repair,
                 headers_only=args.headers_only,
+                walk_progress=None if args.quiet else _walk_progress,
                 progress=None if args.quiet else _progress,
                 derive_progress=None if args.quiet else _derive_progress,
             )

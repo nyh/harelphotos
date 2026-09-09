@@ -141,7 +141,7 @@ Index the photo tree. Safe to interrupt and re-run.
 
 | option | |
 |---|---|
-| `--dir SUBPATH` | index only this subdirectory (and prune only within it) |
+| `--dir SUBPATH` | work only within this subdirectory, in every phase |
 | `--jobs N` | parallel workers (default: all cores) |
 | `--limit N` | stop after N photos, to chip away at a big backlog |
 | `--full` | re-read all metadata and regenerate all images |
@@ -150,12 +150,18 @@ Index the photo tree. Safe to interrupt and re-run.
 | `--dry-run` | report what would happen, write nothing |
 | `--force-unlock` | remove a lock left behind by a killed run |
 
-A scan runs in two visible phases, each with its own progress line:
+A scan runs in three visible phases, each with its own progress line:
 
 ```
-  reading metadata: 146/146 · 17.2/s · ETA 0:00
-  generating images: 92/146 · 4.9/s · ETA 0:11
+scanning /srv/photos/2024/08
+  looking for photos: 12 directories, 4,318 photos · 287/s
+  reading metadata: 146/4,318 · 17.2/s · ETA 4:02
+  generating images: 92/4,318 · 4.9/s · ETA 14:11
 ```
+
+The first phase has no total to count towards — it is still finding out how
+much there is — so it shows what it has found so far. On a network mount this
+phase can take a while on its own, because every file needs a round trip.
 
 "Reading metadata" means reading just the *start* of each photo file — the part
 holding the date, camera, GPS and dimensions — without decoding the picture

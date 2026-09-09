@@ -201,6 +201,9 @@ class Scanner:
         self.cfg = cfg
         self.conn = conn
         self.stats = ScanStats()
+        self._walk_progress = None
+        self._walk_started = 0.0
+        self._walk_last_shown = 0.0
         self.generation = self._next_generation()
 
     def _next_generation(self) -> int:
@@ -223,15 +226,34 @@ class Scanner:
 
     # ---------------------------------------------------------------- phase 1
 
-    def walk(self, subpath: str = "") -> None:
+    def walk(self, subpath: str = "", progress=None) -> None:
         """Depth-first walk, upserting rows and flagging what changed."""
         root = self.cfg.photo_root
         start = root / subpath if subpath else root
         if not start.is_dir():
             raise NotADirectoryError(f"not a directory: {start}")
 
+        # On a network mount every stat is a round trip, so this phase can run
+        # for a long time with nothing to show. Report as we go.
+        self._walk_progress = progress
+        self._walk_started = time.monotonic()
+        self._walk_last_shown = 0.0
         parent_id, parent_chain = self._ensure_ancestors(subpath)
         self._walk_dir(start, subpath, parent_id, parent_chain)
+        if progress:
+            progress(self.stats.dirs_seen, self.stats.photos_seen,
+                     time.monotonic() - self._walk_started, True)
+
+    def _report_walk(self) -> None:
+        if not self._walk_progress:
+            return
+        now = time.monotonic()
+        if now - self._walk_last_shown < PROGRESS_INTERVAL:
+            return
+        self._walk_last_shown = now
+        self._walk_progress(
+            self.stats.dirs_seen, self.stats.photos_seen, now - self._walk_started, False
+        )
 
     def _ensure_ancestors(self, subpath: str) -> tuple[int | None, acl.Chain]:
         """Create rows for the directories above `subpath`, without recursing.
@@ -316,6 +338,7 @@ class Scanner:
             "UPDATE dirs SET n_photos = ?, n_subdirs = ? WHERE id = ?",
             (n_photos, n_subdirs, dir_id),
         )
+        self._report_walk()
         return dir_id
 
     def _upsert_dir(
@@ -459,22 +482,36 @@ class Scanner:
 
     # ---------------------------------------------------------------- phase 2
 
-    def pending_headers(self, limit: int | None = None) -> list[tuple[int, str]]:
+    def _subtree_clause(self, subpath: str) -> tuple[str, tuple]:
+        """Restrict a query to the subtree the user actually asked about.
+
+        `--dir X` means X, consistently across every phase. Without this,
+        asking to scan one directory quietly picks up whatever work happens to
+        be outstanding elsewhere -- a surprising way to spend an hour.
+        """
+        if not subpath:
+            return "", ()
+        return " AND (d.path = ? OR d.path LIKE ?)", (subpath, f"{subpath}/%")
+
+    def pending_headers(
+        self, limit: int | None = None, subpath: str = ""
+    ) -> list[tuple[int, str]]:
+        clause, params = self._subtree_clause(subpath)
         sql = (
             "SELECT p.id, d.path, p.name FROM photos p JOIN dirs d ON d.id = p.dir_id "
-            "WHERE p.hdr_stale = 1 ORDER BY d.path, p.name"
+            "WHERE p.hdr_stale = 1" + clause + " ORDER BY d.path, p.name"
         )
         if limit:
             sql += f" LIMIT {int(limit)}"
         root = self.cfg.photo_root
         return [
             (r["id"], str(root / r["path"] / r["name"] if r["path"] else root / r["name"]))
-            for r in self.conn.execute(sql)
+            for r in self.conn.execute(sql, params)
         ]
 
     def read_headers(self, jobs: int | None = None, limit: int | None = None,
-                     progress=None) -> None:
-        pending = self.pending_headers(limit)
+                     progress=None, subpath: str = "") -> None:
+        pending = self.pending_headers(limit, subpath)
         if not pending:
             return
         jobs = jobs or self.cfg.scan.effective_jobs
@@ -531,12 +568,16 @@ class Scanner:
 
     # ---------------------------------------------------------------- phase 3
 
-    def pending_derives(self, limit: int | None = None) -> list[tuple[int, str, str, Config]]:
+    def pending_derives(
+        self, limit: int | None = None, subpath: str = ""
+    ) -> list[tuple[int, str, str, Config]]:
         """Photos whose derivatives do not match the current recipe."""
+        clause, params = self._subtree_clause(subpath)
         rows = self.conn.execute(
             "SELECT p.id, p.content_sig, p.deriv_key, d.path, p.name "
             "FROM photos p JOIN dirs d ON d.id = p.dir_id "
-            "WHERE p.content_sig IS NOT NULL ORDER BY d.path, p.name"
+            "WHERE p.content_sig IS NOT NULL" + clause + " ORDER BY d.path, p.name",
+            params,
         ).fetchall()
         jobs = []
         for r in rows:
@@ -550,8 +591,8 @@ class Scanner:
         return jobs
 
     def derive_all(self, jobs_n: int | None = None, limit: int | None = None,
-                   progress=None) -> None:
-        pending = self.pending_derives(limit)
+                   progress=None, subpath: str = "") -> None:
+        pending = self.pending_derives(limit, subpath)
         if not pending:
             return
         jobs_n = jobs_n or self.cfg.scan.effective_jobs
@@ -719,6 +760,7 @@ def scan(
     full: bool = False,
     repair: bool = False,
     headers_only: bool = False,
+    walk_progress=None,
     progress=None,
     derive_progress=None,
 ) -> ScanStats:
@@ -730,13 +772,15 @@ def scan(
         conn.execute("UPDATE photos SET deriv_key = NULL")
     if repair:
         s.stats.repaired = len(find_missing_derivatives(cfg, conn, repair=True))
-    s.walk(subpath)
+    s.walk(subpath, progress=walk_progress)
     conn.commit()
     orphans = s.prune(subpath)
     conn.commit()
-    s.read_headers(jobs=jobs, limit=limit, progress=progress)
+    s.read_headers(jobs=jobs, limit=limit, progress=progress, subpath=subpath)
     if not headers_only:
-        s.derive_all(jobs_n=jobs, limit=limit, progress=derive_progress or progress)
+        s.derive_all(
+            jobs_n=jobs, limit=limit, progress=derive_progress or progress, subpath=subpath
+        )
         s.prune_derivatives(orphans)
     s.rollup()
     return s.stats

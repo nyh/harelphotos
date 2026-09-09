@@ -350,6 +350,24 @@ def test_scanning_a_subdirectory_only(tree):
     assert conn.execute("SELECT count(*) AS n FROM photos").fetchone()["n"] == 8
 
 
+def test_subdirectory_scan_does_not_do_work_elsewhere(tree):
+    """`--dir X` means X, in every phase.
+
+    Otherwise asking to scan one directory quietly picks up whatever is
+    outstanding across the whole collection -- which, on a slow mount, is a
+    surprising way to spend an hour.
+    """
+    cfg, conn, photos = tree
+    scanner.scan(cfg, conn, headers_only=True, limit=1)      # leave work pending
+    pending_before = len(scanner.Scanner(cfg, conn).pending_headers())
+    assert pending_before > 2
+
+    stats = scanner.scan(cfg, conn, subpath="2019/01")
+    assert stats.photos_checked <= 2          # only what lives in 2019/01
+    # The rest is still waiting, untouched.
+    assert len(scanner.Scanner(cfg, conn).pending_headers()) >= pending_before - 2
+
+
 def test_limit_stops_early(tree):
     cfg, conn, _ = tree
     stats = scanner.scan(cfg, conn, limit=3)
