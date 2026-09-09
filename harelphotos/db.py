@@ -92,6 +92,10 @@ CREATE TABLE meta (
 """
 
 
+class NotWritable(Exception):
+    """The index exists but this user cannot write it."""
+
+
 class SchemaMismatch(Exception):
     """The database on disk was written by a different version of the schema."""
 
@@ -110,6 +114,11 @@ def connect(path: Path, *, create: bool = False, read_only: bool = False) -> sql
     if read_only:
         conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     else:
+        # Checked up front because SQLite's own message for this is "attempt
+        # to write a readonly database", which sends you looking for a
+        # read-only *connection* when the truth is a file this user cannot
+        # write -- typically because 'init' was run under sudo.
+        _require_writable(path)
         conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
@@ -117,6 +126,48 @@ def connect(path: Path, *, create: bool = False, read_only: bool = False) -> sql
         conn.execute("PRAGMA journal_mode = WAL")
         conn.execute("PRAGMA synchronous = NORMAL")
     return conn
+
+
+def _require_writable(path: Path) -> None:
+    """Fail early, and say what to do, when the index cannot be written.
+
+    SQLite needs to write the directory too, not just the file: WAL puts
+    ``-wal`` and ``-shm`` beside the database.
+    """
+    import os
+
+    for target, what in ((path, "index"), (path.parent, "directory holding it")):
+        if not target.exists():
+            continue
+        if not os.access(target, os.W_OK):
+            raise NotWritable(
+                f"cannot write {target} (the {what}): it is owned by "
+                f"{_owner(target)} and this is running as {_me()}.\n"
+                f"If 'harelphotos init' was run under sudo, fix it with:\n"
+                f"    sudo chown -R $USER {path.parent}"
+            )
+
+
+def _owner(path: Path) -> str:
+    try:
+        import pwd
+
+        return pwd.getpwuid(path.stat().st_uid).pw_name
+    except Exception:
+        return "another user"
+
+
+def _me() -> str:
+    """getlogin() raises with no controlling terminal, which is exactly the
+    case here -- under systemd or cron -- so never rely on it alone."""
+    import os
+
+    try:
+        import pwd
+
+        return pwd.getpwuid(os.getuid()).pw_name
+    except Exception:
+        return f"uid {os.getuid()}"
 
 
 def initialise(conn: sqlite3.Connection) -> None:

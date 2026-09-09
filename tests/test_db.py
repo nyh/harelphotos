@@ -106,3 +106,45 @@ def test_expected_columns_exist(tmp_path):
     assert {"acl_chain", "natkey", "sort_key", "order_json", "cfg_error", "location"} <= dirs
     assert {"content_sig", "deriv_key", "taken", "place", "landmark", "color"} <= photos
     conn.close()
+
+
+def test_a_root_owned_index_says_what_to_do(tmp_path, monkeypatch):
+    """SQLite's own message here is "attempt to write a readonly database",
+    which sends you looking for a read-only connection rather than at the file
+    permissions -- and running 'init' under sudo is an easy way to get here."""
+    import os
+
+    path = tmp_path / "index.sqlite"
+    db.create_index(path).close()
+    real_access = os.access
+    monkeypatch.setattr(
+        os, "access", lambda p, m: False if str(p) == str(path) else real_access(p, m)
+    )
+    with pytest.raises(db.NotWritable, match="chown"):
+        db.connect(path)
+
+
+def test_an_unwritable_directory_is_caught_too(tmp_path, monkeypatch):
+    """WAL writes -wal and -shm beside the database, so the directory must be
+    writable even when the database file itself is."""
+    import os
+
+    path = tmp_path / "index.sqlite"
+    db.create_index(path).close()
+    real_access = os.access
+    monkeypatch.setattr(
+        os, "access",
+        lambda p, m: False if str(p) == str(tmp_path) else real_access(p, m),
+    )
+    with pytest.raises(db.NotWritable, match="directory holding it"):
+        db.connect(path)
+
+
+def test_read_only_opens_are_unaffected(tmp_path, monkeypatch):
+    """Serving from an index you cannot write is entirely normal."""
+    import os
+
+    path = tmp_path / "index.sqlite"
+    db.create_index(path).close()
+    monkeypatch.setattr(os, "access", lambda p, m: False)
+    db.open_index(path, read_only=True).close()

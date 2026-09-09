@@ -673,7 +673,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return args.func(args)
     except (config_mod.ConfigError, users_mod.UsersError, db.SchemaMismatch,
-            initialise.InitError, lock.LockBusy, geonames.GeonamesError,
+            db.NotWritable, initialise.InitError, lock.LockBusy,
+            geonames.GeonamesError, sync_mod.SyncError,
             NotADirectoryError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
