@@ -7,6 +7,7 @@ registered route, so a new one cannot quietly forget the gate.
 
 from __future__ import annotations
 
+import re
 import time
 
 import pytest
@@ -456,3 +457,55 @@ def test_the_throttle_lives_outside_the_index(project):
     with app.test_client() as c:
         login(c, password="wrong")
     assert (project.state_dir / auth.AUTH_DB).exists()
+
+
+# ------------------------------------------------- the cookie and image caching
+#
+# These are about speed, but they live here because the mechanism is the
+# session cookie and getting them wrong the other way would leak images between
+# people sharing a browser.
+
+def test_the_session_cookie_is_not_resent_on_every_response(client):
+    """Otherwise every cached thumbnail is discarded on every page load.
+
+    Image responses carry `Vary: Cookie` -- Flask adds it to anything that
+    touched the session, and the access check always does -- so the cookie
+    value is part of the browser's cache key. Flask's default re-signs the
+    cookie on every response, giving it a fresh value each time and
+    invalidating the entire grid. Invisible on localhost; seconds of grey
+    placeholders over a real network on every back-navigation.
+    """
+    login(client)
+    resent = [client.get("/a/").headers.get("Set-Cookie") for _ in range(3)]
+    assert resent == [None, None, None], (
+        f"the session cookie was re-sent on an unchanged session: {resent}"
+    )
+
+
+def test_images_still_vary_on_cookie(client):
+    """The fix above must not become 'drop Vary: Cookie'.
+
+    Two people sharing a browser must not be served each other's images from
+    the disk cache. Now that the cookie value is stable, keeping this costs
+    nothing.
+    """
+    login(client)
+    body = client.get("/a/2019/01/").get_data(as_text=True)
+    m = re.search(r'srcset="([^" ]+)', body)
+    assert m, "no image in the album page to check"
+    r = client.get(m.group(1))
+    assert r.status_code == 200
+    assert "Cookie" in r.headers.get("Vary", ""), r.headers.get("Vary")
+
+
+def test_a_changed_session_still_sends_the_cookie(client):
+    """The other direction: logging in and out must still take effect."""
+    r = login(client)
+    assert r.status_code == 302
+    assert "session=" in (r.headers.get("Set-Cookie") or "")
+
+    token = _csrf_from(client.get("/a/").get_data(as_text=True))
+    out = client.post("/logout", data={"csrf": token})
+    assert out.status_code == 302
+    assert "session=" in (out.headers.get("Set-Cookie") or "")
+    assert client.get("/a/").status_code == 302      # really logged out

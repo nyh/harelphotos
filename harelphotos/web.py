@@ -59,6 +59,23 @@ def create_app(cfg: Config, *, require_login: bool = True) -> Flask:
         # no error anywhere (DESIGN.md 13.5).
         SESSION_COOKIE_SECURE=cfg.base_url.startswith("https://"),
         PERMANENT_SESSION_LIFETIME=timedelta(days=30),
+        # Send the cookie only when the session actually changes.
+        #
+        # Flask's default re-signs and re-sends it on *every* response, so its
+        # value differs each time. Image responses carry `Vary: Cookie` --
+        # Flask adds that to anything that touched the session, and the access
+        # check always does -- which makes the cookie part of the browser's
+        # cache key. A value that changes every response therefore invalidated
+        # every cached thumbnail on every page load, and the whole grid was
+        # re-downloaded each time it was displayed.
+        #
+        # On localhost that was invisible. Over HTTPS with real latency it was
+        # seconds of grey placeholders on every back-navigation.
+        #
+        # The cost is that the 30-day expiry no longer slides on each request:
+        # it now runs from the moment of login. For a family album that is a
+        # fair trade for a grid that paints instantly.
+        SESSION_REFRESH_EACH_REQUEST=False,
     )
 
     @app.before_request

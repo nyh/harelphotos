@@ -425,3 +425,4 @@ def test_album_urls_are_encoded_too(tmp_path):
     body = c.get("/a/").get_data(as_text=True)
     assert 'href="/a/a%20trip/"' in body
     assert c.get("/a/a%20trip/").status_code == 200
+
