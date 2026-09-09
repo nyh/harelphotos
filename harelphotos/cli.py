@@ -227,23 +227,28 @@ def _fmt_date(ts: int | None) -> str:
     return datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
 
 
-def _progress(done: int, total: int, elapsed: float) -> None:
+def _eta(seconds: float) -> str:
+    s = int(seconds)
+    if s >= 3600:
+        return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}"
+    return f"{s // 60}:{s % 60:02d}"
+
+
+def _bar(label: str, done: int, total: int, elapsed: float) -> None:
     rate = done / elapsed if elapsed > 0 else 0
     eta = (total - done) / rate if rate > 0 else 0
     sys.stderr.write(
-        f"\r  {done:,}/{total:,} headers · {rate:,.0f}/s · ETA {int(eta) // 60}:{int(eta) % 60:02d}   "
+        f"\r\033[K  {label}: {done:,}/{total:,} · {rate:,.1f}/s · ETA {_eta(eta)}"
     )
     sys.stderr.flush()
+
+
+def _progress(done: int, total: int, elapsed: float) -> None:
+    _bar("reading metadata", done, total, elapsed)
 
 
 def _derive_progress(done: int, total: int, elapsed: float) -> None:
-    rate = done / elapsed if elapsed > 0 else 0
-    eta = (total - done) / rate if rate > 0 else 0
-    sys.stderr.write(
-        f"\r  {done:,}/{total:,} images · {rate:,.1f}/s · "
-        f"ETA {int(eta) // 3600}:{int(eta) % 3600 // 60:02d}:{int(eta) % 60:02d}   "
-    )
-    sys.stderr.flush()
+    _bar("generating images", done, total, elapsed)
 
 
 def cmd_scan(args: argparse.Namespace) -> int:
@@ -288,7 +293,8 @@ def cmd_scan(args: argparse.Namespace) -> int:
             conn.commit()
 
     if not args.quiet:
-        sys.stderr.write("\r" + " " * 70 + "\r")
+        sys.stderr.write("\r\033[K")      # clear the progress line
+        sys.stderr.flush()
     print(stats.summary())
     for path in stats.skipped_names[:10]:
         print(f"  skipped (not valid UTF-8): {path}", file=sys.stderr)

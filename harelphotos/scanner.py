@@ -34,6 +34,11 @@ PHOTO_EXTENSIONS = {".jpg", ".jpeg"}
 SIG_BYTES = 16
 COMMIT_BATCH = 200
 
+# How often to redraw the progress line. Tied to the clock, not to a count of
+# items: deriving images runs at a few per second, so a count-based trigger
+# either never fires on a small directory or scrolls uselessly on a big one.
+PROGRESS_INTERVAL = 0.25
+
 
 @dataclass
 class ScanStats:
@@ -451,9 +456,10 @@ class Scanner:
         jobs = jobs or self.cfg.scan.effective_jobs
         done = 0
         started = time.monotonic()
+        last_shown = 0.0
 
         def apply(res: dict) -> None:
-            nonlocal done
+            nonlocal done, last_shown
             done += 1
             self.stats.photos_checked += 1
             if "error" in res:
@@ -483,8 +489,10 @@ class Scanner:
             )
             if done % COMMIT_BATCH == 0:
                 self.conn.commit()
-                if progress:
-                    progress(done, len(pending), time.monotonic() - started)
+            now = time.monotonic()
+            if progress and now - last_shown >= PROGRESS_INTERVAL:
+                last_shown = now
+                progress(done, len(pending), now - started)
 
         if jobs > 1 and len(pending) > 1:
             with multiprocessing.Pool(jobs, initializer=_nice, initargs=(self.cfg.scan.nice,)) as p:
@@ -525,13 +533,14 @@ class Scanner:
         jobs_n = jobs_n or self.cfg.scan.effective_jobs
         done = 0
         started = time.monotonic()
+        last_shown = 0.0
         sigs = {
             r["id"]: r["content_sig"]
             for r in self.conn.execute("SELECT id, content_sig FROM photos")
         }
 
         def apply(res: dict) -> None:
-            nonlocal done
+            nonlocal done, last_shown
             done += 1
             if res["error"]:
                 self.stats.derive_failed += 1
@@ -555,8 +564,10 @@ class Scanner:
                 )
             if done % COMMIT_BATCH == 0:
                 self.conn.commit()
-                if progress:
-                    progress(done, len(pending), time.monotonic() - started)
+            now = time.monotonic()
+            if progress and now - last_shown >= PROGRESS_INTERVAL:
+                last_shown = now
+                progress(done, len(pending), now - started)
 
         if jobs_n > 1 and len(pending) > 1:
             with multiprocessing.Pool(

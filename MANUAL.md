@@ -150,6 +150,18 @@ Index the photo tree. Safe to interrupt and re-run.
 | `--dry-run` | report what would happen, write nothing |
 | `--force-unlock` | remove a lock left behind by a killed run |
 
+A scan runs in two visible phases, each with its own progress line:
+
+```
+  reading metadata: 146/146 · 17.2/s · ETA 0:00
+  generating images: 92/146 · 4.9/s · ETA 0:11
+```
+
+**Generating images is much slower than reading metadata** — a few photos per
+second per core, against tens or hundreds per second — so most of the wait is
+the second line. The rate shown settles after the first few seconds; ignore the
+wild ETA at the very start.
+
 Only one `scan` may run at a time; a second exits with a message naming the
 first one's process. Photos that cannot be read are recorded and reported by
 `check` rather than stopping the run.
