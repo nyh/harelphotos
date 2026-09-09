@@ -942,6 +942,121 @@ Consequences for the design:
   without any cleverness: there are twelve "Grand Canyon"s in the US alone, but
   only one is within 5 km of you.
 
+#### Implementation spec
+
+Everything needed to build this without rediscovering it.
+
+**Downloads** (all from `https://download.geonames.org/export/dump/`, licensed
+CC BY 4.0 — attribute GeoNames in the info panel or the README):
+
+| file | size | when | purpose |
+|---|---:|---|---|
+| `cities500.zip` | 13.6 MB | `init --geonames` | 235,694 populated places ≥500 people |
+| `countryInfo.txt` | 31 KB | `init --geonames` | country code → country name |
+| `admin1CodesASCII.txt` | 152 KB | `init --geonames` | region code → region name ("US.FL" → Florida) |
+| `allCountries.zip` | 421 MB | `init --landmarks` | 13.46 M rows, filtered to landmarks |
+| `featureCodes_en.txt` | 59 KB | reference only | human-readable feature-code meanings |
+
+**File format.** Both dumps are UTF-8, tab-separated, no header, 19 columns.
+The ones we use, 0-indexed:
+
+```
+ 1  name              display name (often the LOCAL language: "Tour Eiffel")
+ 4  latitude          float
+ 5  longitude         float
+ 6  feature class     one letter: A admin, H water, L area, P populated, S spot, T terrain
+ 7  feature code      e.g. PPL, AMUS, MNMT, CNYN
+ 8  country code      ISO-3166 alpha-2
+10  admin1 code       joins to admin1CodesASCII as "<cc>.<admin1>"
+14  population        integer, often 0 outside class P
+```
+
+Rows with a malformed lat/lon are skipped rather than fatal — the dump has some.
+
+**Landmark feature codes.** The curated allowlist actually used in the
+measurements above; everything else in `allCountries` is discarded. The
+exclusions matter as much as the inclusions — `STM` streams, `CH` churches,
+`SCH` schools, `BLDG`, `HTL`, `PO` and `WLL` alone are over a million rows of
+noise that would label a family photo "Saint Mary Church":
+
+```python
+LANDMARK_CODES = {
+  # built                                                       radius 800 m
+  'MNMT','MUS','CSTL','ANS','HSTS','PAL','RUIN','PYR','TOWR','BDG','OBS','ZOO','THTR',
+  # natural points                                              radius 1.5 km
+  'MT','PK','VLC','FLLS','CAPE',
+  # areas                                                       radius 5 km
+  'PRK','AMUS','RESN','RESV','ISL','LK','LGN','BCH','GLCR','FRST','CNYN','DSRT','PLAT',
+}
+```
+
+**Local storage** — `$STATE/geonames.sqlite`, separate from `index.sqlite` so
+that deleting the rebuildable index doesn't force a 421 MB re-download:
+
+```sql
+CREATE TABLE places   (name TEXT, cc TEXT, admin1 TEXT, lat REAL, lon REAL, pop INTEGER);
+CREATE TABLE landmarks(name TEXT, cc TEXT, code TEXT,   lat REAL, lon REAL);
+CREATE INDEX places_ll    ON places(lat, lon);
+CREATE INDEX landmarks_ll ON landmarks(lat, lon);
+CREATE TABLE countries(cc TEXT PRIMARY KEY, name TEXT);
+CREATE TABLE admin1(key TEXT PRIMARY KEY, name TEXT);   -- key = "US.FL"
+```
+
+**Nearest-neighbour lookup.** No k-d tree and no numpy: an indexed bounding-box
+query with geometric expansion, then exact great-circle distance over the
+handful of candidates. This is the prototype that measured 0.16 ms:
+
+```python
+def nearest(db, table, lat, lon):
+    for d in (0.15, 0.6, 2.5, 10.0):              # degrees of latitude
+        dlon = d / max(0.05, cos(radians(lat)))   # widen with latitude
+        rows = db.execute(
+            f"SELECT * FROM {table} WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?",
+            (lat-d, lat+d, lon-dlon, lon+dlon)).fetchall()
+        if rows:
+            r = min(rows, key=lambda r: haversine(lat, lon, r.lat, r.lon))
+            return r, haversine(lat, lon, r.lat, r.lon)
+    return None, None                              # mid-ocean; leave place NULL
+```
+
+Two known corners, both cheap to live with: the longitude box does not wrap at
+±180°, and the expansion returns the nearest row *inside* the first non-empty
+box, which can differ from the true nearest when a closer point sits just
+outside it. Neither is reachable in practice for photographs of people.
+
+**Memoisation** is what makes the pass sub-second: key the cache on
+`(round(lat, 3), round(lon, 3))` — about 100 m — which collapsed 80,000 photos
+to ~4,000 real lookups in the prototype.
+
+**Resolution order**, evaluated per photo, first hit wins:
+
+1. **Landmark**, if the landmarks table is installed and one lies within its
+   code's radius (800 m / 1.5 km / 5 km per the groups above). Rendered as a
+   qualifier in front of the city, never alone.
+2. **City** from `places`, always resolved when the photo has GPS. Stored with
+   `place_dist`; rendered as `"{name}, {country}"`, or `"near {name}, {country}"`
+   when `place_dist > 5 km`.
+3. **Album `location`** from `.album.toml`, inherited down the tree — the only
+   one of these that works for photos with no GPS at all.
+4. **Raw coordinates**, formatted to 5 decimal places.
+
+Worked examples of the resulting strings:
+
+```
+  Tour Eiffel · Paris, France          landmark 0.01 km + city
+  Walt Disney World Resort · Bay Lake, Florida, United States
+  near Filoti, Greece (18 km)          city only, far
+  Náxos, Greece                        city only, close
+  Walt Disney World                    album location; photo had no GPS
+  31.77667, 35.23417                   GPS present, nothing resolved
+```
+
+Honest note on the thresholds: they bound the *damage*, not the error rate. The
+Western Wall miss in the table above ("Muristan", an `HSTS` at 0.44 km) sits
+comfortably inside the 800 m built-feature radius and would still be shown. That
+is the seven-in-ten, and it is why the city is always printed alongside and why
+`.album.toml` exists.
+
 #### The better answer for trip albums
 
 For your actual examples, `.album.toml`'s `location` key beats any geocoder and
