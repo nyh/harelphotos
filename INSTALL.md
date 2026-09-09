@@ -206,10 +206,16 @@ That last command checks the live site end to end from outside: TLS, whether
 compression is actually on, the security headers, and — the one that matters —
 that `/a/` is **not** reachable without logging in.
 
-Enable HSTS (commented out at the bottom of the vhost) only once TLS is
-confirmed working. Browsers remember it for its full lifetime, so a broken
-certificate afterwards means a site nobody can reach — not even by choosing to
-accept the risk.
+HSTS is commented out at the bottom of the vhost, and is genuinely optional.
+The redirect already sends http to https and the session cookie is `Secure`, so
+a session cannot be stolen over plain HTTP either way. What HSTS adds is
+protection for the *first* request on a hostile network, where an attacker
+could otherwise intercept it and phish a password with a fake login page.
+
+Against that, it is a one-way door: if the certificate later breaks, the site
+is unreachable and nobody can click through the warning. If you enable it,
+ramp — `max-age=300`, leave it through at least one certbot renewal, then
+raise it — rather than starting at a year.
 
 
 ## 5. Google sign-in (optional)
