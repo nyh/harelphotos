@@ -117,12 +117,26 @@ minutes. Two things make it survivable:
 time harelphotos scan --dir 2024/08
 ```
 
-**Run it where an ssh disconnection cannot kill it.** Under `tmux`, or:
+**Run it where an ssh disconnection cannot kill it.** `tmux` is the least
+trouble, and lets you watch the progress line and stop it with Ctrl-C:
 
 ```sh
-systemd-run --user --unit=hp-scan --working-directory=$PWD \
-    .venv/bin/harelphotos scan
-journalctl --user -u hp-scan -f
+tmux new -s scan
+harelphotos scan
+#  detach: Ctrl-B then D          reattach: tmux attach -t scan
+```
+
+As a transient systemd unit instead, note that `systemd-run --user` fails with
+"Failed to connect to bus" over a plain ssh login, which has no user D-Bus
+session — either `sudo loginctl enable-linger $USER` once and log back in, or
+use a system unit, which needs no session at all:
+
+```sh
+sudo systemd-run --unit=hp-scan --uid=nyh --gid=nyh \
+    --working-directory=/home/nyh/harelphotos \
+    --setenv=HARELPHOTOS_CONFIG=/etc/harelphotos/config.toml \
+    /home/nyh/harelphotos/.venv/bin/harelphotos scan
+journalctl -u hp-scan -f
 ```
 
 A scan is interruptible and resumable: Ctrl-C, or a reboot, loses only the
