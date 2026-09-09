@@ -322,7 +322,8 @@ heading         = "Photo Album"                     # landing page (§11.5)
 tagline         = "By invitation only. Please login to continue."
 footer_text     = "You can view this private album because you are logged in as {user}. If you wish, you can {logout}."
 landing_image   = "/etc/harelphotos/newsign2.jpg"
-show_gps        = true        # EXIF panel: show/link GPS coordinates
+show_gps        = true        # EXIF panel: show location at all (§11.2)
+map_link        = "osm"       # "osm" | "google" | "none" — outbound map link
 album_page_size = 5000        # safety valve only (§10.3); below this, one page
 dirsort         = "name"      # default subdirectory order (§11.1b); "-name" = newest first
 dir_card_aspect = "4/3"       # subdirectory card shape; "native" = don't crop covers
@@ -402,6 +403,8 @@ group_by    = "none"                  # none | day | month — date headers with
 hidden      = false                   # omit from parent's listing (URL still works)
 allow       = ["dad@gmail.com", "@family"]    # ACL — see §6
 allow_replace = false                 # true = ignore ancestors' restrictions
+location    = "Naxos, Greece"          # fallback place name for photos with no GPS (§9.5);
+                                       # inherited by subdirectories
 
 [photos."IMG_1234.jpg"]               # optional per-photo overrides
 title  = "Nadav on the beach"
@@ -526,6 +529,8 @@ CREATE TABLE photos (
   hidden      INTEGER NOT NULL DEFAULT 0,
   color       TEXT,                    -- '#rrggbb' dominant colour placeholder
   exif_json   TEXT,                    -- camera, lens, exposure, iso, focal, gps
+  place       TEXT,                    -- resolved place name, or NULL (§9.5)
+  place_dist  INTEGER,                 -- metres to that place; large = "near X"  
   deriv_key   TEXT,                    -- fingerprint of what the derivatives were made from
   deriv_error TEXT,
   seen        INTEGER NOT NULL,
@@ -831,11 +836,65 @@ downside a non-event while the upside is 8 GB and half the bandwidth. But it's
 a reversible decision either way, which is the main thing.
 
 (Decode speed is the other fair objection to AVIF, and it gets its own
-measurements in §9.5.)
+measurements in §9.6.)
 
 ---
 
-### 9.5 Decode cost on the client
+### 9.5 Place names from coordinates (planned, not in the early milestones)
+
+Turning `37.1036, 25.3766` into "Naxos, Greece" is much nicer than a coordinate
+pair, and it's worth designing now even though it lands late (M9), because two
+of its consequences touch earlier work.
+
+**It must happen at scan time, not request time.** A page view must never make
+an outbound network call: the server is weak, the call would block a request,
+and an unreachable geocoder would break the info panel. The resolved name is
+stored in `photos.place` and rendered from the database like any other field.
+
+**Do it offline, from a local dataset.** The obvious approach is an online
+reverse-geocoder such as Nominatim, and it's the wrong one here:
+
+- Its usage policy caps bulk work at ~1 request/second, so 80,000 photos would
+  take about a day and would be an abuse of a volunteer-run service.
+- More importantly, it means **transmitting the GPS coordinates of every photo
+  your family has ever taken to a third party** — including your house. For a
+  site whose entire premise is that these photos are private, that's the wrong
+  default, and it happens silently at scan time rather than on a deliberate
+  click.
+
+Instead use **GeoNames `cities500`** — a free CC-BY dataset of every populated
+place with 500+ inhabitants, **13.6 MB zipped** (verified), downloaded once by
+`harelphotos init --geonames`. Nearest-place lookup over ~200k points is a
+trivial spatial search; with coordinates rounded to ~100 m and memoised, an
+80,000-photo collection collapses to a few thousand distinct lookups and the
+whole pass takes seconds. No network, no rate limit, no privacy leak, and it
+works identically on a machine with no internet access.
+
+The honest limitation is that nearest-populated-place is approximate: a photo
+taken on a mountainside gets the nearest village, which may be 20 km away. So
+render the distance when it's large — "near Filoti, Greece (18 km)" — rather
+than asserting a precision we don't have.
+
+**Two consequences for earlier milestones**, which is why this is written down
+now:
+
+1. `photos.place` and `photos.place_dist` exist in the schema from M1, so
+   adding geocoding later is a rescan rather than a migration.
+2. **Most of your collection has no GPS at all.** Scans, film, and pre-2010
+   cameras record nothing, and your "ancient" directory is exactly that case.
+   Coordinates can't help there, so `.album.toml` gets a `location` key:
+
+   ```toml
+   location = "Naxos, Greece"     # applies to this album and its subdirectories
+   ```
+
+   A hand-written album location beats a geocoder for the photos that need it
+   most, costs nothing, follows the PLAN's principle that metadata lives in the
+   directory, and — unlike the geocoder — can ship in M2. A photo's own GPS
+   still wins where present; the album location is the fallback, inherited down
+   the tree.
+
+### 9.6 Decode cost on the client
 
 AVIF is genuinely more expensive to *decode* than JPEG or WebP, so "100
 thumbnails must appear instantly" is the right thing to worry about. Measured
@@ -1284,9 +1343,58 @@ direct links and sharing.
   which is exactly why the phone gets its own 1280 tier (§2.3).
 - Progressive display: show the already-cached thumbnail, upscaled and blurred,
   under the view image until it decodes.
-- **Info panel** (`i`): filename, date taken, dimensions, original file size,
-  camera/lens/exposure/ISO/focal length, and — if `ui.show_gps` — coordinates
-  linked to OpenStreetMap. Plus a "Download original" button.
+#### The two actions on a photo
+
+**1. Download the original.** A clearly-labelled button (and the `d` key) on
+`/orig/<path>`, which serves the untouched file straight from `photo_root` with
+`Content-Disposition: attachment` and the original filename. Full resolution,
+full EXIF, byte-for-byte what the camera wrote — none of the derivative
+processing (§9.1 strips metadata from derivatives; originals keep everything).
+On the server this is handed to Apache via `X-Sendfile` where available (§10.4),
+so a 6 MB download costs the Python process nothing.
+
+**2. The info panel** (`i`, or a visible ⓘ button — not keyboard-only, since
+most viewing is on phones). Deliberately curated rather than a raw EXIF dump;
+the interesting fields, in this order:
+
+```
+    IMG_1234.jpg                        4624 × 3472  ·  6.2 MB
+
+    Sunday, 14 August 2025, 16:50
+    Naxos, Greece                                  [ view on map ↗ ]
+
+    Google Pixel 8 Pro
+    1/250 s · f/1.7 · ISO 55 · 24 mm
+
+                                        [ Download original ]
+```
+
+- **Date and time first** — the field people actually want. Rendered from EXIF
+  `DateTimeOriginal`, which carries **no timezone**: it is the camera's local
+  wall-clock time. Display it exactly as recorded and never "helpfully" convert
+  through UTC, which is the classic way photo software shifts everyone's
+  holiday snaps by three hours. If the tag is absent (scans, old cameras), fall
+  back to the file's mtime and label it as such, so the two are never confused.
+- **Location** — place name where known (§9.5), otherwise the raw coordinates,
+  with a link out to a map. Suppressed entirely when `[ui] show_gps = false`.
+- **Camera and exposure** on one line in the conventional photographic form.
+  Omit any component that isn't present rather than printing "unknown".
+
+Everything is best-effort: malformed EXIF is extremely common and a missing
+field just drops its row.
+
+**The map link** is configurable, since you may not want to hand coordinates to
+a third party even on a deliberate click:
+
+```toml
+[ui]
+map_link = "osm"     # "osm" (default) | "google" | "none"
+```
+
+`osm` → `openstreetmap.org/?mlat=…&mlon=…#map=15/…`, `google` →
+`google.com/maps/search/?api=1&query=lat,lon`. Either way the outbound request
+carries no referrer, because §12.3 sets `Referrer-Policy: no-referrer` — so the
+map provider learns the coordinates but not which private album they came from.
 
 ### 11.3 Site chrome: who you are, and logging out
 
@@ -2012,6 +2120,7 @@ requirement.
 ```
 harelphotos init                     create config, state dirs, secret key,
                                      and default privacy/terms text (§12.2)
+harelphotos init --geonames          download the offline place-name dataset (§9.5)
 harelphotos scan [--full] [--jobs N] [--nice N] [--limit N] [--dir PATH]
                  [--dry-run] [--fallback webp|jpeg]
 harelphotos check                    config errors, missing/failed derivatives,
@@ -2082,6 +2191,13 @@ Not exhaustive TDD, but enough that a rescan can't silently eat data:
   `?next=` round-trips a deep link; and `next=https://evil.example/`,
   `next=//evil.example`, `next=javascript:…` are all rejected rather than
   followed.
+- **EXIF/info-panel tests** — `DateTimeOriginal` is displayed as the camera's
+  local wall-clock time with **no timezone conversion** (assert the rendered
+  string matches the tag under several `TZ` settings — the shifted-holiday-snaps
+  bug, §11.2); a photo with no EXIF date falls back to mtime and is labelled
+  differently; GPS renders when present and the whole row disappears under
+  `show_gps = false`; a photo with no GPS inherits its album's `location`, and
+  its own coordinates win when it has them.
 - **Derivative tests** — orientation applied correctly (all 8 EXIF values),
   no upscaling, no EXIF in output, `deriv_key` invalidation on each config
   change, atomic-write behaviour.
@@ -2104,9 +2220,9 @@ Each milestone is independently useful and independently testable.
 | **M4** | Flask app: album browsing, **subdirectory cards + ordering** (§11.1a–b), **justified-row photo grid** (§11.1c), photo pages, **no auth** | bind to localhost only |
 | **M5** | Landing page (§11.5), local accounts, sessions, `?next=` deep links, ACL enforcement | the security-critical milestone; write these tests first |
 | **M6** | TLS (§13.3), firewall/SELinux (§13.4), then Google Sign-In | TLS comes first. The Google half is optional (§12.2) — local accounts already work, so M6 can be dropped or deferred without affecting anything else |
-| **M7** | Lightbox: keyboard, swipe, prefetch, EXIF panel | the "feels like Google Photos" milestone |
+| **M7** | Lightbox: keyboard, swipe, prefetch, **info panel + download original** (§11.2), album `location` | the "feels like Google Photos" milestone |
 | **M8** | Deployment: **`INSTALL.md`** (§13.0), `check --env`, gunicorn unit, Apache vhost, `sync`, README | |
-| **M9** | Polish: date-group headers, cover-picker UI, dark mode, >5000-photo safety valve | |
+| **M9** | Polish: date-group headers, cover-picker UI, dark mode, **offline reverse geocoding** (§9.5), >5000-photo safety valve | |
 
 M4 is usable on the home machine from day one via `harelphotos serve` (§13.5) —
 plain HTTP on localhost, `--no-auth` for pure UI work, `--bind 0.0.0.0` to try
