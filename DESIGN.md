@@ -2667,6 +2667,31 @@ Suggested order deviation worth considering: do **M5 before M4 is exposed** —
 never run an unauthenticated version on a machine reachable from the internet,
 even briefly.
 
+### How the work proceeds
+
+For whoever picks this up later, including a future session reading this cold:
+
+- **One milestone per working session**, then stop and report. A milestone is
+  the natural review unit: large enough to be worth reviewing, small enough to
+  review honestly. M3 and M4 are big enough to split.
+- **Tests are written with the code, not after**, and must pass before a
+  milestone is called done. §16 lists what matters; the scanner-diff and ACL
+  tests are the ones that earn their keep.
+- **This document is the spec.** Where it settles a question, follow it. Where
+  reality contradicts it — a measurement that doesn't reproduce, a library that
+  behaves differently — say so and update the document rather than quietly
+  improvising around it. Several sections exist only because a measurement
+  contradicted an assumption.
+- **Expensive and irreversible operations belong to the owner, not the
+  implementer.** The 1.8-hour bulk scan over the real collection, the 17 GB
+  rsync, moving 300 GB of photos, anything at all on the server. Prepare them,
+  print the exact command, and let a human run it.
+- **Synthetic fixtures cannot substitute for the real tree.** A 20-year
+  collection has odd filenames, broken EXIF, empty directories and files no
+  test author would think to invent. The first run of `scan` against the real
+  `photo_root` (M2, cheap and read-only) is the most informative test in the
+  project.
+
 ---
 
 ## 18. Deliberately deferred
