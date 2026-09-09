@@ -532,6 +532,53 @@ Names come from `users.toml`. `@name` refers to a group defined under
 
 ---
 
+## Links you can write by hand
+
+The URLs mirror your directory tree, so you can construct one for any album or
+photo without clicking your way there — useful for emailing someone a specific
+album, or bookmarking one.
+
+| what | URL | example |
+|---|---|---|
+| an album | `/a/<directory path>/` | `/a/2024/08/usa/helicopter/` |
+| the top album | `/a/` | |
+| one photo | `/p/<directory path>/<filename>` | `/p/2024/08/usa/helicopter/IMG_0004.JPG` |
+| the original file | `/orig/<directory path>/<filename>` | `/orig/2024/08/usa/helicopter/IMG_0004.JPG` |
+
+So with the site at `https://photos.example.com`, the album living in
+`2024/08/usa/helicopter` is at
+`https://photos.example.com/a/2024/08/usa/helicopter/`.
+
+Details that save guessing:
+
+- **The path is exactly the directory path** under `photo_root`, and the
+  filename exactly as on disk — including its capitalisation, so `.JPG` and
+  `.jpg` are not interchangeable here even though the scanner accepts both.
+- **A missing trailing slash on an album redirects**, so `/a/2024/08` works.
+- **Spaces and other odd characters** are best percent-encoded (`%20` for a
+  space), though pasting the plain form into a browser works too, because the
+  browser encodes it for you.
+- **A path that does not exist gives "Not found"** — as does one you are not
+  allowed to see, deliberately, so that a private album cannot be detected by
+  probing for it.
+
+**Sharing a link with someone who is not logged in works.** They get the login
+page, and land on the album or photo you sent them once they have logged in
+(see [Logging in](#logging-in)) — they do not end up at the top level having to
+find it again.
+
+The `/i/512/...` URLs you may notice in the page source are for the resized
+copies, and are not meant to be shared: they carry a fingerprint that changes
+whenever the image is regenerated. Use `/p/...` for a photo, or `/orig/...` if
+you specifically want to hand someone the original file.
+
+## Why the URLs start with `/a/`
+
+Album paths come from your filesystem, so a directory could be called anything
+— including `login` or `static`. Keeping albums under `/a/` (and photos under
+`/p/`, images under `/i/`) gives them a space of their own where any name is
+safe, instead of having to forbid names that collide with a page of the site.
+
 ## Logging in
 
 With `serve --login`, everything requires an account: the only pages a stranger
