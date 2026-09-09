@@ -408,11 +408,24 @@ def _render_text(cfg: Config, filename: str, heading: str):
         if block.startswith("# "):
             html.append(f"<h1>{escape(block[2:].strip())}</h1>")
         elif block.startswith("- "):
-            items = "".join(
-                f"<li>{escape(line[2:].strip())}</li>"
-                for line in block.splitlines() if line.strip().startswith("- ")
+            # A bullet may wrap onto following indented lines, and those
+            # continuations belong to the item above them. Dropping any line
+            # that did not itself begin with "- " truncated every wrapped
+            # bullet mid-sentence -- silently, in the privacy policy.
+            items: list[str] = []
+            for line in block.splitlines():
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                if stripped.startswith("- "):
+                    items.append(stripped[2:].strip())
+                elif items:
+                    items[-1] += " " + stripped
+                else:
+                    items.append(stripped)
+            html.append(
+                "<ul>" + "".join(f"<li>{escape(i)}</li>" for i in items) + "</ul>"
             )
-            html.append(f"<ul>{items}</ul>")
         else:
             html.append(f"<p>{escape(block)}</p>")
     return render_template(

@@ -426,3 +426,56 @@ def test_album_urls_are_encoded_too(tmp_path):
     assert 'href="/a/a%20trip/"' in body
     assert c.get("/a/a%20trip/").status_code == 200
 
+
+
+def test_a_wrapped_bullet_keeps_its_whole_sentence(scanned, tmp_path, monkeypatch):
+    """The privacy policy was being truncated mid-sentence.
+
+    Every line of a bullet that did not itself start with "- " was dropped, so
+    a bullet wrapped across two lines lost its second half -- in the document
+    that is handed to Google as the site's privacy policy, and the kind of
+    silent loss nobody notices by reading the source file.
+    """
+    from harelphotos.web import create_app
+
+    src = tmp_path / "cfgdir"
+    src.mkdir(parents=True, exist_ok=True)
+    object.__setattr__(scanned, "source", src / "config.toml")
+    (src / "privacy.md").write_text(
+        "# Privacy\n\n"
+        "- If you sign in with Google, Google tells us only your email address,\n"
+        "  so that we can check it against the invitation list. Nothing else is\n"
+        "  requested.\n"
+        "- Cookies are used only to keep you signed in.\n",
+        encoding="utf-8",
+    )
+    app = create_app(scanned, require_login=False)
+    app.config.update(TESTING=True)
+    body = app.test_client().get("/privacy").get_data(as_text=True)
+
+    assert "check it against the invitation list" in body
+    assert "Nothing else is requested." in body
+    assert "Cookies are used only to keep you signed in." in body
+    # Two bullets, not four or one.
+    assert body.count("<li>") == 2
+
+
+def test_the_shipped_privacy_text_survives_rendering(scanned, tmp_path):
+    """The template init actually writes, end to end -- it has wrapped bullets."""
+    from harelphotos import initialise
+    from harelphotos.web import create_app
+
+    src = tmp_path / "cfgdir2"
+    src.mkdir(parents=True, exist_ok=True)
+    object.__setattr__(scanned, "source", src / "config.toml")
+    (src / "privacy.md").write_text(initialise.PRIVACY_TEMPLATE, encoding="utf-8")
+
+    app = create_app(scanned, require_login=False)
+    app.config.update(TESTING=True)
+    body = app.test_client().get("/privacy").get_data(as_text=True)
+
+    # No bullet may end where a line break happened to fall.
+    for tail in ("so that", "They do not record", "and", "including"):
+        assert f"{tail}</li>" not in body, f"a bullet was truncated at {tail!r}"
+    assert "nothing is sent to Google about what you view" in body
+    assert "which photos anyone looked at" in body
