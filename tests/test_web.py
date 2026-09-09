@@ -633,3 +633,80 @@ def test_a_missing_icon_source_is_a_warning_not_a_crash(scanned, tmp_path):
 
     object.__setattr__(scanned.ui, "app_icon", tmp_path / "nope.jpg")
     assert public_assets.build_icons(scanned) == []
+
+
+def test_the_landing_image_keeps_its_aspect_ratio(scanned, tmp_path):
+    """Never squashed to a fixed shape. A panorama makes any damage obvious."""
+    from PIL import Image
+
+    from harelphotos import public_assets
+
+    src = tmp_path / "wide.jpg"
+    Image.new("RGB", (3000, 900), (30, 90, 160)).save(src)      # 10:3
+    object.__setattr__(scanned.ui, "landing_image", src)
+
+    written = public_assets.build(scanned, force=True)
+    assert written
+    for name in written:
+        with Image.open(public_assets.public_dir(scanned) / name) as im:
+            w, h = im.size
+            assert abs(w / h - 3000 / 900) < 0.02, f"{name} is {w}x{h}"
+
+
+def test_icons_crop_rather_than_squash(scanned, tmp_path):
+    """Square is unavoidable for an icon, but a squashed face is not.
+
+    The source is half red and half blue down the middle; a centre-crop keeps
+    both halves in the same proportion, a squash would too -- so this checks
+    the geometry instead: a circle must stay circular.
+    """
+    from PIL import Image, ImageDraw
+
+    from harelphotos import public_assets
+
+    src = tmp_path / "circle.jpg"
+    im = Image.new("RGB", (1000, 500), (255, 255, 255))
+    d = ImageDraw.Draw(im)
+    d.ellipse([375, 75, 625, 325], fill=(0, 0, 0))              # a true circle
+    im.save(src)
+    object.__setattr__(scanned.ui, "app_icon", src)
+    public_assets.build_icons(scanned, force=True)
+
+    with Image.open(public_assets.public_dir(scanned) / "icon-192.png") as out:
+        grey = out.convert("L")
+        # The bounding box of the dark pixels, not a chord through the middle:
+        # the circle is not centred in the source, so a row through the centre
+        # of the *output* would cut a short chord and look like distortion.
+        dark = grey.point(lambda v: 255 if v < 128 else 0)
+        box = dark.getbbox()
+        assert box, "the circle vanished"
+        wide, tall = box[2] - box[0], box[3] - box[1]
+        # Squashing a 2:1 source into a square would make the circle half as
+        # tall as it is wide; cropping keeps it round.
+        assert abs(wide - tall) <= max(2, 0.04 * wide), (
+            f"the circle came out {wide} wide and {tall} tall — squashed, not cropped"
+        )
+
+
+def test_public_assets_are_built_when_the_app_starts(scanned, tmp_path):
+    """Under gunicorn nothing else calls the builder.
+
+    `serve` and `init` used to be the only callers, so in production -- where
+    gunicorn imports harelphotos.wsgi:app directly -- a configured
+    landing_image was never turned into anything and simply never appeared.
+    """
+    from PIL import Image
+
+    from harelphotos import public_assets
+    from harelphotos.web import create_app
+
+    src = tmp_path / "hero.jpg"
+    Image.new("RGB", (1400, 700), (200, 40, 40)).save(src)
+    object.__setattr__(scanned.ui, "landing_image", src)
+    for p in public_assets.public_dir(scanned).glob("*"):
+        p.unlink()
+
+    create_app(scanned, require_login=True)
+
+    assert (public_assets.public_dir(scanned) / "landing-640.jpeg").is_file()
+    assert public_assets.icons(scanned), "no icons were produced at startup"

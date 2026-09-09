@@ -126,6 +126,19 @@ def create_app(cfg: Config, *, require_login: bool = True) -> Flask:
         resp.headers.setdefault("X-Frame-Options", "DENY")
         return resp
 
+    # Prepare the landing image and home-screen icons here rather than in the
+    # `serve` command, so they exist however the application was started.
+    # Under gunicorn nothing else ever calls this, and the result was a
+    # configured landing_image that simply never appeared in production.
+    #
+    # Cheap and idempotent: anything already on disk is skipped.
+    try:
+        made = public_assets.build(cfg) + public_assets.build_icons(cfg)
+        if made:
+            log.info("prepared public assets: %s", ", ".join(made))
+    except Exception as e:                       # never fail to start over a picture
+        log.warning("could not prepare the public assets: %s", e)
+
     _register_routes(app, cfg)
     _register_filters(app, cfg)
     return app

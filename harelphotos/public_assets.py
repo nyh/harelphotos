@@ -14,6 +14,7 @@ a path: the route serves `landing-640` or `landing-1280` and nothing else.
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 from PIL import Image, ImageOps
@@ -77,7 +78,9 @@ def build(cfg: Config, force: bool = False) -> list[str]:
                     dest = out / f"{STEM}-{width}.{ext}"
                     if dest.exists() and not force:
                         continue
-                    tmp = dest.with_name(dest.name + ".tmp")
+                    # Unique per process: gunicorn starts several workers at
+                    # once and they would otherwise share one temp file.
+                    tmp = dest.with_name(f"{dest.name}.{os.getpid()}.tmp")
                     small.save(tmp, fmt, **params)
                     tmp.replace(dest)
                     written.append(dest.name)
@@ -112,7 +115,7 @@ def build_icons(cfg: Config, force: bool = False) -> list[str]:
                 if dest.exists() and not force:
                     continue
                 square = ImageOps.fit(im, (size, size), Image.LANCZOS, centering=(0.5, 0.4))
-                tmp = dest.with_name(dest.name + ".tmp")
+                tmp = dest.with_name(f"{dest.name}.{os.getpid()}.tmp")
                 square.save(tmp, "PNG", optimize=True)
                 tmp.replace(dest)
                 written.append(dest.name)
