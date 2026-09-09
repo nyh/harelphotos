@@ -294,12 +294,11 @@ Arriving straight at a photo — a bookmark or a pasted link — has no album
 behind it, so `Esc` navigates to the album normally instead.
 
 The photo is sized to the space actually available, measured after the page is
-laid out rather than assumed. When vertical space is scarce — a phone held
-sideways, or a short window — the top bar becomes translucent chrome over the
-photo instead of a strip above it, which on a landscape phone roughly doubles
-the area the photo gets. On a desktop, a tablet or a phone held upright the bar
-stays where it is, because getting back to another album is worth its height
-there.
+laid out rather than assumed, and the whole page is one screenful — bar, photo,
+nothing to scroll. When vertical space is scarce, a phone held sideways or a
+short window, the top bar shrinks to about a third of its height rather than
+floating over the photo: covering part of the picture to make the rest slightly
+bigger is the wrong trade on a page whose entire purpose is looking at it.
 
 While you are looking at a photo, the ones on either side of it are fetched in
 the background, so paging with the arrow keys does not wait for the network.

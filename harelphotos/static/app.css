@@ -274,20 +274,11 @@ h2.section:first-child { margin-block-start: 0.25rem; }
    drop the breadcrumb trail (the album is one Escape away), stop the title
    wrapping, and shrink the touch targets to something still comfortable. */
 @media (max-height: 520px) {
-  /* Float the bar over the photo rather than above it. On a desktop, and on a
-     phone held upright, the bar staying put is worth its height -- it is how
-     you get back to another album. Sideways on a phone it is a third of the
-     screen, and the photo is the entire point of the page, so here it becomes
-     translucent chrome laid over the image instead of a strip taking space
-     away from it. Everything in it stays exactly where it was. */
-  .viewer { position: relative; }
-  .viewer .topbar {
-    position: absolute;
-    inset-inline: 0;
-    inset-block-start: 0;
-    background: color-mix(in srgb, var(--bg) 72%, transparent);
-  }
-  .viewer .stage { padding-block-start: 0.5rem; }
+  /* The bar stays in the flow, above the photo, exactly as everywhere else.
+     Floating it over the image bought about 9% more width and covered the top
+     of every photo to do it -- a bad trade for a page whose entire purpose is
+     looking at the picture. Shrinking the bar is the part that paid: 125px of
+     a 390px screen down to 48px, without hiding anything. */
   .viewer .topbar { padding-block: 0.35rem; gap: 0.15rem 0.6rem; }
   .viewer .crumbs a, .viewer .crumbs .sep { display: none; }
   .viewer .crumbs { font-size: 0.95rem; }
