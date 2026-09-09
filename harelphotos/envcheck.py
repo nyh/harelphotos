@@ -70,6 +70,7 @@ def run(cfg: Config | None, url: str | None = None) -> Report:
     else:
         _paths(r, cfg)
         _secrets(r, cfg)
+        _deployment(r, cfg)
         _index(r, cfg)
     if url:
         _live(r, url)
@@ -211,6 +212,27 @@ def _secrets(r: Report, cfg: Config) -> None:
                               " — Google will not redirect to plain HTTP"))
     else:
         r.add(INFO, "google sign-in", "disabled")
+
+
+def _deployment(r: Report, cfg: Config) -> None:
+    """Config that is only wrong once it is behind a real web server."""
+    https = cfg.base_url.startswith("https://")
+    r.add(INFO, "base_url", cfg.base_url)
+    if https and not cfg.behind_proxy:
+        # The symptom is subtle rather than loud: everything works, but every
+        # client looks like 127.0.0.1, so one person failing to log in throttles
+        # everyone, and absolute URLs come out as http://.
+        r.add(WARN, "behind_proxy",
+              "false, but base_url is https — set behind_proxy = true so "
+              "X-Forwarded-For/Proto from Apache are believed")
+    elif cfg.behind_proxy and not https:
+        r.add(WARN, "behind_proxy",
+              "true with a plain-http base_url — only set it when a proxy on "
+              "this machine really is in front")
+    else:
+        r.add(OK, "behind_proxy", str(cfg.behind_proxy).lower())
+    if not https:
+        r.add(WARN, "TLS", "base_url is plain http — sessions are not marked Secure")
 
 
 def _index(r: Report, cfg: Config) -> None:

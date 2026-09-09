@@ -36,6 +36,16 @@ NO_LOGIN_VIEWER = Viewer(token=None, name="", is_admin=True)
 
 def create_app(cfg: Config, *, require_login: bool = True) -> Flask:
     app = Flask(__name__)
+    if cfg.behind_proxy:
+        # Behind Apache every request otherwise appears to come from 127.0.0.1
+        # over plain HTTP: the login throttle would count the proxy rather than
+        # the client, and any absolute URL we build would say http://.
+        #
+        # One hop only, and only when configured -- believing these headers on
+        # a directly-reachable server lets anyone forge their own address.
+        from werkzeug.middleware.proxy_fix import ProxyFix
+
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
     app.config["HARELPHOTOS"] = cfg
     app.config["HARELPHOTOS_REQUIRE_LOGIN"] = require_login
     app.config["MAX_CONTENT_LENGTH"] = 64 * 1024

@@ -114,6 +114,11 @@ class Config:
     secret_key_file: Path
     base_url: str = "http://127.0.0.1:5000"
     sendfile_header: str = "auto"   # "auto" | "X-Sendfile" | "none"
+    # Set only when a reverse proxy on this machine terminates TLS. It makes
+    # the application believe X-Forwarded-For and X-Forwarded-Proto, which a
+    # directly-reachable server must never do: anyone could then claim any
+    # address and defeat the login throttle.
+    behind_proxy: bool = False
     log_file: Path | None = None
     sizes: Sizes = field(default_factory=Sizes)
     encode: Encode = field(default_factory=Encode)
@@ -299,6 +304,7 @@ def from_dict(raw: dict, src: Path) -> Config:
         users_file=users_file,
         secret_key_file=secret_key_file,
         base_url=str(raw.get("base_url", "http://127.0.0.1:5000")).rstrip("/"),
+        behind_proxy=bool(raw.get("behind_proxy", False)),
         sendfile_header=_enum(
             raw.get("sendfile_header"),
             ("auto", "X-Sendfile", "none"),
