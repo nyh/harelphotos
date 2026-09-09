@@ -653,6 +653,11 @@ index_db        = "/var/lib/harelphotos/index.sqlite"
 users_file      = "/etc/harelphotos/users.toml"
 secret_key_file = "/etc/harelphotos/secret_key"
 
+base_url        = "https://photos.example.org"
+session_days    = 30                  # how long a login lasts
+behind_proxy    = false               # true when Apache is in front
+sendfile_header = "auto"              # "X-Sendfile" with mod_xsendfile
+
 [scan]
 jobs    = 0                           # 0 = all cores
 nice    = 10
@@ -662,8 +667,31 @@ exclude = [".*", "@eaDir", "Thumbs.db"]
 family = ["nyh", "dad@gmail.com"]
 ```
 
-Settings for image sizes, encoding and the web interface are written by `init`
-but are not used yet.
+The three that only matter on a server:
+
+- **`base_url`** must be exactly what the browser asks for, with no trailing
+  slash. It decides whether the session cookie is marked `Secure`, so getting
+  it wrong makes logging in fail by silently returning you to the login page.
+- **`behind_proxy`** makes the application believe Apache's `X-Forwarded-For`
+  and `X-Forwarded-Proto`. Off by default because trusting those headers on a
+  directly-reachable server would let anyone claim any address. Behind Apache
+  without it, every request looks like `127.0.0.1`, so one person mistyping a
+  password throttles everybody.
+- **`sendfile_header = "X-Sendfile"`** lets Apache send image bytes itself once
+  the access check has passed, instead of copying them through Python. Needs
+  `mod_xsendfile` and a matching `XSendFilePath`.
+
+**`session_days`** is counted from when you log in, not from last use. The
+session cookie is deliberately not re-sent on every response: its value is part
+of the browser's cache key for images, so a cookie that changed each time threw
+away every cached thumbnail and made each page load re-download the whole grid.
+
+Every key has a default, so a `config.toml` written by an older `init` keeps
+working and picks up the default for anything it does not mention. That cuts
+both ways: because `init` bakes the current defaults into the file it writes, a
+later change to a *code* default will not reach a config that already names the
+setting. If a new default does not seem to be taking effect, look for the old
+value still sitting in your file.
 
 The config file is found via `-c`, then `$HARELPHOTOS_CONFIG`, then
 `./config.toml`, `~/.config/harelphotos/config.toml`, `/etc/harelphotos/config.toml`

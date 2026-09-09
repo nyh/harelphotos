@@ -23,6 +23,7 @@ users_file      = "{users_file}"
 secret_key_file = "{secret_key_file}"
 
 base_url        = "http://127.0.0.1:5000"   # production: https://your.host
+session_days    = 30                        # how long a login lasts
 sendfile_header = "auto"                    # "auto" | "X-Sendfile" | "none"
 # log_file      = "{state}/harelphotos.log" # unset = stderr / journal
 

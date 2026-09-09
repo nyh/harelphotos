@@ -119,6 +119,11 @@ class Config:
     # directly-reachable server must never do: anyone could then claim any
     # address and defeat the login throttle.
     behind_proxy: bool = False
+    # How long a login lasts, in days. Counted from the moment of logging in,
+    # not from last use: the cookie is deliberately not re-sent on every
+    # response, because its value is part of the browser's image cache key and
+    # changing it threw away every cached thumbnail (see web.py).
+    session_days: int = 30
     log_file: Path | None = None
     sizes: Sizes = field(default_factory=Sizes)
     encode: Encode = field(default_factory=Encode)
@@ -190,6 +195,15 @@ def _enum(value: object, allowed: tuple[str, ...], what: str, src: Path, default
             f"{src}: {what} must be one of {', '.join(allowed)}, got {value!r}"
         )
     return str(value)
+
+
+def _positive_int(value: object, what: str, src: Path, default: int) -> int:
+    if value is None:
+        return default
+    # bool is an int subclass, and `session_days = true` is a mistake, not a 1.
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        raise ConfigError(f"{src}: {what} must be a positive integer, got {value!r}")
+    return value
 
 
 def load(path: str | os.PathLike[str] | None = None) -> Config:
@@ -305,6 +319,7 @@ def from_dict(raw: dict, src: Path) -> Config:
         secret_key_file=secret_key_file,
         base_url=str(raw.get("base_url", "http://127.0.0.1:5000")).rstrip("/"),
         behind_proxy=bool(raw.get("behind_proxy", False)),
+        session_days=_positive_int(raw.get("session_days"), "session_days", src, 30),
         sendfile_header=_enum(
             raw.get("sendfile_header"),
             ("auto", "X-Sendfile", "none"),

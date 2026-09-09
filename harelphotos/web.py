@@ -58,7 +58,7 @@ def create_app(cfg: Config, *, require_login: bool = True) -> Flask:
         # cookie is never sent back, and you land on the login page again with
         # no error anywhere (DESIGN.md 13.5).
         SESSION_COOKIE_SECURE=cfg.base_url.startswith("https://"),
-        PERMANENT_SESSION_LIFETIME=timedelta(days=30),
+        PERMANENT_SESSION_LIFETIME=timedelta(days=cfg.session_days),
         # Send the cookie only when the session actually changes.
         #
         # Flask's default re-signs and re-sends it on *every* response, so its

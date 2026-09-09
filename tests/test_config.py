@@ -172,3 +172,17 @@ def test_jobs_zero_means_all_cores(tmp_path):
 def test_base_url_trailing_slash_stripped(tmp_path):
     cfg = config_mod.load(write(tmp_path, MINIMAL + '\nbase_url = "https://h.example/"\n'))
     assert cfg.base_url == "https://h.example"
+
+
+def test_session_days_defaults_and_overrides(tmp_path):
+    assert config_mod.load(write(tmp_path, MINIMAL)).session_days == 30
+    cfg = config_mod.load(write(tmp_path, MINIMAL + "\nsession_days = 7\n"))
+    assert cfg.session_days == 7
+
+
+def test_session_days_must_be_a_positive_integer(tmp_path):
+    # `true` is a mistake, not a 1 -- bool being an int subclass would let it
+    # silently mean "one day".
+    for bad in ("0", "-1", '"forever"', "true", "1.5"):
+        with pytest.raises(config_mod.ConfigError, match="session_days"):
+            config_mod.load(write(tmp_path, MINIMAL + f"\nsession_days = {bad}\n"))
