@@ -38,6 +38,8 @@ Decided during this design pass, from measurements (§2, §3) rather than taste:
 | Album listing | separate section, **uniform cards with the name captioned below**, subdirs first | §11.1a — the hierarchy Google Photos doesn't have |
 | Subdir order | natural sort by name; `dirsort`, parent `order`, child `sort_key` to override | §11.1b |
 | Default sort | **EXIF date, else mtime, tie-break filename** | §5.3 |
+| UI language | **English only**, no i18n machinery; CSS logical properties so a future Hebrew/RTL pass stays cheap | §11.4 |
+| Filenames | **assumed UTF-8**; anything else is skipped and reported, never crashes a scan | §8 phase 1 |
 | Change detection | `mtime` decides whether to *look*; **`content_sig` decides whether to *work*** | §8 phase 2 — stops `jhead -ft` triggering a 22 core-hour re-encode |
 
 ---
@@ -585,6 +587,13 @@ results from the directory read itself, so this is essentially the cost of
 3. For each file with a known photo extension, upsert the `photos` row with
    `(size, mtime_ns)` and stamp `seen`. If `(size, mtime_ns)` differs from the
    stored values, flag the photo **stat-dirty**.
+
+**Filenames are assumed UTF-8** (§19). No transcoding, no encoding guessing.
+The one thing the scanner owes you is not dying on a surprise: a name that
+`os.scandir` returns with surrogate escapes is skipped, counted, and listed by
+`harelphotos check` — not raised halfway through a two-hour run, and not
+silently swallowed either. One `if` and a warning; the alternative is a scan
+that crashes on its 80,000th file after two hours of work.
 
 Then delete every row whose `seen != generation` — those are the files and
 directories that disappeared. Their derivative files go on a deletion list.
@@ -1717,6 +1726,19 @@ dark mode (a photo grid on a dark ground looks much better anyway), `safe-area-i
 padding for notched phones, everything touch-target-sized ≥ 44 px. Tested on
 Firefox and Chrome, desktop and Android/iOS widths.
 
+**English-only** (§19) — no i18n framework, no translation files, no locale
+machinery. The user-visible wording that does vary is already in `config.toml`
+(`site_title`, `heading`, `tagline`, `footer_text`); the rest is in the
+templates, in English.
+
+The one concession to a possible Hebrew interface later costs nothing now: use
+**CSS logical properties** throughout — `margin-inline-start` rather than
+`margin-left`, `padding-inline`, `inset-inline`, `text-align: start`, `border-
+inline-end`. It is the same amount of CSS, it is the modern idiom regardless,
+and it is the difference between a future `dir="rtl"` being a one-line change
+and being a stylesheet rewrite. No RTL work is done now, and no RTL testing is
+in scope.
+
 ### 11.5 The landing page
 
 `/` is the only page an unauthenticated visitor ever sees, so it carries the
@@ -2447,7 +2469,9 @@ Not exhaustive TDD, but enough that a rescan can't silently eat data:
 - **Fixture tree generator** — builds a temp tree of tiny synthetic JPEGs with
   controlled EXIF (dates, orientations, GPS), nested dirs, `.album.toml` files,
   deliberate edge cases: unicode and spaces in names, a corrupt JPEG, an empty
-  directory, a broken symlink, a malformed TOML file.
+  directory, a broken symlink, a malformed TOML file, and one deliberately
+  non-UTF-8 filename — asserted to be skipped and reported rather than to raise
+  (§8 phase 1).
 - **Scanner diff tests** — the highest-value tests in the project. Scan, mutate
   the tree (add / delete / rename / touch / move a subtree / edit a
   `.album.toml`), rescan, assert the DB and the derived tree match a full
@@ -2604,31 +2628,14 @@ Nothing here blocks starting on M1 — these can be answered as we reach them.
 ~~7. **Python 3.12 on Rocky**~~ — *resolved: confirmed available. `requires-python
    = ">=3.11"` stands, and the `tomli` shim is gone for good.*
 
-Raised by the full-document review, both genuinely unaddressed:
-
-8. **Language and date formatting.** The whole UI is currently English —
-   "214 photos", "Sunday, 14 August 2025, 16:50", "By invitation only". Your
-   family is Israeli; do you want Hebrew anywhere, or dates in a different
-   format (`14/08/2025`, or Hebrew month names)? This matters more than it
-   looks: Hebrew means RTL, which is a stylesheet-wide decision (`dir="rtl"`,
-   logical CSS properties) that is cheap to build in from M4 and expensive to
-   retrofit. English-only is a perfectly good answer — I just shouldn't assume
-   it. A middle option is English UI with a configurable date format, which
-   costs nothing.
-9. **Filename encoding in the older parts of the collection.** A 300 GB
-   collection spanning decades, with an "ancient" directory, may well contain
-   filenames that are not valid UTF-8 — Hebrew names written under ISO-8859-8,
-   or names created on Windows. Python's `os.scandir` hands those back with
-   surrogate escapes, which then blow up at the first attempt to put them in
-   JSON, a URL, or an HTML page. The design should either normalise them at scan
-   time or refuse them loudly with a listing, rather than crashing halfway
-   through a two-hour scan. Cheap to check before writing any code:
-
-   ```
-   find $PHOTO_ROOT -name '*' | grep -aP '[\x80-\xff]' | head
-   LC_ALL=C find $PHOTO_ROOT -type f ! -name '*[[:print:]]*' | head
-   ```
-
-   If nothing turns up, this is a non-issue and the scanner just needs a clear
-   error path. If it does, it needs a deliberate policy, and it is much better
-   to know that now.
+~~8. **Language and date formatting**~~ — *resolved: **English-only**, no i18n
+   machinery, no translation files, no locale configuration. Hebrew is a
+   possible future want but explicitly not now. The one free precaution is in
+   §11.4: write the stylesheet with CSS **logical properties** from the start,
+   which costs nothing today and is what makes a future `dir="rtl"` mostly a
+   one-line change instead of a rewrite.*
+~~9. **Filename encoding**~~ — *resolved: **filenames are UTF-8**; the scanner
+   assumes it and builds no transcoding machinery. It still refuses a
+   non-UTF-8 name cleanly rather than crashing on it (§8, phase 1) — the
+   assumption is cheap to hold, but a two-hour scan should not die on its
+   80,000th file if one turns out to be odd.*
