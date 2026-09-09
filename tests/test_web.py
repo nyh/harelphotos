@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from harelphotos import scanner
+from harelphotos import db, scanner
 from harelphotos.web import create_app
 
 from . import fixtures
@@ -479,3 +479,42 @@ def test_the_shipped_privacy_text_survives_rendering(scanned, tmp_path):
         assert f"{tail}</li>" not in body, f"a bullet was truncated at {tail!r}"
     assert "nothing is sent to Google about what you view" in body
     assert "which photos anyone looked at" in body
+
+
+def test_an_album_shows_its_location(scanned, tmp_path):
+    """`location` in .album.toml already stands in for a place on photos with
+    no GPS; the album it belongs to should say it too."""
+    from harelphotos import scanner
+    from harelphotos.web import create_app
+
+    (scanned.photo_root / "2019" / "01" / ".album.toml").write_text(
+        'title = "Twenty Nineteen"\nlocation = "Tel Aviv, Israel"\n', encoding="utf-8"
+    )
+    conn = db.open_index(scanned.index_db)
+    scanner.scan(scanned, conn)
+    conn.close()
+
+    app = create_app(scanned, require_login=False)
+    app.config.update(TESTING=True)
+    body = app.test_client().get("/a/2019/01/").get_data(as_text=True)
+    assert "Tel Aviv, Israel" in body
+
+
+def test_a_location_is_hidden_when_places_are_switched_off(scanned, tmp_path):
+    """show_gps = false means "do not tell people where this was", and a
+    hand-written album location is exactly that."""
+    from harelphotos import scanner
+    from harelphotos.web import create_app
+
+    (scanned.photo_root / "2019" / "01" / ".album.toml").write_text(
+        'title = "Twenty Nineteen"\nlocation = "Tel Aviv, Israel"\n', encoding="utf-8"
+    )
+    conn = db.open_index(scanned.index_db)
+    scanner.scan(scanned, conn)
+    conn.close()
+
+    object.__setattr__(scanned.ui, "show_gps", False)
+    app = create_app(scanned, require_login=False)
+    app.config.update(TESTING=True)
+    body = app.test_client().get("/a/2019/01/").get_data(as_text=True)
+    assert "Tel Aviv" not in body

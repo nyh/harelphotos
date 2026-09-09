@@ -514,7 +514,8 @@ sort_key    = "1975"                  # how THIS directory sorts inside its pare
 hidden      = false                   # omit from the parent's listing
 allow       = ["nyh", "@family"]      # who may see this directory and everything under it
 allow_replace = false                 # true = ignore restrictions inherited from above
-location    = "Naxos, Greece"         # place name for photos with no GPS
+location    = "Naxos, Greece"         # shown on the album; also the place for
+                                      # photos in it that have no GPS
 
 [photos."IMG_1234.jpg"]
 title  = "Nadav on the beach"

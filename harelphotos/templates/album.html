@@ -10,6 +10,10 @@
   <div class="meta">
     {%- if album.n_photos_rec %}{{ "{:,}".format(album.n_photos_rec) }} photos{% endif -%}
     {%- if album|date_span %} <span class="sep">·</span> {{ album|date_span }}{% endif -%}
+    {#- `location` from .album.toml. It already stands in for a place on photos
+        with no GPS; saying it here too is what makes setting it feel worth the
+        bother, and it is the one fact a folder name usually does not carry. -#}
+    {%- if album.location and cfg.ui.show_gps %} <span class="sep">·</span> {{ album.location }}{% endif -%}
   </div>
   {{ chrome.user_menu(viewer) }}
 </header>
