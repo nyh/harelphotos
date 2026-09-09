@@ -65,6 +65,17 @@ a:hover { text-decoration: underline; }
 .crumbs .here { font-weight: 600; }
 .meta, .dim { color: var(--dim); font-size: 0.85rem; }
 
+/* Filename plus the always-visible date and place. Wraps to a second line by
+   itself when the bar is too narrow, rather than squeezing the filename. */
+.titleline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.75rem;
+  min-inline-size: 0;
+}
+.photo-meta { white-space: nowrap; }
+
 main {
   padding: 1rem;
   padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));

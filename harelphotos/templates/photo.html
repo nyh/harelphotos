@@ -4,10 +4,27 @@
 {% block body %}
 <div class="viewer">
   <header class="topbar viewer-bar">
-    <nav class="crumbs">
-      {%- for c in crumbs %}<a href="{{ c.url }}">{{ c.title }}</a><span class="sep">/</span>{% endfor -%}
-      <span class="here">{{ photo.title or photo.name }}</span>
-    </nav>
+    {#- Filename and the one line of context worth always seeing. Grouped so
+        the meta sits beside the name on a wide screen and wraps under it on a
+        narrow one -- the top bar is already flex-wrap, so no breakpoint is
+        needed. Camera and exposure stay behind the Info button: they are for
+        when you go looking, whereas where and when a photo was taken is what
+        you want to know while looking at it. -#}
+    <div class="titleline">
+      <nav class="crumbs">
+        {%- for c in crumbs %}<a href="{{ c.url }}">{{ c.title }}</a><span class="sep">/</span>{% endfor -%}
+        <span class="here">{{ photo.title or photo.name }}</span>
+      </nav>
+      {%- set place = photo.place or album.location %}
+      {%- set when = photo.taken or photo.when %}
+      {%- if when or (place and cfg.ui.show_gps) %}
+      <div class="meta photo-meta">
+        {%- if when %}{{ when|day_date }}{% endif -%}
+        {%- if when and place and cfg.ui.show_gps %} <span class="sep">·</span> {% endif -%}
+        {%- if place and cfg.ui.show_gps %}{{ place }}{% endif -%}
+      </div>
+      {%- endif %}
+    </div>
     <div class="actions">
       <button type="button" id="info-toggle" aria-expanded="false"
               aria-controls="info" title="Photo information (i)">Info</button>

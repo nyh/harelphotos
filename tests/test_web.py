@@ -518,3 +518,37 @@ def test_a_location_is_hidden_when_places_are_switched_off(scanned, tmp_path):
     app.config.update(TESTING=True)
     body = app.test_client().get("/a/2019/01/").get_data(as_text=True)
     assert "Tel Aviv" not in body
+
+
+def test_the_photo_page_shows_date_and_place_without_opening_the_panel(client):
+    """Where and when is what you want while looking at a photo; camera and
+    exposure are for when you go looking. Before this, all of it was hidden
+    behind the Info button and most people would never find any of it."""
+    body = client.get("/p/2019/01/a.jpg").get_data(as_text=True)
+    head, _, panel = body.partition('<aside id="info"')
+    assert "titleline" in head
+    # The date is in the always-visible part, not only inside the panel.
+    assert "2019" in head.split('class="meta photo-meta"')[1][:200]
+
+
+def test_the_place_respects_show_gps(scanned):
+    from harelphotos.web import create_app
+
+    object.__setattr__(scanned.ui, "show_gps", False)
+    app = create_app(scanned, require_login=False)
+    app.config.update(TESTING=True)
+    body = app.test_client().get("/p/2019/01/a.jpg").get_data(as_text=True)
+    head, _, _ = body.partition('<aside id="info"')
+    assert "photo-meta" not in head or "·" not in head.split("photo-meta")[1][:200]
+
+
+def test_day_date_has_no_weekday_or_time(scanned):
+    """It sits next to a filename, so it must stay short."""
+    from harelphotos.web import create_app
+
+    app = create_app(scanned, require_login=False)
+    with app.app_context():
+        f = app.jinja_env.filters["day_date"]
+        out = f(1_565_000_000)
+        assert out and "," not in out and ":" not in out
+        assert f(None) == ""

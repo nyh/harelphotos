@@ -446,6 +446,16 @@ def _register_filters(app: Flask, cfg: Config) -> None:
     def short_date(ts: int | None) -> str:
         return datetime.fromtimestamp(ts).strftime("%b %Y") if ts else ""
 
+    @app.template_filter("day_date")
+    def day_date(ts: int | None) -> str:
+        """For the photo's top line: the day, without the weekday or the time.
+
+        `photo_date` is too long to sit beside a filename and `short_date` too
+        coarse to be worth showing there. Local wall-clock as recorded, never
+        converted through UTC (DESIGN.md 11.2).
+        """
+        return datetime.fromtimestamp(ts).strftime("%-d %b %Y") if ts else ""
+
     @app.template_filter("date_span")
     def date_span(album: Album) -> str:
         lo, hi = album.date_min, album.date_max

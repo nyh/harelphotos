@@ -267,8 +267,16 @@ it — testing on a phone over your own LAN, say.
 
 What you can do: browse albums, follow subdirectories, click a photo to see it
 large, move between photos with the arrow keys or by swiping, press `i` for
-date/camera/location details, `d` to download the original, and `Esc` to go
+camera and exposure details, `d` to download the original, and `Esc` to go
 back to the album.
+
+A photo's date and place are shown next to its filename, without opening
+anything: they are what you want to know while looking at a photo, whereas the
+camera settings are for when you go looking. On a narrow screen they wrap onto
+their own line rather than squeezing the filename. The place comes from the
+photo's own GPS, turned into a place name by [`geocode`](#harelphotos-geocode);
+for photos with no GPS it falls back to `location` in the album's `.album.toml`,
+and `show_gps = false` in `config.toml` suppresses both.
 
 `Esc`, a downward swipe and the browser's Back button all return you to the
 album **exactly where you left it**, in one step, however many photos you
