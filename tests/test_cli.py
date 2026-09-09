@@ -148,3 +148,20 @@ def test_the_no_listen_guard_is_real(project, tmp_path):
         s.bind(("127.0.0.1", 0))
         with pytest.raises(AssertionError, match="must not start a server"):
             s.listen(1)
+
+
+def test_check_env_reports_on_this_machine(project, capsys):
+    """The only view of a machine I cannot log in to, so it must not crash."""
+    assert cli.main(["check", "--env"]) in (0, 1)
+    out = capsys.readouterr().out
+    for expected in ("python", "Pillow AVIF support", "photo_root", "secret_key"):
+        assert expected in out, expected
+
+
+def test_check_env_fails_when_avif_is_missing(project, monkeypatch, capsys):
+    """A Pillow without AVIF otherwise fails at the first encode, hours in."""
+    from PIL import features
+
+    monkeypatch.setattr(features, "check", lambda f: False if f == "avif" else True)
+    assert cli.main(["check", "--env"]) == 1
+    assert "avif=NO" in capsys.readouterr().out

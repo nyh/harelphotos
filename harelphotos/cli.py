@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 
 from . import check as check_mod
+from . import envcheck
 from . import config as config_mod
 from . import db, geocode as geocode_mod, geonames, initialise, lock
 from . import maintenance, scanner, users as users_mod
@@ -460,6 +461,17 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
 def cmd_check(args: argparse.Namespace) -> int:
     cfg = _load_config(args)
+    if args.env:
+        r = envcheck.run(cfg, url=args.url)
+        print(r.render())
+        print()
+        if r.failures:
+            print(f"{r.failures} failure(s), {r.warnings} warning(s)")
+        elif r.warnings:
+            print(f"no failures, {r.warnings} warning(s)")
+        else:
+            print("everything checks out")
+        return 1 if r.failures else 0
     conn = db.open_index(cfg.index_db, read_only=True)
     r = check_mod.run(cfg, conn, verify_files=args.verify_files)
     print(f"index          {cfg.index_db}")
@@ -547,6 +559,9 @@ def build_parser() -> argparse.ArgumentParser:
     pk = sub.add_parser("check", help="report index contents and problems")
     pk.add_argument("--verify-files", action="store_true",
                     help="also check that every recorded derivative is on disk")
+    pk.add_argument("--env", action="store_true",
+                    help="check this machine instead: python, permissions, apache, selinux")
+    pk.add_argument("--url", help="with --env, also check a running site over the network")
     pk.set_defaults(func=cmd_check)
 
     pg = sub.add_parser("geocode", help="resolve place names from GPS already indexed")
