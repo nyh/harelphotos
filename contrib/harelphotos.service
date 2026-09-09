@@ -45,6 +45,7 @@ ExecStart=/home/nyh/harelphotos/.venv/bin/gunicorn \
     --threads 8 \
     --worker-class gthread \
     --timeout 120 \
+    --graceful-timeout 10 \
     --bind 127.0.0.1:8099 \
     --access-logfile - \
     --error-logfile - \
@@ -53,6 +54,17 @@ ExecStart=/home/nyh/harelphotos/.venv/bin/gunicorn \
 ExecReload=/bin/kill -s HUP $MAINPID
 Restart=on-failure
 RestartSec=2
+
+# Bound how long a restart can take.
+#
+# On SIGTERM gunicorn stops accepting and waits for requests already in flight
+# to finish -- up to --graceful-timeout (10s above, down from its default 30),
+# and then systemd waits again on its own default of 90s before resorting to
+# SIGKILL. With 8 threads per worker there are more requests in flight to wait
+# for, so a restart under load can sit there noticeably longer than it used to.
+# Nothing here is precious enough to wait a minute and a half for: the index is
+# read-only to this process, so a killed request costs one refresh.
+TimeoutStopSec=20
 
 # Hardening. The service only ever reads the photos, and writes nothing
 # outside its state directory, so it can be locked down hard.
