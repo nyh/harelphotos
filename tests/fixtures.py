@@ -96,6 +96,10 @@ def make_config(tmp_path: Path, photo_root: Path) -> config_mod.Config:
     """A Config pointing at a fixture tree, with state under tmp_path."""
     state = tmp_path / "state"
     state.mkdir(parents=True, exist_ok=True)
+    # The app needs a signing key to start.
+    key = tmp_path / "secret_key"
+    if not key.exists():
+        key.write_bytes(b"0123456789abcdef0123456789abcdef")
     return config_mod.from_dict(
         {
             "photo_root": str(photo_root),
@@ -110,3 +114,20 @@ def make_config(tmp_path: Path, photo_root: Path) -> config_mod.Config:
 
 def fresh_index(cfg: config_mod.Config):
     return db.create_index(cfg.index_db)
+
+
+def add_user(cfg: config_mod.Config, token: str = "nyh", password: str = "nyh",
+             admin: bool = False, name: str | None = None):
+    """Add an account to the fixture's users.toml."""
+    from harelphotos import users as users_mod
+
+    existing = users_mod.load(cfg.users_file)
+    table = dict(existing.by_token)
+    table[token] = users_mod.User(
+        token=token,
+        name=name or token,
+        password_hash=users_mod.hash_password(password),
+        admin=admin,
+    )
+    users_mod.save(cfg.users_file, users_mod.Users(by_token=table))
+    return table[token]

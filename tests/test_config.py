@@ -30,9 +30,9 @@ def test_minimal_config_and_defaults(tmp_path):
     cfg = config_mod.load(write(tmp_path, MINIMAL))
     assert cfg.photo_root == Path("/photos")
     assert cfg.sizes.thumb == (256, 512)
-    assert cfg.sizes.view == (1280, 2048)
+    assert cfg.sizes.view == (1280, 1600)
     # Tiers are descending: the cascade resizes each from the one above.
-    assert cfg.sizes.tiers == (2048, 1280, 512, 256)
+    assert cfg.sizes.tiers == (1600, 1280, 512, 256)
     assert cfg.encode.format == "avif"
     assert cfg.encode.fallback == "auto"
     assert cfg.encode.speed == 6

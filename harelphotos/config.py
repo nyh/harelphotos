@@ -17,11 +17,25 @@ CONFIG_SEARCH = (
 )
 
 DEFAULT_TIERS_THUMB = [256, 512]
-DEFAULT_TIERS_VIEW = [1280, 2048]
+
+# 1600 rather than 2048 as the top view size. Measured in a real browser: the
+# photo page letterboxes the image to fit inside the window, so the binding
+# constraint is the available HEIGHT, not the window width. A 4:3 photo in a
+# 1920x1080 window renders 1079 px wide, and the most demanding case tested --
+# a retina laptop -- needs 1676. Nothing needed 2048, and it was more than half
+# the derived tree.
+DEFAULT_TIERS_VIEW = [1280, 1600]
 
 # Per-tier AVIF quality. Smaller tiers get a higher Q because downscaling
 # concentrates detail, so low-Q artefacts show more (DESIGN.md 5.1).
-DEFAULT_QUALITY = {256: 52, 512: 48, 1280: 46, 2048: 45}
+#
+# Covers more sizes than the default ladder uses, on purpose: this table is
+# part of the recipe fingerprint, so keeping it stable means changing which
+# sizes you generate costs only the sizes that changed, and never a re-encode
+# of the whole collection.
+DEFAULT_QUALITY = {
+    256: 52, 512: 48, 1024: 47, 1280: 46, 1600: 45, 2048: 45, 2560: 44, 3200: 43,
+}
 
 
 class ConfigError(Exception):

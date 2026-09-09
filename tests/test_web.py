@@ -11,16 +11,23 @@ from . import fixtures
 
 
 @pytest.fixture
-def client(tmp_path):
+def scanned(tmp_path):
+    """A scanned fixture tree and its config."""
     photos = fixtures.make_tree(tmp_path / "pictures")
     cfg = fixtures.make_config(tmp_path, photos)
     conn = fixtures.fresh_index(cfg)
     scanner.scan(cfg, conn)
     conn.close()
-    app = create_app(cfg)
+    return cfg
+
+
+@pytest.fixture
+def client(scanned):
+    """The default: no login required, as `harelphotos serve` runs locally."""
+    app = create_app(scanned, require_login=False)
     app.config.update(TESTING=True)
     with app.test_client() as c:
-        c.harelphotos_cfg = cfg
+        c.harelphotos_cfg = scanned
         c.harelphotos_app = app
         yield c
 
@@ -78,7 +85,7 @@ def test_both_headings_when_an_album_has_both(tmp_path):
     conn = fixtures.fresh_index(cfg)
     scanner.scan(cfg, conn)
     conn.close()
-    app = create_app(cfg)
+    app = create_app(cfg, require_login=False)
     app.config.update(TESTING=True)
     body = app.test_client().get("/a/mixed/").get_data(as_text=True)
     assert '<h2 class="section">Albums</h2>' in body

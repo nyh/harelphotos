@@ -40,7 +40,7 @@ dir_card_aspect = "4/3"                     # "native" = do not crop covers
 
 [sizes]
 thumb = [256, 512]                          # album grid
-view  = [1280, 2048]                        # lightbox
+view  = [1280, 1600]                        # viewing one photo
 
 [encode]
 format         = "avif"
@@ -48,7 +48,9 @@ fallback       = "auto"                     # "none" = serve AVIF to everyone
 speed          = 6
 subsampling    = "4:2:0"
 recipe_version = 1
-quality        = {{ 256 = 52, 512 = 48, 1280 = 46, 2048 = 45 }}
+# Leave this alone unless you want to retune quality: changing it re-encodes
+# everything, whereas changing `view` above only makes the sizes that changed.
+quality        = {{ 256 = 52, 512 = 48, 1024 = 47, 1280 = 46, 1600 = 45, 2048 = 45, 2560 = 44, 3200 = 43 }}
 
 [scan]
 jobs    = 0                                 # 0 = all cores

@@ -77,6 +77,13 @@ def cmd_init(args: argparse.Namespace) -> int:
         config_path.resolve(), photo_root=photo_root, state_dir=state_dir
     ):
         print(f"  {note}")
+    try:
+        from . import public_assets
+        cfg = config_mod.load(config_path)
+        for name in public_assets.build(cfg):
+            print(f"  prepared {name}")
+    except config_mod.ConfigError:
+        pass
     print(f"\nNext: harelphotos user add <name>, then 'harelphotos scan' (M2).")
     return 0
 
@@ -414,19 +421,39 @@ def cmd_serve(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
 
+    from . import public_assets
     from .web import create_app
 
-    app = create_app(cfg)
     host = args.bind or "127.0.0.1"
-    if host not in ("127.0.0.1", "localhost", "::1"):
-        # M4 has no authentication at all. Reaching it from the network is a
-        # deliberate act, not a default.
+    loopback = host in ("127.0.0.1", "localhost", "::1")
+
+    # No login by default: this is the development server, and typing a
+    # password to look at your own photos on your own machine is friction for
+    # nothing. --login turns the real gate on so it can be exercised.
+    require_login = bool(args.login)
+    if not loopback and not require_login and not args.insecure:
         print(
-            f"WARNING: binding to {host} exposes the whole collection to your "
-            f"network with NO login (authentication arrives in M5).",
+            f"refusing to serve {host} without a login: that would hand the whole\n"
+            f"collection to anyone who can reach this machine.\n"
+            f"  Use --login to require one (recommended), or --insecure to mean it.",
             file=sys.stderr,
         )
+        return 2
+
+    made = public_assets.build(cfg)
+    if made:
+        print(f"prepared the landing image ({', '.join(made)})")
+
+    app = create_app(cfg, require_login=require_login)
     print(f"serving {cfg.photo_root} at http://{host}:{args.port}/  (Ctrl-C to stop)")
+    if require_login:
+        from . import users as u
+        n = len(u.load(cfg.users_file))
+        print(f"login required — {n} account{'' if n == 1 else 's'} in {cfg.users_file}")
+        if n == 0:
+            print("  no accounts yet: harelphotos user add <name>", file=sys.stderr)
+    else:
+        print("NO LOGIN REQUIRED (use --login to turn authentication on)")
     app.run(host=host, port=args.port, debug=False, threaded=True)
     return 0
 
@@ -537,6 +564,10 @@ def build_parser() -> argparse.ArgumentParser:
     pv = sub.add_parser("serve", help="run the web interface (development server)")
     pv.add_argument("--bind", help="address to listen on (default: 127.0.0.1)")
     pv.add_argument("--port", type=int, default=5000)
+    pv.add_argument("--login", action="store_true",
+                    help="require logging in (off by default on this server)")
+    pv.add_argument("--insecure", action="store_true",
+                    help="allow a non-local address with no login")
     pv.set_defaults(func=cmd_serve)
 
     pu = sub.add_parser("user", help="manage accounts in users.toml")

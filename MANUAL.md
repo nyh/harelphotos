@@ -315,7 +315,7 @@ and `sync` (copy the generated images to the server).
 `derived_root`. Those are what a browser will actually load; the originals are
 only ever sent when someone asks to download one.
 
-Four sizes by default — 256 and 512 px for grid thumbnails, 1280 and 2048 px
+Four sizes by default — 256 and 512 px for grid thumbnails, 1280 and 1600 px
 for viewing a single photo — encoded as AVIF. They are laid out by pixel size:
 
 ```
@@ -341,7 +341,7 @@ To see what they cost, `harelphotos stats`.
 
 ## How the browser picks an image size
 
-Each photo is generated at several sizes (256, 512, 1280, 2048 px by default),
+Each photo is generated at several sizes (256, 512, 1280, 1600 px by default),
 and **the server does not choose between them** — the page offers all of them
 and the browser picks:
 
@@ -366,9 +366,12 @@ That is why there are two sizes for each purpose rather than one:
   where the bandwidth goes (500 thumbnails is 2.5 MB at 256 against 6.3 MB at
   512), so it matters that a non-retina screen is not made to pay retina
   prices.
-- **1280 and 2048 for viewing one photo.** A phone at 400 CSS px wide needs
-  about 1200 px; a desktop wants closer to 2000. Serving the phone 1280 rather
-  than 2048 halves the cost of every swipe.
+- **1280 and 1600 for viewing one photo.** The photo is letterboxed to fit
+  inside the window, so the limit is the available *height*, not the window
+  width: measured in a browser, a 4:3 photo in a 1920x1080 window renders only
+  1079 px wide, and the most demanding case — a retina laptop — needs 1676. So
+  1600 is the top size; 2048 was measured to buy nothing and cost more than
+  half the derived tree.
 
 Sizes larger than the original are never generated. A photo that falls between
 two tiers — 1174 px, say — gets a copy at *its own* size rather than being
@@ -402,7 +405,9 @@ They should not, but if they do, in order of likelihood:
 2. **Raise the quality.** The defaults are deliberately frugal: `quality` in
    `[encode]` is 52 at 256 px and 48 at 512 px. Raising those to, say, 62 and
    58 costs roughly a third more disk for the grid. Then run `harelphotos
-   scan`, which notices the change and regenerates.
+   scan`, which notices the change and regenerates. Note that changing quality
+   re-encodes **everything**, unlike changing `view`, which only makes the
+   sizes that changed.
 3. **The photo may simply be small.** An old scan or a 2003 camera photo has
    less detail than a modern phone image, and nothing can add it back. The
    info panel on the photo page shows the original's dimensions.

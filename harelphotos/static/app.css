@@ -242,3 +242,127 @@ h2.section:first-child { margin-block-start: 0.25rem; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* ------------------------------------------------- landing page (11.5) */
+
+.landing {
+  max-inline-size: 40rem;
+  margin-inline: auto;
+  padding: 2.5rem 1.25rem 3rem;
+  padding-inline: max(1.25rem, env(safe-area-inset-left)) max(1.25rem, env(safe-area-inset-right));
+  text-align: center;
+}
+.landing .hero {
+  inline-size: 100%;
+  max-inline-size: 640px;
+  block-size: auto;
+  border-radius: var(--radius);
+  margin-block-end: 1.5rem;
+}
+.landing h1 { font-size: 2rem; margin: 0 0 0.35rem; }
+.landing .tagline { color: var(--dim); margin-block: 0 2rem; }
+.landing .notice, .landing .error {
+  border-radius: var(--radius);
+  padding: 0.6rem 0.8rem;
+  margin-block-end: 1.25rem;
+}
+.landing .notice { background: var(--card); color: var(--dim); }
+.landing .error  { background: #fdeaea; color: #8a1f1f; }
+@media (prefers-color-scheme: dark) {
+  .landing .error { background: #3a1b1b; color: #ffb4b4; }
+}
+
+form.login {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.6rem 0.9rem;
+  align-items: center;
+  text-align: start;
+  max-inline-size: 24rem;
+  margin-inline: auto;
+}
+form.login label { color: var(--dim); }
+form.login input {
+  font: inherit;
+  padding: 0.55rem 0.6rem;
+  min-block-size: 44px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  inline-size: 100%;
+}
+form.login input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+form.login button {
+  grid-column: 2;
+  font: inherit;
+  font-weight: 600;
+  min-block-size: 44px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+.landing .or {
+  position: relative;
+  margin-block: 1.75rem;
+  color: var(--dim);
+  font-size: 0.85rem;
+}
+.landing .or::before {
+  content: "";
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline: 0;
+  border-block-start: 1px solid var(--line);
+}
+.landing .or span { position: relative; background: var(--bg); padding-inline: 0.75rem; }
+
+.landing .google {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
+  padding: 0 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.landing .google:hover { border-color: var(--accent); text-decoration: none; }
+.landing .legal { margin-block-start: 2.5rem; font-size: 0.85rem; color: var(--dim); }
+
+/* --------------------------------------------------- chrome (11.3) */
+
+.usermenu { display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; }
+.usermenu form, form.inline { display: inline; }
+button.linklike {
+  font: inherit;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+button.linklike:hover { color: var(--fg); }
+
+.sitefoot {
+  margin-block-start: 3rem;
+  padding: 1.25rem;
+  padding-inline: max(1.25rem, env(safe-area-inset-left)) max(1.25rem, env(safe-area-inset-right));
+  border-block-start: 1px solid var(--line);
+  color: var(--dim);
+  font-size: 0.85rem;
+}
+.sitefoot.warn {
+  background: #fff6e5;
+  color: #6b4a00;
+  border-block-start-color: #e8cf9a;
+}
+@media (prefers-color-scheme: dark) {
+  .sitefoot.warn { background: #2e2510; color: #ffd88a; border-block-start-color: #4d3f18; }
+}
+
+.prose { max-inline-size: 44rem; margin-inline: auto; padding: 2rem 1.25rem; }
+.prose h1 { font-size: 1.6rem; }
+.prose a { color: var(--accent); }

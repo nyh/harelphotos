@@ -93,13 +93,19 @@ def dominant_colour(im: Image.Image) -> str:
 
 
 def deriv_key(content_sig: bytes | None, cfg: Config) -> str:
-    """Fingerprint of everything that would change the output.
+    """Fingerprint of everything that would change how a tier is encoded.
 
     Deliberately built from `content_sig` and never from mtime: timestamps get
     rewritten without pixels changing, and making derivatives depend on them
     would turn a metadata tidy-up into a full re-encode (DESIGN.md 7).
+
+    Just as deliberately, it does **not** include which tiers are configured.
+    Adding a size to the ladder should cost only that size, not a re-encode of
+    the whole collection — which matters, because 'is 2048 worth its disk?' is
+    a question worth being able to answer by trying it.
     """
     e = cfg.encode
+    quality = ",".join(f"{k}:{v}" for k, v in sorted(e.quality.items()))
     recipe = "|".join(
         [
             e.format,
@@ -107,13 +113,30 @@ def deriv_key(content_sig: bytes | None, cfg: Config) -> str:
             str(e.recipe_version),
             str(e.speed),
             e.subsampling,
-            ",".join(f"{t}:{e.quality_for(t)}" for t in cfg.sizes.tiers),
+            quality,
+            str(e.quality_default),
         ]
     )
     h = hashlib.blake2b(digest_size=12)
     h.update(content_sig or b"")
     h.update(recipe.encode())
     return h.hexdigest()
+
+
+def expected_tiers(cfg: Config, longest: int | None) -> list[int]:
+    """Which tiers a photo of this size should have, without opening it.
+
+    Mirrors the rules in `derive`: nothing is upscaled, and the smallest tier
+    that covers an over-sized original holds the original's own size. Computed
+    from the dimensions already in the index, so deciding what work is
+    outstanding costs no file access.
+    """
+    tiers = list(cfg.sizes.tiers)
+    if not longest:
+        return tiers
+    covering = [t for t in tiers if t >= longest]
+    native = min(covering) if covering else None
+    return [t for t in tiers if t <= longest or t == native]
 
 
 def derived_path(cfg: Config, tier: int, relpath: str, fmt: str | None = None) -> Path:
@@ -160,8 +183,16 @@ class DeriveResult:
     error: str | None = None
 
 
-def derive(path: Path, relpath: str, cfg: Config) -> DeriveResult:
-    """Produce every configured tier for one photo. Never raises."""
+def derive(
+    path: Path, relpath: str, cfg: Config, only: set[int] | None = None
+) -> DeriveResult:
+    """Produce the configured tiers for one photo. Never raises.
+
+    `only` restricts the work to particular tiers, so adding a size to the
+    ladder regenerates just that size. The cascade still walks the whole way
+    down — each tier is resized from the one above — but nothing is re-encoded
+    unless it is wanted.
+    """
     out = DeriveResult()
     tiers = list(cfg.sizes.tiers)          # descending
     if not tiers:
@@ -199,6 +230,11 @@ def derive(path: Path, relpath: str, cfg: Config) -> DeriveResult:
                 cur if px == native_tier
                 else cur.filter(ImageFilter.UnsharpMask(radius, percent, threshold))
             )
+            if only is not None and px not in only:
+                out.tiers.append(px)       # already on disk and still current
+                if px == tiers[-1]:
+                    out.colour = dominant_colour(shaped)
+                continue
             dest = derived_path(cfg, px, relpath)
             written = save_atomic(shaped, dest, cfg, px)
             # Re-encoding a small photo can produce something bigger than the

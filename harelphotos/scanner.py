@@ -202,10 +202,10 @@ def find_missing_derivatives(
     return missing
 
 
-def _phase3_worker(job: tuple[int, str, str, "Config"]) -> dict:
-    """Runs in a pool process: derive every tier for one photo."""
-    photo_id, path_str, relpath, cfg = job
-    res = derive.derive(Path(path_str), relpath, cfg)
+def _phase3_worker(job: tuple[int, str, str, "Config", set]) -> dict:
+    """Runs in a pool process: derive the wanted tiers for one photo."""
+    photo_id, path_str, relpath, cfg, only = job
+    res = derive.derive(Path(path_str), relpath, cfg, only=only)
     return {
         "id": photo_id,
         "tiers": res.tiers,
@@ -595,18 +595,33 @@ class Scanner:
         """Photos whose derivatives do not match the current recipe."""
         clause, params = self._subtree_clause(subpath)
         rows = self.conn.execute(
-            "SELECT p.id, p.content_sig, p.deriv_key, d.path, p.name "
-            "FROM photos p JOIN dirs d ON d.id = p.dir_id "
+            "SELECT p.id, p.content_sig, p.deriv_key, p.deriv_tiers, p.width, p.height, "
+            "d.path, p.name FROM photos p JOIN dirs d ON d.id = p.dir_id "
             "WHERE p.content_sig IS NOT NULL" + clause + " ORDER BY d.path, p.name",
             params,
         ).fetchall()
         jobs = []
         for r in rows:
-            want = derive.deriv_key(r["content_sig"], self.cfg)
-            if r["deriv_key"] == want:
-                continue
+            want_key = derive.deriv_key(r["content_sig"], self.cfg)
+            longest = max(r["width"] or 0, r["height"] or 0) or None
+            want_tiers = set(derive.expected_tiers(self.cfg, longest))
+            try:
+                have_tiers = set(json.loads(r["deriv_tiers"] or "[]"))
+            except ValueError:
+                have_tiers = set()
+
+            if r["deriv_key"] != want_key:
+                only = None                 # the recipe changed: redo them all
+            else:
+                missing = want_tiers - have_tiers
+                if not missing:
+                    continue                # nothing outstanding
+                only = missing              # just the newly-configured sizes
+
             relpath = f"{r['path']}/{r['name']}" if r["path"] else r["name"]
-            jobs.append((r["id"], str(self.cfg.photo_root / relpath), relpath, self.cfg))
+            jobs.append(
+                (r["id"], str(self.cfg.photo_root / relpath), relpath, self.cfg, only)
+            )
             if limit and len(jobs) >= limit:
                 break
         return jobs

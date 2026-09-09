@@ -17,7 +17,7 @@ def test_derives_every_configured_tier(tmp_path):
     cfg = fixtures.make_config(tmp_path, photos)
     res = derive.derive(photos / "a.jpg", "a.jpg", cfg)
     assert res.error is None
-    assert res.tiers == [2048, 1280, 512, 256]
+    assert res.tiers == [1600, 1280, 512, 256]
     for tier in res.tiers:
         p = derive.derived_path(cfg, tier, "a.jpg")
         assert p.exists(), p
@@ -32,7 +32,11 @@ def test_aspect_ratio_is_preserved_never_cropped(tmp_path):
     cfg = fixtures.make_config(tmp_path, photos)
     derive.derive(photos / "wide.jpg", "wide.jpg", cfg)
     with Image.open(derive.derived_path(cfg, 512, "wide.jpg")) as im:
-        assert im.size == (512, 171)       # 3:1 kept, not squared off
+        # 3:1 kept, not squared off. Asserted as a ratio rather than an exact
+        # height: the cascade rounds at each step, so the last pixel depends on
+        # which sizes are in the ladder above this one.
+        assert im.size[0] == 512
+        assert abs(im.size[0] / im.size[1] - 3.0) < 0.02
 
 
 def test_never_upscales(tmp_path):
@@ -137,12 +141,13 @@ def test_deriv_key_changes_with_every_setting_that_matters(tmp_path):
         object.__setattr__(other.encode, field, value)
         assert derive.deriv_key(b"sig", other) != base, field
 
-    # Changing the ladder must invalidate too, or a new tier is never built.
+    # Changing the ladder must NOT invalidate: which sizes are wanted is
+    # tracked separately (deriv_tiers), so adding one costs only that one.
     from harelphotos.config import Sizes
 
     other = fixtures.make_config(tmp_path, photos)
     object.__setattr__(other, "sizes", Sizes(thumb=(256,), view=(1600,)))
-    assert derive.deriv_key(b"sig", other) != base
+    assert derive.deriv_key(b"sig", other) == base
 
 
 def test_pipeline_version_invalidates_derivatives(tmp_path):
@@ -330,4 +335,63 @@ def test_an_interrupted_derive_keeps_what_it_finished(tmp_path):
     second = scanner.scan(cfg, conn)
     assert second.photos_derived == 4        # the remaining four, not all six
     assert scanner.scan(cfg, conn).photos_derived == 0
+    conn.close()
+
+
+def test_adding_a_tier_regenerates_only_that_tier(tmp_path):
+    """'Is 2048 worth its disk?' should be answerable by trying it.
+
+    The tier list is deliberately excluded from the recipe fingerprint, so
+    widening the ladder costs the new size rather than a re-encode of
+    everything.
+    """
+    from harelphotos.config import Sizes
+
+    photos = tmp_path / "pictures"
+    fixtures.make_jpeg(photos / "a.jpg", size=(3000, 2000))
+    cfg = fixtures.make_config(tmp_path, photos)
+    object.__setattr__(cfg, "sizes", Sizes(thumb=(256, 512), view=(1280,)))
+    conn = fixtures.fresh_index(cfg)
+    scanner.scan(cfg, conn)
+    assert json.loads(
+        conn.execute("SELECT deriv_tiers FROM photos").fetchone()["deriv_tiers"]
+    ) == [1280, 512, 256]
+    small_mtime = derive.derived_path(cfg, 512, "a.jpg").stat().st_mtime_ns
+
+    # Widen the ladder.
+    object.__setattr__(cfg, "sizes", Sizes(thumb=(256, 512), view=(1280, 2048)))
+    stats = scanner.scan(cfg, conn)
+    assert stats.photos_derived == 1
+    assert derive.derived_path(cfg, 2048, "a.jpg").exists()
+    # The tiers that did not change were left exactly as they were.
+    assert derive.derived_path(cfg, 512, "a.jpg").stat().st_mtime_ns == small_mtime
+    assert set(json.loads(
+        conn.execute("SELECT deriv_tiers FROM photos").fetchone()["deriv_tiers"]
+    )) == {256, 512, 1280, 2048}
+    conn.close()
+
+
+def test_removing_a_tier_needs_no_re_encoding_at_all(tmp_path):
+    from harelphotos.config import Sizes
+
+    photos = tmp_path / "pictures"
+    fixtures.make_jpeg(photos / "a.jpg", size=(3000, 2000))
+    cfg = fixtures.make_config(tmp_path, photos)
+    conn = fixtures.fresh_index(cfg)
+    scanner.scan(cfg, conn)
+
+    object.__setattr__(cfg, "sizes", Sizes(thumb=(256, 512), view=(1280,)))
+    assert scanner.scan(cfg, conn).photos_derived == 0
+    conn.close()
+
+
+def test_a_quality_change_still_redoes_everything(tmp_path):
+    """Quality applies to the encoding itself, so it must invalidate."""
+    photos = tmp_path / "pictures"
+    fixtures.make_jpeg(photos / "a.jpg", size=(1000, 800))
+    cfg = fixtures.make_config(tmp_path, photos)
+    conn = fixtures.fresh_index(cfg)
+    scanner.scan(cfg, conn)
+    object.__setattr__(cfg.encode, "quality", {256: 70, 512: 70, 1280: 70, 2048: 70})
+    assert scanner.scan(cfg, conn).photos_derived == 1
     conn.close()

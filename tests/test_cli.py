@@ -111,7 +111,7 @@ def test_user_commands_on_unknown_name(project):
 def test_config_show(project, capsys):
     assert cli.main(["config", "show"]) == 0
     out = capsys.readouterr().out
-    assert "2048, 1280, 512, 256" in out
+    assert "1600, 1280, 512, 256" in out
     assert "avif" in out
 
 

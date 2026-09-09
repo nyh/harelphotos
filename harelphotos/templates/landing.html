@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ cfg.ui.site_title }}{% endblock %}
+{% block body %}
+<div class="landing">
+  {% if hero %}
+    <img class="hero" src="{{ hero.src }}"
+         {% if hero.srcset %}srcset="{{ hero.srcset }}" sizes="(max-width: 700px) 92vw, 640px"{% endif %}
+         alt="{{ cfg.ui.site_title }}">
+  {% endif %}
+
+  <h1>{{ cfg.ui.heading }}</h1>
+  <p class="tagline">{{ cfg.ui.tagline }}</p>
+
+  {% if notice %}<p class="notice">{{ notice }}</p>{% endif %}
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+
+  <form class="login" method="post" action="{{ url_for('login') }}">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+    <label for="username">Username</label>
+    <input id="username" name="username" autocomplete="username"
+           autocapitalize="none" spellcheck="false" required autofocus>
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password"
+           autocomplete="current-password" required>
+    <button type="submit">Log in</button>
+  </form>
+
+  {% if cfg.google.enabled %}
+    <div class="or"><span>or</span></div>
+    <a class="google" href="{{ url_for('google_start', next=next_url) }}">Sign in with Google</a>
+  {% endif %}
+
+  <p class="legal">
+    <a href="{{ url_for('privacy') }}">Privacy</a> ·
+    <a href="{{ url_for('terms') }}">Terms</a>
+  </p>
+</div>
+{% endblock %}

@@ -34,9 +34,9 @@ Chosen from measurements rather than taste — the numbers behind each are in
 
 | | |
 |---|---|
-| Derivative format | **AVIF**, four tiers (256/512 px grid, 1280/2048 px lightbox) delivered by `srcset`; WebP/JPEG served to older browsers by content negotiation. Measured 48% smaller than WebP at matched SSIM |
-| Derived tree size | **~21 GB for 98,460 photos** — 7% of the originals |
-| Bulk encode | **~27 core-hours** (~2.3 h on 12 cores), run on a fast machine and rsynced to the server |
+| Derivative format | **AVIF**, four tiers (256/512 px grid, 1280/1600 px viewing) delivered by `srcset`; WebP/JPEG served to older browsers by content negotiation. Measured 48% smaller than WebP at matched SSIM |
+| Derived tree size | **~14 GB for 98,460 photos** — under 5% of the originals |
+| Bulk encode | **~22 core-hours** (~1.9 h on 12 cores), run on a fast machine and rsynced to the server |
 | Change detection | mtime decides whether to *look*; a content signature decides whether to *work*, so re-dating files doesn't trigger a mass re-encode |
 | Photo grid | justified rows, true aspect ratios, **never cropped** |
 | Album listing | separate section, uniform cards with the name captioned below |

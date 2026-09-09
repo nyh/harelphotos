@@ -1,0 +1,25 @@
+{# Shared chrome: who you are, and a way out. On every logged-in page, so
+   there is never a page you cannot leave from (DESIGN.md 11.3). #}
+{% macro user_menu(viewer) %}
+  {% if viewer and viewer.token %}
+  <div class="usermenu">
+    <span class="dim">{{ viewer.name or viewer.token }}</span>
+    <form method="post" action="{{ url_for('logout') }}">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <button type="submit" class="linklike">Log out</button>
+    </form>
+  </div>
+  {% endif %}
+{% endmacro %}
+
+{% macro footer(viewer) %}
+  {% if viewer and viewer.token %}
+  <footer class="sitefoot">
+    {{ footer_html(viewer)|safe }}
+  </footer>
+  {% elif dev_no_login %}
+  <footer class="sitefoot warn">
+    Running without a login. Anyone who can reach this server sees everything.
+  </footer>
+  {% endif %}
+{% endmacro %}

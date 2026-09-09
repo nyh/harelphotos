@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_chrome.html" as chrome %}
 {% block title %}{{ photo.title or photo.name }} — {{ cfg.ui.site_title }}{% endblock %}
 {% block body %}
 <div class="viewer">
@@ -12,13 +13,15 @@
               aria-controls="info" title="Photo information (i)">Info</button>
       <a class="button" href="/orig/{{ photo.relpath }}" download
          title="Download the original file (d)">Download original</a>
+      {{ chrome.user_menu(viewer) }}
     </div>
   </header>
 
   <div class="stage">
     {% if prev %}<a class="nav prev" href="{{ prev.page_url }}" title="Previous">&#8249;</a>{% endif %}
     <img id="main" src="{{ photo|img_src(2048) }}"
-         {% if photo.tiers %}srcset="{{ photo|srcset(view_tiers) }}" sizes="100vw"{% endif %}
+         {% if photo.tiers %}srcset="{{ photo|srcset(all_tiers) }}"
+         sizes="{{ photo|view_sizes }}"{% endif %}
          {% if photo.width %}width="{{ photo.width }}" height="{{ photo.height }}"{% endif %}
          style="background: {{ photo.colour }}"
          alt="{{ photo.title or photo.name }}">

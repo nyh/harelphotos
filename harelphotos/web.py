@@ -1,45 +1,90 @@
-"""The web application (DESIGN.md 10).
+"""The web application (DESIGN.md 10, 12).
 
-M4: browsing, with no authentication — every request is treated as an admin.
-M5 replaces `current_viewer()` with the session and adds the login gate; the
-access-control machinery it will use is already in place and already applied to
-every query, so that change is a substitution rather than a retrofit.
+Login is enforced by a single `before_request` hook against a literal list of
+public endpoints (`auth.PUBLIC_ENDPOINTS`), and a test walks every registered
+route to check nothing escaped it.
+
+`require_login=False` turns the gate off entirely, for working on the interface
+locally without typing a password every time. It is a per-process argument, not
+a config setting: something that disables authentication should have to be
+passed deliberately, and never be a line in a file that could be wrong on the
+server.
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
-from flask import Flask, abort, g, redirect, render_template, request, url_for
+from flask import (
+    Flask, abort, flash, g, get_flashed_messages, redirect, render_template,
+    request, session, url_for,
+)
+from markupsafe import Markup, escape
 
-from . import db, images
+from . import auth, db, images, public_assets
 from .config import Config
 from .queries import Album, Index, Photo, Viewer
 
 log = logging.getLogger("harelphotos.web")
 
-# Until M5 there is no session, and the app binds to localhost only.
-DEV_VIEWER = Viewer(token=None, name="", is_admin=True)
+# The viewer used when the login gate is off: sees everything, like an admin,
+# but has no token, so the chrome can tell the difference and say so.
+NO_LOGIN_VIEWER = Viewer(token=None, name="", is_admin=True)
 
 
-def create_app(cfg: Config) -> Flask:
+def create_app(cfg: Config, *, require_login: bool = True) -> Flask:
     app = Flask(__name__)
     app.config["HARELPHOTOS"] = cfg
-    app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
+    app.config["HARELPHOTOS_REQUIRE_LOGIN"] = require_login
+    app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
+    app.secret_key = auth.secret_key(cfg)
+    app.config.update(
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        # Off only when serving plain HTTP locally: with it on and no TLS the
+        # cookie is never sent back, and you land on the login page again with
+        # no error anywhere (DESIGN.md 13.5).
+        SESSION_COOKIE_SECURE=cfg.base_url.startswith("https://"),
+        PERMANENT_SESSION_LIFETIME=timedelta(days=30),
+    )
 
     @app.before_request
     def _open_index() -> None:
         g.conn = db.open_index(cfg.index_db, read_only=True)
         g.index = Index(g.conn, cfg)
-        g.viewer = current_viewer()
+        g.viewer = NO_LOGIN_VIEWER if not require_login else auth.current_viewer(cfg)
+
+    @app.before_request
+    def _require_login():
+        """The login gate. Fail closed: anything not listed needs a session."""
+        if not require_login:
+            return None
+        if request.endpoint in auth.PUBLIC_ENDPOINTS:
+            return None
+        if g.viewer is not None:
+            return None
+        if request.endpoint is None:
+            abort(404)
+        # An image or JSON request from a stale page should not be answered
+        # with a login page; say plainly that it is unauthorised.
+        if request.endpoint in ("image", "original", "inline_original", "api_album"):
+            abort(401)
+        return redirect(auth.login_url(cfg))
 
     @app.teardown_request
     def _close_index(exc) -> None:
         conn = g.pop("conn", None)
         if conn is not None:
             conn.close()
+
+    @app.context_processor
+    def _chrome_context():
+        return {
+            "viewer": g.get("viewer"),
+            "dev_no_login": not app.config["HARELPHOTOS_REQUIRE_LOGIN"],
+        }
 
     @app.after_request
     def _security_headers(resp):
@@ -55,10 +100,6 @@ def create_app(cfg: Config) -> Flask:
     _register_routes(app, cfg)
     _register_filters(app, cfg)
     return app
-
-
-def current_viewer() -> Viewer:
-    return DEV_VIEWER
 
 
 def _clean_path(raw: str) -> str:
@@ -79,9 +120,84 @@ def _clean_path(raw: str) -> str:
 
 def _register_routes(app: Flask, cfg: Config) -> None:
     @app.route("/")
-    def home():
-        # Not url_for: the <path:> converter renders an empty segment as "/a//".
-        return redirect("/a/")
+    def landing():
+        """The only page an unauthenticated visitor sees (DESIGN.md 11.5)."""
+        if g.viewer is not None:
+            return redirect("/a/")
+        return _render_landing(cfg)
+
+    @app.route("/login", methods=("GET", "POST"))
+    def login():
+        if g.viewer is not None and request.method == "GET":
+            return redirect(auth.safe_next(request.args.get("next")) or "/a/")
+        if request.method == "GET":
+            return _render_landing(cfg, next_url=auth.safe_next(request.args.get("next")))
+
+        nxt = auth.safe_next(request.form.get("next"))
+        if not auth.check_csrf():
+            # Usually a stale form rather than an attack; say something useful.
+            return _render_landing(
+                cfg, next_url=nxt,
+                error="That form had expired. Please try again.",
+            ), 400
+
+        # The throttle table is the one thing the web process writes.
+        writable = db.open_index(cfg.index_db)
+        try:
+            try:
+                auth.check_rate_limit(writable)
+            except auth.LoginRateLimited as e:
+                return _render_landing(
+                    cfg, next_url=nxt,
+                    error=f"Too many attempts. Try again in {e.wait:.0f} seconds.",
+                ), 429
+
+            username = (request.form.get("username") or "").strip()
+            user = auth.authenticate(cfg, username, request.form.get("password") or "")
+            if user is None:
+                auth.record_failure(writable)
+                log.info("failed login for %r from %s", username, request.remote_addr)
+                # Never says which of the two was wrong, nor whether the
+                # account exists.
+                return _render_landing(
+                    cfg, next_url=nxt, error="Incorrect username or password.",
+                ), 401
+            auth.clear_failures(writable)
+        finally:
+            writable.close()
+
+        auth.log_in(user, via="local")
+        log.info("login: %s from %s", user.token, request.remote_addr)
+        return redirect(nxt or "/a/")
+
+    @app.route("/logout", methods=("POST",))
+    def logout():
+        """POST only, and CSRF-checked.
+
+        A GET link would be followed by link prefetchers, mail scanners and
+        preview bots, each of which would silently log you out.
+        """
+        if not auth.check_csrf():
+            abort(400)
+        auth.log_out()
+        return redirect(url_for("landing", logged_out=1))
+
+    @app.route("/privacy")
+    def privacy():
+        return _render_text(cfg, "privacy.md", "Privacy")
+
+    @app.route("/terms")
+    def terms():
+        return _render_text(cfg, "terms.md", "Terms")
+
+    @app.route("/public/<name>")
+    def public_asset(name: str):
+        """Fixed filenames only — no part of the request becomes a path."""
+        path = public_assets.asset_path(cfg, name)
+        if path is None or not path.is_file():
+            abort(404)
+        mime = "image/avif" if name.endswith(".avif") else "image/jpeg"
+        return images.send(cfg, path, mime, vary_accept=False)
 
     @app.route("/a/")
     @app.route("/a/<path:dirpath>/")
@@ -161,6 +277,23 @@ def _register_routes(app: Flask, cfg: Config) -> None:
             vary_accept=False,
         )
 
+    @app.route("/api/a/", defaults={"dirpath": ""})
+    @app.route("/api/a/<path:dirpath>/")
+    def api_album(dirpath: str = ""):
+        """Photo list as JSON, for the large-album safety valve and prefetch."""
+        alb = g.index.album(_clean_path(dirpath), g.viewer)
+        if alb is None:
+            abort(404)
+        photos = g.index.photos(alb, g.viewer)
+        return {
+            "path": alb.path,
+            "count": len(photos),
+            "photos": [
+                {"name": p.name, "url": p.page_url, "aspect": round(p.aspect, 4)}
+                for p in photos
+            ],
+        }
+
     @app.route("/healthz")
     def healthz():
         return {"ok": True, "photos": g.conn.execute(
@@ -169,6 +302,48 @@ def _register_routes(app: Flask, cfg: Config) -> None:
     @app.errorhandler(404)
     def not_found(_):
         return render_template("404.html", cfg=cfg), 404
+
+
+def _render_landing(cfg: Config, next_url: str | None = None, error: str | None = None):
+    notice = None
+    if request.args.get("logged_out"):
+        notice = "You have been logged out."
+    return render_template(
+        "landing.html",
+        cfg=cfg,
+        hero=public_assets.hero(cfg),
+        csrf=auth.csrf_token(),
+        next_url=next_url,
+        error=error,
+        notice=notice,
+    )
+
+
+def _render_text(cfg: Config, filename: str, heading: str):
+    """Serve the privacy/terms text that `init` wrote, as plain paragraphs."""
+    path = (cfg.source.parent if cfg.source else Path(".")) / filename
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        raw = f"# {heading}\n\nNot configured."
+    html = []
+    for block in raw.split("\n\n"):
+        block = block.strip()
+        if not block:
+            continue
+        if block.startswith("# "):
+            html.append(f"<h1>{escape(block[2:].strip())}</h1>")
+        elif block.startswith("- "):
+            items = "".join(
+                f"<li>{escape(line[2:].strip())}</li>"
+                for line in block.splitlines() if line.strip().startswith("- ")
+            )
+            html.append(f"<ul>{items}</ul>")
+        else:
+            html.append(f"<p>{escape(block)}</p>")
+    return render_template(
+        "text.html", cfg=cfg, heading=heading, body=Markup("".join(html))
+    )
 
 
 def _register_filters(app: Flask, cfg: Config) -> None:
@@ -210,6 +385,21 @@ def _register_filters(app: Flask, cfg: Config) -> None:
             w, _ = photo.size_at(tier)
             parts.append(f"/i/{tier}/{photo.relpath}?v={photo.deriv_key} {w}w")
         return ", ".join(parts)
+
+    @app.template_filter("view_sizes")
+    def view_sizes(photo: Photo) -> str:
+        """How wide the single photo will actually render.
+
+        Not 100vw. The photo is letterboxed to fit *inside* the window, so for
+        anything but a very tall image the limit is the available HEIGHT, not
+        the width: measured in Chrome, a 4:3 photo in a 1920x1080 window
+        renders 1079 px wide, not 1900. Claiming 100vw made the browser fetch
+        the 2048 tier where 1280 was plenty — wasted bandwidth on every photo
+        viewed.
+        """
+        ar = max(0.2, min(5.0, photo.aspect))
+        # Mirrors the CSS: max-inline-size 100%, max-block-size 100dvh - 8rem.
+        return f"min(100vw, calc((100vh - 8rem) * {ar:.3f}))"
 
     @app.template_filter("grid_sizes")
     def grid_sizes(photo: Photo) -> str:
@@ -269,6 +459,26 @@ def _register_filters(app: Flask, cfg: Config) -> None:
     # screen — so a ladder stopping at 512 would visibly upscale it. Offering
     # the larger tiers costs nothing: they already exist, and `sizes` stops a
     # small tile from ever fetching one.
+    def footer_html(viewer: Viewer) -> str:
+        """Render `footer_text`, substituting only {user} and {logout}.
+
+        The surrounding text is escaped; the two placeholders become a name and
+        a real form-backed button, so logging out stays a POST.
+        """
+        template = cfg.ui.footer_text
+        logout_form = Markup(
+            '<form method="post" action="{}" class="inline">'
+            '<input type="hidden" name="csrf" value="{}">'
+            '<button type="submit" class="linklike">log out</button></form>'
+        ).format(url_for("logout"), auth.csrf_token())
+        out = escape(template)
+        out = out.replace("{user}", Markup("<strong>{}</strong>").format(
+            viewer.name or viewer.token or ""))
+        out = out.replace("{logout}", logout_form)
+        return out
+
+    app.jinja_env.globals["footer_html"] = footer_html
+    app.jinja_env.globals["csrf_token"] = auth.csrf_token
     app.jinja_env.globals["all_tiers"] = sorted(cfg.sizes.tiers)
     app.jinja_env.globals["thumb_tiers"] = list(cfg.sizes.thumb)
     app.jinja_env.globals["view_tiers"] = sorted(cfg.sizes.view)
