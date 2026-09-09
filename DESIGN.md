@@ -529,8 +529,9 @@ CREATE TABLE photos (
   hidden      INTEGER NOT NULL DEFAULT 0,
   color       TEXT,                    -- '#rrggbb' dominant colour placeholder
   exif_json   TEXT,                    -- camera, lens, exposure, iso, focal, gps
-  place       TEXT,                    -- resolved place name, or NULL (§9.5)
-  place_dist  INTEGER,                 -- metres to that place; large = "near X"  
+  place       TEXT,                    -- resolved city, or NULL (§9.5)
+  place_dist  INTEGER,                 -- metres to it; large renders as "near X"
+  landmark    TEXT,                    -- optional landmark qualifier, or NULL
   deriv_key   TEXT,                    -- fingerprint of what the derivatives were made from
   deriv_error TEXT,
   seen        INTEGER NOT NULL,
@@ -840,59 +841,133 @@ measurements in §9.6.)
 
 ---
 
-### 9.5 Place names from coordinates (planned, not in the early milestones)
+### 9.5 Place names from coordinates
 
 Turning `37.1036, 25.3766` into "Naxos, Greece" is much nicer than a coordinate
-pair, and it's worth designing now even though it lands late (M9), because two
-of its consequences touch earlier work.
+pair. This was originally deferred to M9 on the assumption it was expensive;
+prototyping showed otherwise, so **the city layer moves up to M3**.
+
+**Correcting an earlier claim in this document: geocoding does *not* require a
+rescan.** It never opens a photo file. The GPS coordinates are already in the
+database after the header-read pass (§8, phase 2), so geocoding is a pure
+database operation — read coordinates, resolve names, write `photos.place`.
+Running it later costs seconds, not a re-read of 300 GB. It is exposed both as
+part of `scan` and as a standalone `harelphotos geocode` for re-running after a
+dataset update.
 
 **It must happen at scan time, not request time.** A page view must never make
 an outbound network call: the server is weak, the call would block a request,
-and an unreachable geocoder would break the info panel. The resolved name is
-stored in `photos.place` and rendered from the database like any other field.
+and an unreachable geocoder would break the info panel.
 
 **Do it offline, from a local dataset.** The obvious approach is an online
 reverse-geocoder such as Nominatim, and it's the wrong one here:
 
 - Its usage policy caps bulk work at ~1 request/second, so 80,000 photos would
-  take about a day and would be an abuse of a volunteer-run service.
+  take about a day and would abuse a volunteer-run service.
 - More importantly, it means **transmitting the GPS coordinates of every photo
   your family has ever taken to a third party** — including your house. For a
   site whose entire premise is that these photos are private, that's the wrong
-  default, and it happens silently at scan time rather than on a deliberate
-  click.
+  default, and it would happen silently at scan time rather than on a
+  deliberate click.
 
-Instead use **GeoNames `cities500`** — a free CC-BY dataset of every populated
-place with 500+ inhabitants, **13.6 MB zipped** (verified), downloaded once by
-`harelphotos init --geonames`. Nearest-place lookup over ~200k points is a
-trivial spatial search; with coordinates rounded to ~100 m and memoised, an
-80,000-photo collection collapses to a few thousand distinct lookups and the
-whole pass takes seconds. No network, no rate limit, no privacy leak, and it
-works identically on a machine with no internet access.
+#### Layer 1 — cities (M3, the reliable backbone)
 
-The honest limitation is that nearest-populated-place is approximate: a photo
-taken on a mountainside gets the nearest village, which may be 20 km away. So
-render the distance when it's large — "near Filoti, Greece (18 km)" — rather
-than asserting a precision we don't have.
+**GeoNames `cities500`**: every populated place worldwide with 500+
+inhabitants. Measured end to end with a working prototype:
 
-**Two consequences for earlier milestones**, which is why this is written down
-now:
+| | |
+|---|---|
+| Download | **13.6 MB** zipped, one-off (`harelphotos init --geonames`) |
+| Contents | **235,694 places**, worldwide |
+| Build | parse 0.6 s + index 0.3 s → a **16 MB** SQLite table |
+| Lookup | **0.16 ms** per distinct coordinate |
+| **Whole collection** | **0.7 s for 80,000 photos** (≈4,000 distinct locations after rounding to ~100 m and memoising) |
+| Dependencies | **none** — stdlib `sqlite3` and `math`, ~80 lines |
 
-1. `photos.place` and `photos.place_dist` exist in the schema from M1, so
-   adding geocoding later is a rescan rather than a migration.
-2. **Most of your collection has no GPS at all.** Scans, film, and pre-2010
-   cameras record nothing, and your "ancient" directory is exactly that case.
-   Coordinates can't help there, so `.album.toml` gets a `location` key:
+Spot-checked worldwide: Náxos 0.2 km, Tel Aviv 0.5 km, Reykjavík 2.6 km,
+Lobuche (Everest) 12.1 km. You were right that this is simple; it is also fast
+enough to be unconditional.
+
+The honest limitation is that nearest-populated-place is approximate — a photo
+on a mountainside gets the nearest village, possibly 20 km away — so render the
+distance when it's large ("near Filoti, Greece (18 km)") rather than asserting
+precision we don't have. Note also that the longitude box does not wrap at
+±180°, which costs nothing outside the Pacific.
+
+#### Layer 2 — landmarks (M9, opt-in, and genuinely imperfect)
+
+You asked for famous places that aren't cities — Disney World, the Grand
+Canyon. GeoNames does carry these, in the full `allCountries` dump, under
+feature codes like `AMUS` (amusement park), `PRK` (park), `MNMT` (monument),
+`MT`, `CNYN`, `VLC`, `HSTS`. I tested it worldwide rather than guessing.
+
+Filtering 13,464,089 worldwide rows to a curated allowlist of ~30 landmark codes
+keeps **1,342,811 rows** (10%) — excluding the enormous noise categories
+(streams, churches, schools, buildings, hotels, wells) that would otherwise
+label a family photo "Saint Mary Church".
+
+What a *coordinate* lookup actually returns, tested at ten famous sites:
+
+| site | nearest curated landmark | |
+|---|---|---|
+| Eiffel Tower | **Tour Eiffel** (0.01 km) | ✅ |
+| Mount Fuji | **Fujiyama** (0.03 km) | ✅ |
+| Machu Picchu | **Ruinas Machupicchu** (0.10 km) | ✅ |
+| Colosseum | **Colosse** (0.12 km) | ✅ |
+| Uluru | **Uluru National Park** (0.15 km) | ✅ |
+| Masada | **Har Metsada** (0.24 km) | ✅ |
+| Walt Disney World | **Walt Disney World Resort** (2.03 km) | ✅ |
+| Taj Mahal | Anguri Bagh (1.92 km) — a garden inside the complex | ⚠️ |
+| Grand Canyon south rim | Grandeur Point (1.88 km) — a viewpoint | ⚠️ |
+| Western Wall | Muristan (0.44 km) — a different quarter | ❌ |
+
+So: **roughly seven in ten give a recognisable answer**, and names come in the
+local language or transliteration ("Tour Eiffel", "Har Metsada", "Fujiyama").
+The failure mode is that GeoNames has no notion of significance, so in dense
+historic areas the *nearest* feature is some minor sub-feature rather than the
+famous thing you meant. I tried using the count of alternate-language names as a
+fame proxy and it doesn't work — "Walt Disney World" scores 3 while "Mud Lake"
+scores 18.
+
+Consequences for the design:
+
+- **Opt-in**, via `harelphotos init --landmarks`: a 421 MB download filtered
+  down to a ~100 MB table. Too big and too approximate to be the default.
+- **Always show the city as well**, never the landmark alone — "Tour Eiffel ·
+  Paris, France". A wrong landmark then reads as a curiosity rather than the
+  entire answer.
+- **Only label within a tight, code-specific radius** (a few hundred metres for
+  monuments and museums, a few km for parks and resorts), so a photo gets a
+  landmark only when genuinely at one. This also disposes of name ambiguity
+  without any cleverness: there are twelve "Grand Canyon"s in the US alone, but
+  only one is within 5 km of you.
+
+#### The better answer for trip albums
+
+For your actual examples, `.album.toml`'s `location` key beats any geocoder and
+ships in **M2**:
+
+```toml
+location = "Walt Disney World"
+```
+
+Typed once for the album, it is exactly right, in your words and your language,
+for every photo in it — no 421 MB download, no seven-in-ten. Use the geocoder
+for the long tail of photos nobody will ever label by hand.
+
+**And most of your collection has no GPS at all.** Scans, film and pre-2010
+cameras record nothing, and your "ancient" directory is precisely that case;
+coordinates cannot help there at any accuracy. The same `location` key covers
+it:
 
    ```toml
    location = "Naxos, Greece"     # applies to this album and its subdirectories
    ```
 
-   A hand-written album location beats a geocoder for the photos that need it
-   most, costs nothing, follows the PLAN's principle that metadata lives in the
-   directory, and — unlike the geocoder — can ship in M2. A photo's own GPS
-   still wins where present; the album location is the fallback, inherited down
-   the tree.
+   Precedence: a confident landmark match, then the photo's own resolved city,
+   then the album `location`, then raw coordinates. The album location is
+   inherited down the tree, and is what makes the info panel useful for the
+   pre-GPS half of the collection.
 
 ### 9.6 Decode cost on the client
 
@@ -2120,7 +2195,10 @@ requirement.
 ```
 harelphotos init                     create config, state dirs, secret key,
                                      and default privacy/terms text (§12.2)
-harelphotos init --geonames          download the offline place-name dataset (§9.5)
+harelphotos init --geonames          download the offline city dataset, 13.6 MB (§9.5)
+harelphotos init --landmarks         also download the landmark dataset, 421 MB (§9.5)
+harelphotos geocode [--force]        resolve place names from GPS already in the DB;
+                                     no photo files are read, ~1 s for 80k photos
 harelphotos scan [--full] [--jobs N] [--nice N] [--limit N] [--dir PATH]
                  [--dry-run] [--fallback webp|jpeg]
 harelphotos check                    config errors, missing/failed derivatives,
@@ -2216,13 +2294,13 @@ Each milestone is independently useful and independently testable.
 |---|---|---|
 | **M1** | Config loading, `.album.toml` parsing, DB schema, `init` | foundation |
 | **M2** | `scan` phases 1–2 + `check`: tree indexed with dates and dimensions, no images yet | verify the diff engine and the mtime-vs-signature logic on the real 300 GB tree — fast and safe |
-| **M3** | Derivative pipeline + phases 3–4; `gc`, `stats` | the first long run; validate the §2 projections against reality |
+| **M3** | Derivative pipeline + phases 3–4; `gc`, `stats`; **offline city geocoding** (§9.5) | the first long run; validate the §2 projections against reality |
 | **M4** | Flask app: album browsing, **subdirectory cards + ordering** (§11.1a–b), **justified-row photo grid** (§11.1c), photo pages, **no auth** | bind to localhost only |
 | **M5** | Landing page (§11.5), local accounts, sessions, `?next=` deep links, ACL enforcement | the security-critical milestone; write these tests first |
 | **M6** | TLS (§13.3), firewall/SELinux (§13.4), then Google Sign-In | TLS comes first. The Google half is optional (§12.2) — local accounts already work, so M6 can be dropped or deferred without affecting anything else |
 | **M7** | Lightbox: keyboard, swipe, prefetch, **info panel + download original** (§11.2), album `location` | the "feels like Google Photos" milestone |
 | **M8** | Deployment: **`INSTALL.md`** (§13.0), `check --env`, gunicorn unit, Apache vhost, `sync`, README | |
-| **M9** | Polish: date-group headers, cover-picker UI, dark mode, **offline reverse geocoding** (§9.5), >5000-photo safety valve | |
+| **M9** | Polish: date-group headers, cover-picker UI, dark mode, **opt-in landmark geocoding** (§9.5), >5000-photo safety valve | |
 
 M4 is usable on the home machine from day one via `harelphotos serve` (§13.5) —
 plain HTTP on localhost, `--no-auth` for pure UI work, `--bind 0.0.0.0` to try
