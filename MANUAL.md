@@ -36,18 +36,68 @@ to find out now than an hour into a scan:
 That must print `True`. The PyPI Pillow wheel bundles AVIF support; a distro
 `python3-pillow` package generally does not, which is why the venv exists.
 
-The commands below assume `./.venv/bin/harelphotos` is on your `PATH`, or that
-you type the full path.
-
 ---
 
-## Getting started
+## Running the commands
 
+**From which directory?** Any. The working directory does not matter, provided
+you use the full path to the program and give the config path absolutely.
+
+The program lives in the virtualenv, at `<checkout>/.venv/bin/harelphotos`. It
+was installed with `pip install -e .`, so it runs from anywhere without
+activating anything — the two lines below are only so you can type
+`harelphotos` instead of the full path, and so every command finds the same
+config:
+
+```sh
+export PATH="$HOME/harelphotos/.venv/bin:$PATH"
+export HARELPHOTOS_CONFIG="$HOME/.config/harelphotos/config.toml"
 ```
+
+(`source ~/harelphotos/.venv/bin/activate` does the same as the first line.
+Put both in `~/.bashrc` and you never think about it again.)
+
+**Setting `HARELPHOTOS_CONFIG` is worth doing.** The config search order ends
+with `./config.toml`, so without it, running from a directory that happens to
+contain a `config.toml` would silently use the wrong one. If you are ever
+unsure, `harelphotos config show` prints which file it actually read.
+
+### First time
+
+`init` needs `-c` spelled out, because the config does not exist yet for
+`$HARELPHOTOS_CONFIG` to point at:
+
+```sh
 harelphotos -c ~/.config/harelphotos/config.toml init --photo-root ~/pictures
-export HARELPHOTOS_CONFIG=~/.config/harelphotos/config.toml
+```
+
+Then set the two variables above, and:
+
+```sh
 harelphotos user add nyh --display-name Nadav --admin
 harelphotos scan
+harelphotos check
+```
+
+### Every time after that
+
+With the variables set, that is the whole of it:
+
+```sh
+harelphotos scan            # after adding or changing photos
+harelphotos check           # what is indexed, and anything wrong
+```
+
+### Trying it out without committing to anything
+
+Nothing is written outside the state directory you name, so a scratch location
+is a fine way to experiment, and `rm -rf` undoes all of it:
+
+```sh
+harelphotos -c /tmp/hp/config.toml init \
+    --photo-root /home/nyh/mnt/pictures --state-dir /tmp/hp/state
+export HARELPHOTOS_CONFIG=/tmp/hp/config.toml
+harelphotos scan --dir 2019       # just one year, rather than the whole tree
 harelphotos check
 ```
 
@@ -260,7 +310,9 @@ Settings for image sizes, encoding and the web interface are written by `init`
 but are not used yet.
 
 The config file is found via `-c`, then `$HARELPHOTOS_CONFIG`, then
-`./config.toml`, `~/.config/harelphotos/config.toml`, `/etc/harelphotos/config.toml`.
+`./config.toml`, `~/.config/harelphotos/config.toml`, `/etc/harelphotos/config.toml`
+— see [Running the commands](#running-the-commands) for why it is worth setting
+the environment variable rather than relying on the search.
 
 ---
 
