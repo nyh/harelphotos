@@ -40,6 +40,7 @@ Decided during this design pass, from measurements (§2, §3) rather than taste:
 | Default sort | **EXIF date, else mtime, tie-break filename** | §5.3 |
 | UI language | **English only**, no i18n machinery; CSS logical properties so a future Hebrew/RTL pass stays cheap | §11.4 |
 | Filenames | **assumed UTF-8**; anything else is skipped and reported, never crashes a scan | §8 phase 1 |
+| `photo_root` | **`/home/nyh/pictures`**, configurable, read-only to the app | §13.1a — being under `/home` needs an ACL, an SELinux boolean, and `ProtectHome=read-only` |
 | Change detection | `mtime` decides whether to *look*; **`content_sig` decides whether to *work*** | §8 phase 2 — stops `jhead -ft` triggering a 22 core-hour re-encode |
 
 ---
@@ -259,7 +260,7 @@ Also rejected:
 ## 4. On-disk layout
 
 ```
-$PHOTO_ROOT/                       e.g. /srv/photos          (authoritative, read-mostly)
+$PHOTO_ROOT/                       e.g. /home/nyh/pictures   (authoritative, read-only to the app)
 ├── 2019/
 │   ├── .album.toml
 │   ├── summer/
@@ -311,7 +312,7 @@ the (optional, admin-only) cover-picker write to it.
 ### 5.1 Global `config.toml`
 
 ```toml
-photo_root   = "/srv/photos"
+photo_root   = "/home/nyh/pictures"
 derived_root = "/var/lib/harelphotos/derived"
 index_db     = "/var/lib/harelphotos/index.sqlite"
 users_file   = "/etc/harelphotos/users.toml"
@@ -2058,8 +2059,88 @@ depends on and which fails silently if misconfigured).
 /etc/harelphotos/            config.toml, users.toml, secret_key, newsign2.jpg
 /var/lib/harelphotos/        index.sqlite, geonames.sqlite, derived/
 /run/harelphotos/            gunicorn.sock (systemd RuntimeDirectory)
-/srv/photos/                 the originals
+/home/nyh/pictures/                 the originals
 ```
+
+### 13.1a `photo_root` inside a home directory
+
+`photo_root` is configurable and the app only ever *reads* it (§4). Putting it
+at `/home/nyh/pictures` rather than `/srv/photos` changes nothing about the
+design, but it does change three deployment details — each of which fails in a
+confusing way rather than an obvious one, so they're worth knowing before you
+hit them.
+
+**1. Home directories are not traversable by default.** Fedora and Rocky both
+set `HOME_MODE 0700` in `/etc/login.defs`, so a freshly created home directory
+denies everyone else even the right to *pass through* it. A dedicated
+`harelphotos` service user then cannot reach `pictures/` at all, and the error
+is a bare `PermissionError` on a path that looks perfectly readable when you
+check it as yourself.
+
+Check first — on this machine `/home/nyh` happens to be `0701`, which already
+permits traversal:
+
+```
+$ ls -ld /home/nyh
+drwx-----x. 1 nyh nyh ... /home/nyh          # 0701: --x for other, traversal OK
+```
+
+If the server's is `0700`, grant just the service user a path through, with an
+ACL rather than by loosening the mode for everybody:
+
+```
+setfacl -m u:harelphotos:--x /home/nyh                   # traverse only, cannot list
+setfacl -R -m u:harelphotos:rX /home/nyh/pictures        # read the photos
+setfacl -R -d -m u:harelphotos:rX /home/nyh/pictures     # and anything added later
+```
+
+The `-d` (default) line matters: without it, directories you create later won't
+carry the ACL and new albums become unreadable to the service for no visible
+reason. The alternative — `User=nyh` in the unit instead of a dedicated user —
+is simpler and defensible on a personal server, but it gives a
+network-facing process your login account, including `~/.ssh`. The ACL is a few
+minutes' work and worth it.
+
+**2. SELinux forbids Apache from reading home directories.** This is the one
+that will actually bite, and only if you enable `mod_xsendfile` (§10.4), where
+Apache — not Python — opens the file. Verified on this machine:
+
+```
+$ getenforce
+Enforcing
+$ getsebool httpd_read_user_content
+httpd_read_user_content --> off
+```
+
+With photos under `/srv`, §13.4's `semanage fcontext … httpd_sys_content_t`
+relabelling is the right fix. Under `/home` it is *not* — relabelling home
+content away from `user_home_t` is invasive and can confuse other things. Use
+the boolean intended for exactly this case:
+
+```
+sudo setsebool -P httpd_read_user_content 1
+```
+
+If you'd rather not grant that, simply leave `mod_xsendfile` out:
+`sendfile_header = "none"` has Flask serve the bytes, the gunicorn service is
+not confined the way `httpd_t` is, and SELinux stops being part of this
+conversation. For a handful of family members that is a perfectly good trade
+(§10.4).
+
+**3. Don't let systemd hide it.** `ProtectHome=yes` is a standard hardening line
+that makes `/home` invisible to the service — which would break both scanning
+and serving, in a way that looks like the photos vanished. The unit below uses
+`ProtectHome=read-only` and names `photo_root` explicitly, which gets the
+hardening benefit while keeping the photos readable and still unwritable.
+
+**On your Apache point** — correct, and it's structural rather than something to
+configure: there is no `Alias` or `<Directory>` anywhere exposing `photo_root`.
+Apache has no route to those files at all. Every byte goes through the Flask
+handler, which performs the ACL check (§6) first; only then does it hand the
+path to Apache via `X-Sendfile`. `XSendFilePath` grants Apache permission to
+serve a file *when the application asks it to*, and is not itself a way for a
+request to reach one. The same check guards `/orig/…`, so downloads are
+authenticated exactly like thumbnails.
 
 ### 13.2 Why three pieces? Flask, gunicorn and Apache
 
@@ -2124,7 +2205,10 @@ Environment=HARELPHOTOS_CONFIG=/etc/harelphotos/config.toml
 RuntimeDirectory=harelphotos
 ProtectSystem=strict
 ReadWritePaths=/var/lib/harelphotos
-# photo_root is not listed → the web process cannot write to your photos
+ProtectHome=read-only          # NOT "yes": photo_root lives under /home (§13.1a)
+ReadOnlyPaths=/home/nyh/pictures
+# photo_root appears only under ReadOnlyPaths → the web process can never
+# write to your photos, even if it is compromised.
 ```
 
 Note it binds a **unix socket**, not a TCP port: the Python workers are then not
@@ -2150,7 +2234,7 @@ AddOutputFilterByType DEFLATE text/html text/css application/javascript applicat
 # Optional, if mod_xsendfile is installed:
 #   XSendFile On
 #   XSendFilePath /var/lib/harelphotos/derived
-#   XSendFilePath /srv/photos
+#   XSendFilePath /home/nyh/pictures
 ```
 
 Flask sits behind `ProxyFix` so it sees the real scheme and client IP.
@@ -2281,17 +2365,28 @@ sudo setsebool -P httpd_can_network_connect 1
 ```
 
 And if you enable `mod_xsendfile` (§10.4), Apache must be allowed to read the
-files it hands out:
+files it hands out. The derived tree is ordinary system state and gets a label:
 
 ```
 sudo semanage fcontext -a -t httpd_sys_content_t "/var/lib/harelphotos/derived(/.*)?"
-sudo semanage fcontext -a -t httpd_sys_content_t "/srv/photos(/.*)?"
-sudo restorecon -R /var/lib/harelphotos/derived /srv/photos
+sudo restorecon -R /var/lib/harelphotos/derived
 ```
 
-`harelphotos check --env` tests these conditions directly — socket reachable,
-derived tree readable by the Apache user — rather than making you infer them
-from a 503.
+The originals are under `/home` (§13.1a), where relabelling is the wrong tool —
+use the boolean meant for it instead:
+
+```
+sudo setsebool -P httpd_read_user_content 1
+```
+
+Neither is needed at all with `sendfile_header = "none"`, which keeps Apache out
+of the file-reading business entirely.
+
+`harelphotos check --env` tests these conditions directly rather than making you
+infer them from a 503: the socket is reachable, the derived tree is readable by
+the Apache user, and — the one that catches the home-directory case — the
+service user can actually `stat()` and open a sample photo under `photo_root`,
+traversing every parent directory on the way (§13.1a).
 
 ### 13.5 Home-machine mode: no domain, no TLS, no Apache
 
@@ -2608,9 +2703,14 @@ Nothing here blocks starting on M1 — these can be answered as we reach them.
    falling back to filesystem mtime, tie-broken by filename (§5.3). This is what
    motivated the content-signature scanner phase (§8) so that fixing up mtimes
    doesn't trigger a mass re-encode.*
-3. **`photo_root` on the server:** is it already at a path like `/srv/photos`,
-   and does the web server user have read access, or does it live under your
-   home directory (which affects the systemd hardening in §13.2)?
+~~3. **`photo_root` on the server**~~ — *resolved: `/home/nyh/pictures`,
+   read-only to the app, configurable. Being under `/home` costs three
+   deployment details, all written up in §13.1a: home directories are `0700` by
+   default so the service user needs an ACL to traverse; SELinux blocks Apache
+   from reading home content unless `httpd_read_user_content` is set (only
+   relevant with `mod_xsendfile`); and `ProtectHome` must be `read-only`, not
+   `yes`. Verify `ls -ld /home/nyh` on the actual server — it is `0701` here,
+   which already permits traversal.*
 ~~4. **Domain and TLS**~~ — *resolved: hostname exists, TLS not yet set up.
    §13.3 is the step-by-step (Let's Encrypt, free, auto-renewing), and §13.4
    covers the firewall and SELinux settings that make a correct setup look
