@@ -166,9 +166,13 @@ vhost — it does that correctly and, more to the point, it renews it.
 ```sh
 sudo mkdir -p /var/www/harelphotos-acme
 sudo cp contrib/harelphotos-vhost.conf /etc/httpd/conf.d/harelphotos.conf
-sudo vi /etc/httpd/conf.d/harelphotos.conf   # ServerName, paths; comment out the :443 block for now
+sudo vi /etc/httpd/conf.d/harelphotos.conf   # ServerName and the two paths
 sudo apachectl configtest && sudo systemctl reload httpd
 ```
+
+Nothing needs commenting out. The TLS vhost in that file is wrapped in
+`<IfFile>` on the certificate, so it is inert until certbot has run and turns
+itself on at the next reload. Both states are checked by `configtest`.
 
 Before running certbot, confirm the two things it needs, because its failure
 messages are much worse than these:
@@ -179,22 +183,22 @@ sudo firewall-cmd --list-services    # needs http and https
 sudo firewall-cmd --permanent --add-service={http,https} && sudo firewall-cmd --reload
 ```
 
-Then:
+Then get the certificate. Use `certonly --webroot`, **not** `--apache`: the
+vhost file already contains the TLS vhost, and `--apache` would write a second
+one for the same name, leaving two and a warning about it.
 
 ```sh
-sudo certbot --apache -d photos.example.org
+sudo certbot certonly --webroot -w /var/www/harelphotos-acme -d photos.example.org
+sudo systemctl reload httpd
 ```
 
-Let it add the HTTP→HTTPS redirect when it offers. It writes an `:443` vhost
-and a renewal timer; check the timer with `systemctl list-timers certbot*`.
-Certificates are free and last 90 days, renewed automatically.
-
-Now copy everything from `ProxyPreserveHost` downwards out of
-`contrib/harelphotos-vhost.conf` into the `:443` vhost certbot created, and
-reload. Keep the `:80` vhost: renewal serves its challenge from there.
+That reload is what activates the TLS vhost and the HTTP→HTTPS redirect, both
+of which were waiting on the certificate. Certificates are free, last 90 days
+and renew themselves; check the timer with `systemctl list-timers certbot*`.
+Renewal keeps working because the `:80` vhost still serves `/.well-known/`
+rather than redirecting it.
 
 ```sh
-sudo apachectl configtest && sudo systemctl reload httpd
 harelphotos check --env --url https://photos.example.org
 ```
 
@@ -202,8 +206,10 @@ That last command checks the live site end to end from outside: TLS, whether
 compression is actually on, the security headers, and — the one that matters —
 that `/a/` is **not** reachable without logging in.
 
-Enable HSTS (it is in the vhost, commented) only once TLS is confirmed working.
-Browsers remember it for its full lifetime and you cannot take it back quickly.
+Enable HSTS (commented out at the bottom of the vhost) only once TLS is
+confirmed working. Browsers remember it for its full lifetime, so a broken
+certificate afterwards means a site nobody can reach — not even by choosing to
+accept the risk.
 
 
 ## 5. Google sign-in (optional)

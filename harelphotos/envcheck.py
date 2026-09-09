@@ -275,6 +275,9 @@ def _apache(r: Report, cfg: Config | None) -> None:
         ("proxy_module", True, "reverse proxy to gunicorn"),
         ("proxy_http_module", True, "same"),
         ("deflate_module", True, "album HTML is 30x smaller compressed"),
+        # AddOutputFilterByType is mod_filter's directive, not mod_deflate's,
+        # so compression needs both and a missing one fails configtest.
+        ("filter_module", True, "provides AddOutputFilterByType"),
         ("headers_module", True, "cache and security headers"),
         ("ssl_module", True, "TLS"),
         ("xsendfile_module", False, "optional: lets Apache send image bytes itself"),
