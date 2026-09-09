@@ -2671,9 +2671,13 @@ even briefly.
 
 For whoever picks this up later, including a future session reading this cold:
 
-- **One milestone per working session**, then stop and report. A milestone is
-  the natural review unit: large enough to be worth reviewing, small enough to
-  review honestly. M3 and M4 are big enough to split.
+- **One milestone per working session**, then stop and report — saying plainly
+  what now exists and what the owner can try for themselves. A milestone is the
+  natural unit: large enough to be worth reporting, small enough to report
+  honestly. M3 and M4 are big enough to split.
+- **Commit straight to `main`**, in logical chunks, and push. There is no
+  pull-request review step, which raises rather than lowers the bar on tests
+  and on saying clearly when something is unverified.
 - **Tests are written with the code, not after**, and must pass before a
   milestone is called done. §16 lists what matters; the scanner-diff and ACL
   tests are the ones that earn their keep.
