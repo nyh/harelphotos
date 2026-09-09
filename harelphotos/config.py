@@ -29,13 +29,12 @@ DEFAULT_TIERS_VIEW = [1280, 1600]
 # Per-tier AVIF quality. Smaller tiers get a higher Q because downscaling
 # concentrates detail, so low-Q artefacts show more (DESIGN.md 5.1).
 #
-# Covers more sizes than the default ladder uses, on purpose: this table is
-# part of the recipe fingerprint, so keeping it stable means changing which
-# sizes you generate costs only the sizes that changed, and never a re-encode
-# of the whole collection.
-DEFAULT_QUALITY = {
-    256: 52, 512: 48, 1024: 47, 1280: 46, 1600: 45, 2048: 45, 2560: 44, 3200: 43,
-}
+# **Do not add entries here casually.** This table is part of the recipe
+# fingerprint, so touching it re-encodes the whole collection, whereas changing
+# which sizes are generated costs only the sizes that changed. A size with no
+# entry uses `quality_default`, which is what makes trying a new one cheap — so
+# a new size is added to `[sizes]` and left out of here.
+DEFAULT_QUALITY = {256: 52, 512: 48, 1280: 46, 2048: 45}
 
 
 class ConfigError(Exception):

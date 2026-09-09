@@ -48,9 +48,12 @@ fallback       = "auto"                     # "none" = serve AVIF to everyone
 speed          = 6
 subsampling    = "4:2:0"
 recipe_version = 1
-# Leave this alone unless you want to retune quality: changing it re-encodes
-# everything, whereas changing `view` above only makes the sizes that changed.
-quality        = {{ 256 = 52, 512 = 48, 1024 = 47, 1280 = 46, 1600 = 45, 2048 = 45, 2560 = 44, 3200 = 43 }}
+# Do not add entries here casually: this table is part of the recipe
+# fingerprint, so touching it re-encodes everything, whereas changing `view`
+# above only makes the sizes that changed. A size with no entry here uses
+# quality_default, which is what makes trying a new size cheap.
+quality         = {{ 256 = 52, 512 = 48, 1280 = 46, 2048 = 45 }}
+quality_default = 46
 
 [scan]
 jobs    = 0                                 # 0 = all cores
