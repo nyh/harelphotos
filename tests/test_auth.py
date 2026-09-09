@@ -83,6 +83,9 @@ def test_every_route_either_needs_a_session_or_is_on_the_list(app):
         "terms": "/terms",
         "healthz": "/healthz",
         "public_asset": "/public/landing-640.avif",
+        # Public by necessity: the browser fetches it before anyone signs in,
+        # and it holds nothing but the site name and icon paths.
+        "manifest": "/manifest.webmanifest",
         "static": "/static/app.css",
         "logout": None,          # POST-only; covered by its own tests
         # Public by necessity: signing in cannot require being signed in.

@@ -552,3 +552,84 @@ def test_day_date_has_no_weekday_or_time(scanned):
         out = f(1_565_000_000)
         assert out and "," not in out and ":" not in out
         assert f(None) == ""
+
+
+# ------------------------------------------------------ installable web app
+
+def test_the_manifest_is_reachable_without_a_session(scanned):
+    """The browser fetches it before anyone has signed in, and it holds
+    nothing but the site's name and icons."""
+    from harelphotos.web import create_app
+
+    app = create_app(scanned, require_login=True)
+    app.config.update(TESTING=True)
+    r = app.test_client().get("/manifest.webmanifest")
+    assert r.status_code == 200
+    assert r.mimetype == "application/manifest+json"
+
+
+def test_the_manifest_asks_for_standalone_display(scanned, client):
+    """The entire point: launched from the home screen there is no URL bar,
+    which on a phone held sideways is a sixth of the screen."""
+    import json as _json
+
+    data = _json.loads(client.get("/manifest.webmanifest").get_data(as_text=True))
+    assert data["display"] == "standalone"
+    assert data["name"] == scanned.ui.site_title
+    # "/" so the icon lands on the albums when signed in and the login page
+    # when not, rather than a redirect either way.
+    assert data["start_url"] == "/"
+
+
+def test_no_icons_key_at_all_when_there_is_no_image(scanned, client):
+    """An empty list is a manifest error; an absent key just lets the browser
+    choose something."""
+    import json as _json
+
+    data = _json.loads(client.get("/manifest.webmanifest").get_data(as_text=True))
+    assert "icons" not in data
+
+
+def test_icons_are_square_pngs_cut_from_the_configured_image(scanned, tmp_path):
+    from PIL import Image
+
+    from harelphotos import public_assets
+
+    src = tmp_path / "icon-source.jpg"
+    Image.new("RGB", (1200, 800), (10, 120, 200)).save(src)
+    object.__setattr__(scanned.ui, "app_icon", src)
+
+    written = public_assets.build_icons(scanned)
+    assert written, "no icons were produced"
+    for size in public_assets.ICON_SIZES:
+        p = public_assets.public_dir(scanned) / f"icon-{size}.png"
+        with Image.open(p) as im:
+            # Square and PNG: every platform accepts PNG for an installed app,
+            # which is the one place AVIF is not the answer.
+            assert im.size == (size, size), (size, im.size)
+            assert im.format == "PNG"
+
+
+def test_app_icon_overrides_the_landing_image(scanned, tmp_path):
+    from PIL import Image
+
+    from harelphotos import public_assets
+
+    landing = tmp_path / "landing.jpg"
+    icon = tmp_path / "icon.jpg"
+    Image.new("RGB", (900, 600), (255, 0, 0)).save(landing)
+    Image.new("RGB", (900, 600), (0, 255, 0)).save(icon)
+    object.__setattr__(scanned.ui, "landing_image", landing)
+    object.__setattr__(scanned.ui, "app_icon", icon)
+
+    public_assets.build_icons(scanned, force=True)
+    with Image.open(public_assets.public_dir(scanned) / "icon-192.png") as im:
+        r, g, b = im.convert("RGB").getpixel((96, 96))
+        assert g > 200 and r < 60, f"used the landing image, not app_icon: {(r, g, b)}"
+
+
+def test_a_missing_icon_source_is_a_warning_not_a_crash(scanned, tmp_path):
+    from harelphotos import public_assets
+
+    object.__setattr__(scanned.ui, "app_icon", tmp_path / "nope.jpg")
+    assert public_assets.build_icons(scanned) == []

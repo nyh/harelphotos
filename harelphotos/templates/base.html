@@ -6,6 +6,17 @@
 <meta name="robots" content="noindex, nofollow">
 <title>{% block title %}{{ cfg.ui.site_title }}{% endblock %}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+{#- Installable to a phone's home screen, which is the only way to get the
+    browser's URL bar off the screen for good. Opened from the icon the site
+    runs standalone, with no address bar in either orientation. -#}
+<link rel="manifest" href="{{ url_for('manifest') }}">
+<meta name="theme-color" content="#ffffff">
+{#- iOS ignores the manifest's display mode and wants its own two tags. -#}
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+{%- if app_icons %}
+<link rel="apple-touch-icon" href="/public/icon-180.png">
+{%- endif %}
 </head>
 <body{% block bodyclass %}{% endblock %}>
 {% block body %}{% endblock %}

@@ -13,6 +13,7 @@ server.
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -263,6 +264,16 @@ def _register_routes(app: Flask, cfg: Config) -> None:
     @app.route("/terms")
     def terms():
         return _render_text(cfg, "terms.md", "Terms")
+
+    @app.route("/manifest.webmanifest")
+    def manifest():
+        """Public by necessity: the browser fetches this before anyone has
+        signed in, and it holds nothing but the site's name and icons."""
+        return app.response_class(
+            json.dumps(public_assets.manifest(cfg), ensure_ascii=False, indent=1),
+            mimetype="application/manifest+json",
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
 
     @app.route("/public/<name>")
     def public_asset(name: str):
@@ -573,6 +584,9 @@ def _register_filters(app: Flask, cfg: Config) -> None:
     app.jinja_env.globals["all_tiers"] = sorted(cfg.sizes.tiers)
     app.jinja_env.globals["thumb_tiers"] = list(cfg.sizes.thumb)
     app.jinja_env.globals["view_tiers"] = sorted(cfg.sizes.view)
+    # Whether an apple-touch-icon exists to point at. Read once at startup:
+    # the icons are written by `init`/`scan`, not while serving.
+    app.jinja_env.globals["app_icons"] = bool(public_assets.icons(cfg))
 
 
 def wsgi_app(config_path: str | Path | None = None) -> Flask:

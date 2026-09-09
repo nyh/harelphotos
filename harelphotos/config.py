@@ -76,6 +76,10 @@ class Ui:
     heading: str = "Photo Album"
     tagline: str = "By invitation only. Please login to continue."
     landing_image: Path | None = None
+    # The home-screen icon. Falls back to landing_image, which is usually the
+    # right picture anyway; set it separately when the hero photo does not
+    # survive being cropped to a small square.
+    app_icon: Path | None = None
     show_gps: bool = True
     map_link: str = "osm"           # "osm" | "google" | "none"
     album_page_size: int = 5000
@@ -259,6 +263,8 @@ def from_dict(raw: dict, src: Path) -> Config:
         heading=str(u.get("heading", "Photo Album")),
         tagline=str(u.get("tagline", Ui.tagline)),
         landing_image=Path(landing).expanduser() if landing else None,
+        app_icon=(Path(str(u["app_icon"])).expanduser()
+                  if u.get("app_icon") else None),
         show_gps=bool(u.get("show_gps", True)),
         map_link=_enum(u.get("map_link"), ("osm", "google", "none"), "[ui] map_link", src, "osm"),
         album_page_size=int(u.get("album_page_size", 5000)),

@@ -32,6 +32,9 @@ site_title      = "Photo Album"
 heading         = "Photo Album"
 tagline         = "By invitation only. Please login to continue."
 # landing_image = "{config_dir}/landing.jpg"
+# app_icon      = "{config_dir}/icon.jpg"   # home-screen icon; defaults to
+                                            # landing_image. Any image; it is
+                                            # cropped to a square.
 show_gps        = true
 map_link        = "osm"                     # "osm" | "google" | "none"
 album_page_size = 5000

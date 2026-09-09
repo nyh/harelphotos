@@ -723,6 +723,28 @@ the environment variable rather than relying on the search.
 
 ---
 
+## Adding it to a phone's home screen
+
+The site ships a web app manifest, so a phone can install it. In Chrome use
+**Add to Home screen**; in Safari, **Share → Add to Home Screen**.
+
+Launched from that icon it runs standalone, with **no browser address bar** —
+which on a phone held sideways is about a sixth of the screen, and is the only
+way to get that space back for good. It is also just easier for relatives than
+finding a bookmark.
+
+The name under the icon is `[ui] site_title`. The icon itself is cut from
+`[ui] app_icon`, or from `[ui] landing_image` if that is not set; the image is
+centre-cropped to a square, so pick one that survives that. With neither set
+there is no icon and the phone falls back to a generic tile — everything else
+still works.
+
+Icons are written by `init` and by `serve`, into the `public/` directory of the
+derived tree. After changing the setting, run `harelphotos init` again (it is
+idempotent and will not overwrite your config) or just restart the server.
+
+---
+
 ## What is not indexed
 
 Only `.jpg` and `.jpeg` files (either case) are indexed. Everything else in the

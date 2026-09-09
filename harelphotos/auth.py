@@ -50,6 +50,7 @@ PUBLIC_ENDPOINTS = frozenset(
         "privacy",          # Google's consent screen requires these to be
         "terms",            # publicly fetchable (§12.2)
         "public_asset",     # the landing page's own image, fixed filenames
+        "manifest",         # fetched before anyone has signed in
         "healthz",
         "static",
     }

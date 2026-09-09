@@ -80,7 +80,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     try:
         from . import public_assets
         cfg = config_mod.load(config_path)
-        for name in public_assets.build(cfg):
+        for name in public_assets.build(cfg) + public_assets.build_icons(cfg):
             print(f"  prepared {name}")
     except config_mod.ConfigError:
         pass
@@ -461,9 +461,9 @@ def cmd_serve(args: argparse.Namespace) -> int:
         )
         return 2
 
-    made = public_assets.build(cfg)
+    made = public_assets.build(cfg) + public_assets.build_icons(cfg)
     if made:
-        print(f"prepared the landing image ({', '.join(made)})")
+        print(f"prepared the landing image and icons ({', '.join(made)})")
 
     app = create_app(cfg, require_login=require_login)
     print(f"serving {cfg.photo_root} at http://{host}:{args.port}/  (Ctrl-C to stop)")

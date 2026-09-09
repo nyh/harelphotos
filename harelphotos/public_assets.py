@@ -26,6 +26,12 @@ WIDTHS = (640, 1280)
 PUBLIC_DIR = "public"
 STEM = "landing"
 
+# Home-screen icons. 192 and 512 are what Android asks for; 180 is what iOS
+# uses for apple-touch-icon. PNG because that is what every platform accepts
+# for an installed app -- this is the one place AVIF is not the answer.
+ICON_STEM = "icon"
+ICON_SIZES = (180, 192, 512)
+
 
 def public_dir(cfg: Config) -> Path:
     return cfg.derived_root / PUBLIC_DIR
@@ -37,6 +43,9 @@ def asset_path(cfg: Config, name: str) -> Path | None:
         for ext in ("avif", "jpeg"):
             if name == f"{STEM}-{width}.{ext}":
                 return public_dir(cfg) / name
+    for size in ICON_SIZES:
+        if name == f"{ICON_STEM}-{size}.png":
+            return public_dir(cfg) / name
     return None
 
 
@@ -76,6 +85,84 @@ def build(cfg: Config, force: bool = False) -> list[str]:
         log.warning("cannot prepare the landing image from %s: %s", src, e)
         return written
     return written
+
+
+def build_icons(cfg: Config, force: bool = False) -> list[str]:
+    """Square home-screen icons, cut from the landing image.
+
+    Centre-cropped rather than letterboxed: an icon is displayed as a square
+    whatever we do, and padding it just makes the picture smaller. Without a
+    landing image there is no icon at all and the manifest omits them, which
+    browsers accept -- they fall back to a screenshot of the page.
+    """
+    src = cfg.ui.app_icon or cfg.ui.landing_image
+    if not src:
+        return []
+    if not src.is_file():
+        log.warning("[ui] icon source does not exist: %s", src)
+        return []
+    out = public_dir(cfg)
+    out.mkdir(parents=True, exist_ok=True)
+    written: list[str] = []
+    try:
+        with Image.open(src) as im:
+            im = ImageOps.exif_transpose(im).convert("RGB")
+            for size in ICON_SIZES:
+                dest = out / f"{ICON_STEM}-{size}.png"
+                if dest.exists() and not force:
+                    continue
+                square = ImageOps.fit(im, (size, size), Image.LANCZOS, centering=(0.5, 0.4))
+                tmp = dest.with_name(dest.name + ".tmp")
+                square.save(tmp, "PNG", optimize=True)
+                tmp.replace(dest)
+                written.append(dest.name)
+    except Exception as e:
+        log.warning("cannot prepare the home-screen icons from %s: %s", src, e)
+    return written
+
+
+def icons(cfg: Config) -> list[int]:
+    """Which icon sizes actually exist on disk."""
+    d = public_dir(cfg)
+    return [s for s in ICON_SIZES if (d / f"{ICON_STEM}-{s}.png").is_file()]
+
+
+def manifest(cfg: Config) -> dict:
+    """The web app manifest.
+
+    `display: standalone` is the whole point: opened from the home screen the
+    site gets the URL bar's height back, which on a phone held sideways is a
+    sixth of the screen.
+    """
+    title = cfg.ui.site_title or "Photos"
+    data = {
+        "name": title,
+        "short_name": title[:12],
+        "description": cfg.ui.tagline,
+        # "/" rather than "/a/": it sends you to the albums when you are signed
+        # in and to the login page when you are not, which is what launching
+        # the icon should do in both cases.
+        "start_url": "/",
+        "scope": "/",
+        "display": "standalone",
+        "orientation": "any",
+        "background_color": "#ffffff",
+        "theme_color": "#ffffff",
+    }
+    have = icons(cfg)
+    if have:
+        # Omitted entirely when there is none: an empty list is a manifest
+        # error, whereas an absent key just means the browser picks something.
+        data["icons"] = [
+            {
+                "src": f"/public/{ICON_STEM}-{s}.png",
+                "sizes": f"{s}x{s}",
+                "type": "image/png",
+                "purpose": "any",
+            }
+            for s in have
+        ]
+    return data
 
 
 def hero(cfg: Config) -> dict | None:
