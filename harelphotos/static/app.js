@@ -222,6 +222,41 @@
       window.location.href = nav.album;
     }
 
+    // Tell the browser how wide the photo will actually be.
+    //
+    // This is not only about picking the right file. With `width: auto` and a
+    // w-descriptor srcset, the browser lays the image out at exactly the width
+    // `sizes` claims -- so a `sizes` that is wrong makes the photo the wrong
+    // size on screen, not merely the wrong resolution. The server-rendered
+    // value has to guess the chrome's height; here it can be measured, which
+    // matters most on a phone held sideways, where guessing wrong wasted a
+    // third of the screen.
+    var main = document.getElementById("main");
+    function fitPhoto() {
+      if (!main) return;
+      var w = parseFloat(main.getAttribute("width"));
+      var h = parseFloat(main.getAttribute("height"));
+      var stage = main.parentElement;
+      if (!w || !h || !stage) return;
+      var cs = window.getComputedStyle(stage);
+      var box = stage.getBoundingClientRect();
+      var availW = box.width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      var availH = box.height - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+      if (availW <= 0 || availH <= 0) return;
+      // Letterboxed to fit: whichever of the two limits binds first.
+      var shown = Math.min(availW, availH * (w / h));
+      main.sizes = Math.round(shown) + "px";
+    }
+    fitPhoto();
+    var fitPending = false;
+    function refit() {
+      if (fitPending) return;
+      fitPending = true;
+      requestAnimationFrame(function () { fitPending = false; fitPhoto(); });
+    }
+    window.addEventListener("resize", refit);
+    window.addEventListener("orientationchange", refit);
+
     // Fetch the neighbouring photos while this one is being looked at.
     //
     // Paging is a page load, so without this every arrow press waits a full

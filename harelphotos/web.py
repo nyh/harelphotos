@@ -495,8 +495,16 @@ def _register_filters(app: Flask, cfg: Config) -> None:
         viewed.
         """
         ar = max(0.2, min(5.0, photo.aspect))
-        # Mirrors the CSS: max-inline-size 100%, max-block-size 100dvh - 8rem.
-        return f"min(100vw, calc((100vh - 8rem) * {ar:.3f}))"
+        # Only the pre-JavaScript fallback: app.js measures the stage and
+        # replaces this as soon as it runs, and again on rotation. It has to
+        # be an estimate here because the height of the chrome is not known
+        # until it has been laid out -- and being wrong is not just a
+        # resolution question, since the browser lays the image out at
+        # whatever width `sizes` claims.
+        #
+        # dvh, not vh: on a phone vh is the height with the browser toolbar
+        # hidden, which overstates the space by around 10%.
+        return f"min(100vw, calc((100dvh - 7rem) * {ar:.3f}))"
 
     @app.template_filter("grid_sizes")
     def grid_sizes(photo: Photo) -> str:
