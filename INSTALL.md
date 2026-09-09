@@ -58,11 +58,15 @@ of copying every image through Python.
 
 ```sh
 sudo mkdir -p /etc/harelphotos /var/lib/harelphotos
-sudo chown nyh:nyh /var/lib/harelphotos
 sudo .venv/bin/harelphotos --config /etc/harelphotos/config.toml init \
     --photo-root /home/nyh/pictures \
     --state-dir /var/lib/harelphotos
-sudo chown -R nyh:nyh /etc/harelphotos
+
+# After init, not before: it runs as root and creates index.sqlite and
+# derived/ as root inside these directories. Chowning first does nothing for
+# the files that do not exist yet, and the first scan then fails with
+# "attempt to write a readonly database".
+sudo chown -R nyh:nyh /etc/harelphotos /var/lib/harelphotos
 ```
 
 Then edit `/etc/harelphotos/config.toml`. Four lines matter for a server:
@@ -272,6 +276,7 @@ Where things go wrong:
 
 | symptom | look at |
 |---|---|
+| `attempt to write a readonly database` | `sudo chown -R nyh:nyh /var/lib/harelphotos` — `init` ran as root |
 | 503 from Apache | `systemctl status harelphotos` — gunicorn is not up |
 | every image 404s but pages work | `sendfile_header`/`XSendFilePath` disagree, or Apache cannot read `/var/lib/harelphotos/derived` |
 | login always returns to the login page | `base_url` is not exactly what the browser asked for, so the cookie is dropped |
