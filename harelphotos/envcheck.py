@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import shutil
 import socket
+import ssl
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -346,6 +347,9 @@ def _live(r: Report, url: str) -> None:
             code = resp.status
     except urllib.error.HTTPError as e:
         code, headers, body = e.code, {k.lower(): v for k, v in e.headers.items()}, b""
+    except ssl.SSLCertVerificationError as e:
+        r.add(FAIL, "TLS certificate", _explain_cert_error(e))
+        return
     except Exception as e:
         r.add(FAIL, "reachable", f"{base}: {e}")
         return
@@ -376,6 +380,29 @@ def _live(r: Report, url: str) -> None:
         reachable, code = False, 0
     r.add(FAIL if reachable else OK, "login required",
           f"/a/ answered {code}" + (" — the collection is PUBLIC" if reachable else ""))
+
+
+def _explain_cert_error(e: Exception) -> str:
+    """Name the cause, because the raw message names only the symptom.
+
+    Something answering on 443 with a self-signed certificate is nearly always
+    the distribution's stock ssl.conf vhost rather than ours: it ships a
+    `_default_:443` using /etc/pki/tls/certs/localhost.crt, and it answers
+    whenever our own TLS vhost is not active -- which, with the <IfFile> guard,
+    means certbot has not run yet.
+    """
+    text = str(e)
+    if "self-signed" in text or "self signed" in text:
+        return (
+            "a self-signed certificate is being served — certbot has probably "
+            "not run yet, so the stock /etc/httpd/conf.d/ssl.conf vhost is "
+            "answering on 443 instead of this site's"
+        )
+    if "hostname mismatch" in text.lower() or "doesn't match" in text:
+        return f"{text} — another vhost is answering on 443"
+    if "expired" in text:
+        return f"{text} — check 'systemctl list-timers certbot*'"
+    return text
 
 
 def socket_reachable(path: str) -> bool:
