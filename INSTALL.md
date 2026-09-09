@@ -243,7 +243,16 @@ and nothing is billed.
 4. **Credentials → Create credentials → OAuth client ID → Web application.**
    Authorised redirect URI, exactly, with no trailing slash:
    `https://photos.example.org/auth/google/callback`
-   Google compares this character for character.
+   Google compares this character for character, and a mismatch is by far the
+   commonest failure: it shows up as `redirect_uri_mismatch`. It must equal
+   `base_url` from your config with `/auth/google/callback` appended.
+
+   The form also demands an **Authorised JavaScript origin**. Nothing here
+   needs one — the sign-in button is a plain link, your server does the
+   redirect, and the code is exchanged server-to-server, so no script on the
+   page ever contacts Google. The field is required by the form rather than by
+   the flow; enter the bare origin and ignore it:
+   `https://photos.example.org` — scheme and host only, no path, no slash.
 5. Put the client ID and secret in `/etc/harelphotos/config.toml` and restart:
 
 ```toml
