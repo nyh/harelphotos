@@ -44,6 +44,8 @@ PUBLIC_ENDPOINTS = frozenset(
     {
         "landing",          # the front page, for people who are not logged in
         "login",
+        "google_start",     # signing in cannot require being signed in
+        "google_callback",
         "logout",           # clearing a session needs no session
         "privacy",          # Google's consent screen requires these to be
         "terms",            # publicly fetchable (§12.2)

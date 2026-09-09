@@ -84,6 +84,10 @@ def test_every_route_either_needs_a_session_or_is_on_the_list(app):
         "public_asset": "/public/landing-640.avif",
         "static": "/static/app.css",
         "logout": None,          # POST-only; covered by its own tests
+        # Public by necessity: signing in cannot require being signed in.
+        # Both 404 when Google sign-in is disabled, which is the fixture here.
+        "google_start": "/auth/google",
+        "google_callback": "/auth/google/callback",
     }
     checked = 0
     for rule in app.url_map.iter_rules():

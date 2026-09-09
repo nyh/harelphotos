@@ -23,7 +23,8 @@ from flask import (
 )
 from markupsafe import Markup, escape
 
-from . import auth, db, images, public_assets
+from . import auth, db, google_auth, images, public_assets
+from . import users as users_mod
 from .config import Config
 from .queries import Album, Index, Photo, Viewer
 
@@ -178,6 +179,53 @@ def _register_routes(app: Flask, cfg: Config) -> None:
         auth.log_in(user, via="local")
         log.info("login: %s from %s", user.token, request.remote_addr)
         return redirect(nxt or "/a/")
+
+    @app.route("/auth/google")
+    def google_start():
+        """Send the browser to Google. GET is correct here: it navigates
+        away and changes nothing until the callback comes back."""
+        if not google_auth.enabled(cfg):
+            abort(404)
+        if g.viewer is not None:
+            return redirect("/a/")
+        nxt = auth.safe_next(request.args.get("next"))
+        return redirect(google_auth.begin(cfg, session, nxt))
+
+    @app.route("/auth/google/callback")
+    def google_callback():
+        if not google_auth.enabled(cfg):
+            abort(404)
+        # Google reports a refusal here rather than at the token endpoint;
+        # the commonest is the person pressing Cancel, which is not an error.
+        if request.args.get("error"):
+            log.info("google sign-in declined: %s", request.args.get("error"))
+            return _render_landing(cfg, error="Sign-in with Google was cancelled."), 400
+        try:
+            identity, nxt = google_auth.complete(
+                cfg,
+                session,
+                code=request.args.get("code", ""),
+                state=request.args.get("state", ""),
+            )
+        except google_auth.GoogleAuthError as e:
+            # The detail goes to the log, not to the page: it can name the
+            # client secret or the mismatched redirect URI.
+            log.warning("google sign-in failed: %s", e)
+            return _render_landing(cfg, error="Could not sign in with Google."), 400
+
+        # Authentication is not authorization. Google has told us who this is;
+        # whether they may look at anything is still decided by users.toml.
+        user = users_mod.load(cfg.users_file).by_google_email(identity.email)
+        if user is None:
+            log.info("google sign-in by %s, who has no account", identity.email)
+            return _render_landing(
+                cfg,
+                error=f"{identity.email} has not been invited to this album.",
+            ), 403
+
+        auth.log_in(user, via="google")
+        log.info("login: %s via google from %s", user.token, request.remote_addr)
+        return redirect(auth.safe_next(nxt) or "/a/")
 
     @app.route("/logout", methods=("POST",))
     def logout():

@@ -17,14 +17,13 @@ from . import check as check_mod
 from . import envcheck
 from . import config as config_mod
 from . import db, geocode as geocode_mod, geonames, initialise, lock
-from . import maintenance, scanner, users as users_mod
+from . import maintenance, scanner, sync as sync_mod, users as users_mod
 
 log = logging.getLogger("harelphotos")
 
 NOT_YET = {
     "cover": "M9",
     "acl": "M5",
-    "sync": "M8",
 }
 
 
@@ -347,6 +346,27 @@ def cmd_geocode(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_sync(args: argparse.Namespace) -> int:
+    cfg = _load_config(args)
+    dest = sync_mod.Destination.parse(args.dest)
+    r = sync_mod.run(
+        cfg,
+        dest,
+        dry_run=args.dry_run,
+        geonames=args.geonames,
+        index_only=args.index_only,
+    )
+    print()
+    for what, detail in r.steps:
+        print(f"{what:16} {detail}")
+    if args.dry_run:
+        print("\n(dry run — nothing was copied)")
+    else:
+        print(f"\nsynced to {dest}")
+        print("run 'harelphotos gc' there to reclaim images this scan dropped")
+    return 0
+
+
 def cmd_gc(args: argparse.Namespace) -> int:
     cfg = _load_config(args)
     conn = db.open_index(cfg.index_db, read_only=True)
@@ -575,6 +595,19 @@ def build_parser() -> argparse.ArgumentParser:
     pg = sub.add_parser("geocode", help="resolve place names from GPS already indexed")
     pg.add_argument("--force", action="store_true", help="re-resolve photos that have a place")
     pg.set_defaults(func=cmd_geocode)
+
+    psy = sub.add_parser(
+        "sync", help="copy the generated images and index to the serving machine"
+    )
+    psy.add_argument("dest", metavar="[user@]host:/path",
+                     help="the far side's state directory, e.g. "
+                          "nyh@harel.org.il:/var/lib/harelphotos")
+    psy.add_argument("--dry-run", action="store_true", help="report, copy nothing")
+    psy.add_argument("--index-only", action="store_true",
+                     help="skip the images (use when only metadata changed)")
+    psy.add_argument("--geonames", action="store_true",
+                     help="also send the place-name database (once, ~30 MB)")
+    psy.set_defaults(func=cmd_sync)
 
     pgc = sub.add_parser("gc", help="remove derivatives with no matching photo")
     pgc.add_argument("--deep", action="store_true", help="walk the whole derived tree")

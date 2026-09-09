@@ -12,11 +12,15 @@ Description=harelphotos
 After=network.target
 
 [Service]
-User=harelphotos
-Group=harelphotos
+# Runs as the user who owns the photos: they stay where they are, in a home
+# directory, and nothing needs to be moved or re-owned. Only the *generated*
+# tree lives outside, under /var/lib/harelphotos, so that Apache can read it
+# for X-Sendfile without opening up the home directory.
+User=nyh
+Group=nyh
 
 Environment=HARELPHOTOS_CONFIG=/etc/harelphotos/config.toml
-WorkingDirectory=/srv/harelphotos
+WorkingDirectory=/home/nyh/harelphotos
 
 # --workers: this machine is CPU-weak and the workers do almost no CPU work
 # (Apache sends the image bytes via X-Sendfile), so a small number is right.
@@ -25,7 +29,7 @@ WorkingDirectory=/srv/harelphotos
 # --timeout 120: the first request for a WebP or JPEG fallback transcodes on
 # demand, and on a slow machine a large image can take a while. Every request
 # after it is a static file.
-ExecStart=/srv/harelphotos/venv/bin/gunicorn \
+ExecStart=/home/nyh/harelphotos/.venv/bin/gunicorn \
     --workers 3 \
     --timeout 120 \
     --bind 127.0.0.1:8099 \
@@ -37,9 +41,12 @@ ExecReload=/bin/kill -s HUP $MAINPID
 Restart=on-failure
 RestartSec=2
 
-# Hardening. The service reads photos and writes nothing outside its state
-# directory, so it can be locked down hard. ReadWritePaths must list the state
-# directory (index.sqlite, auth.sqlite and the generated images).
+# Hardening. The service only ever reads the photos, and writes nothing
+# outside its state directory, so it can be locked down hard.
+#
+# ProtectHome=read-only still lets it read the photos; ReadWritePaths then
+# punches through it for the one directory that must be writable (auth.sqlite,
+# and the on-demand WebP/JPEG fallback cache).
 NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true
