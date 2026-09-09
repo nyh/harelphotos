@@ -102,6 +102,38 @@
     grid.classList.add("justified");
   }
 
+  // Remember where you were in an album, and come back to it. The browser
+  // does this by itself for Back, but not for a fresh navigation, which is
+  // what Escape from a photo performs.
+  function rememberScroll(grid) {
+    var key = "hp:scroll:" + window.location.pathname;
+    var pending = false;
+
+    window.addEventListener("scroll", function () {
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(function () {
+        pending = false;
+        try { sessionStorage.setItem(key, String(Math.round(window.scrollY))); } catch (e) {}
+      });
+    }, { passive: true });
+
+    // Only on a fresh navigation: for Back and Forward the browser restores
+    // the position itself, and doing it twice fights with it.
+    var entries = window.performance && window.performance.getEntriesByType
+      ? window.performance.getEntriesByType("navigation") : [];
+    var kind = entries.length ? entries[0].type : "navigate";
+    if (kind !== "navigate") return;
+
+    var y = 0;
+    try { y = parseInt(sessionStorage.getItem(key), 10) || 0; } catch (e) { y = 0; }
+    if (y > 0) {
+      // After the rows have been laid out, so the page is already its final
+      // height; otherwise the scroll is clamped to a shorter document.
+      window.scrollTo(0, y);
+    }
+  }
+
   function initGrid() {
     var grid = document.getElementById("grid");
     if (!grid) return;
@@ -119,6 +151,7 @@
     }
     lastWidth = grid.clientWidth;
     layoutGrid(grid);
+    rememberScroll(grid);
     window.addEventListener("resize", relayout, { passive: true });
   }
 
@@ -132,56 +165,14 @@
 
     function go(url) { if (url) window.location.href = url; }
 
-    // Returning to the album must restore the scroll position, which only the
-    // browser's own history can do — navigating to the album URL afresh lands
-    // you back at the top. So Escape (and a downward swipe) step *back*
-    // through history rather than navigating.
-    //
-    // Paging with the arrow keys pushes a history entry per photo, so after
-    // three photos the album is three steps back, not one. That depth is
-    // tracked in sessionStorage, keyed by album, and reset whenever we arrive
-    // from somewhere that is not another photo in the same album.
-    var DEPTH_KEY = "hp:depth:" + nav.album;
-
-    function sameOrigin(url) {
-      return !!url && url.indexOf(window.location.origin + "/") === 0;
-    }
-
-    function trackDepth() {
-      var ref = document.referrer;
-      var depth = 1;
-      if (sameOrigin(ref)) {
-        var path = ref.slice(window.location.origin.length);
-        if (path.indexOf("/p/") === 0) {
-          // Arrived from another photo page: one step deeper.
-          try {
-            depth = (parseInt(sessionStorage.getItem(DEPTH_KEY), 10) || 1) + 1;
-          } catch (e) { depth = 2; }
-        }
-      }
-      try { sessionStorage.setItem(DEPTH_KEY, String(depth)); } catch (e) {}
-      return depth;
-    }
-
-    var depth = trackDepth();
-
-    function backToAlbum() {
-      // Only trust history if we actually came from within the site: someone
-      // opening a shared link directly has nothing to go back to, and
-      // history.back() would take them off the site entirely.
-      if (sameOrigin(document.referrer) && window.history.length > 1) {
-        try { sessionStorage.removeItem(DEPTH_KEY); } catch (e) {}
-        window.history.go(-depth);
-        return;
-      }
-      go(nav.album);
-    }
-
-    // Fetch the neighbours now, so paging feels instant rather than like a
-    // page load.
-    (nav.preload || []).forEach(function (src) {
-      if (src) { var i = new Image(); i.src = src; }
-    });
+    // Escape and a downward swipe return to the album. They navigate to it
+    // rather than calling history.back(): a first attempt used the referrer to
+    // decide whether history was safe to use, which could never work, because
+    // this site sends `Referrer-Policy: no-referrer` and so document.referrer
+    // is always empty. The album page restores its own scroll position
+    // instead (see rememberScroll), which needs no history at all and also
+    // works after paging through several photos.
+    function backToAlbum() { go(nav.album); }
 
     var info = document.getElementById("info");
     var toggle = document.getElementById("info-toggle");

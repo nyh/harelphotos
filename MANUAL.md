@@ -248,10 +248,10 @@ large, move between photos with the arrow keys or by swiping, press `i` for
 date/camera/location details, `d` to download the original, and `Esc` to go
 back to the album.
 
-`Esc` and a downward swipe both step *back* through history, so you return to
-the album exactly where you left it — including after paging through several
-photos with the arrow keys. Opening a shared photo link directly, where there
-is no history to step back through, goes to the album instead.
+`Esc` and a downward swipe return you to the album **exactly where you left
+it**, including after paging through several photos with the arrow keys. The
+album remembers your position for the rest of the browser session, so the Back
+button and `Esc` behave the same way.
 
 ### `harelphotos init --geonames`
 
@@ -366,6 +366,23 @@ That is why there are two sizes for each purpose rather than one:
 Sizes larger than the original are never generated. A photo that falls between
 two tiers — 1174 px, say — gets a copy at *its own* size rather than being
 dropped to the next tier down, so nothing loses resolution it had.
+
+### What the photo count and dates at the top of an album mean
+
+Both are **recursive**: they cover the album and everything beneath it, so a
+directory holding only subdirectories still shows a total. The dates are the
+span of the oldest to newest photo in that whole subtree.
+
+They describe **what is in the index**, not what is on disk. If a scan is still
+running, or you have only scanned part of the tree with `--dir`, the number is
+the count of what has been indexed so far and will look too small. It is
+brought up to date at the end of every scan, so a completed `harelphotos scan`
+makes it right.
+
+A date that looks wrong usually is: a photo with no date recorded falls back to
+the file's timestamp, which for a scan is when it was scanned rather than when
+it was taken. `harelphotos check` reports what fraction of your photos have a
+real date.
 
 ### If thumbnails look soft
 
