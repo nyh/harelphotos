@@ -248,6 +248,11 @@ large, move between photos with the arrow keys or by swiping, press `i` for
 date/camera/location details, `d` to download the original, and `Esc` to go
 back to the album.
 
+`Esc` and a downward swipe both step *back* through history, so you return to
+the album exactly where you left it — including after paging through several
+photos with the arrow keys. Opening a shared photo link directly, where there
+is no history to step back through, goes to the album instead.
+
 ### `harelphotos init --geonames`
 
 Download and build the offline place-name dataset that `geocode` uses. Run it
@@ -347,11 +352,13 @@ and downloads exactly one of them.
 
 That is why there are two sizes for each purpose rather than one:
 
-- **256 and 512 for the grid.** An ordinary desktop screen needs about 180 px
-  per thumbnail and takes the 256; a phone or a retina laptop takes the 512.
-  Album pages are where the bandwidth goes — 500 thumbnails is 2.5 MB at 256
-  against 6.3 MB at 512 — so it matters that a non-retina screen is not made to
-  pay retina prices.
+- **256 and 512 for the grid**, plus the bigger ones when a tile is large
+  enough to need them. An ordinary screen takes the 256 for most thumbnails; a
+  retina screen takes the 512, and for a wide photo — which a justified row
+  makes much wider than it is tall — one of the larger sizes. Album pages are
+  where the bandwidth goes (500 thumbnails is 2.5 MB at 256 against 6.3 MB at
+  512), so it matters that a non-retina screen is not made to pay retina
+  prices.
 - **1280 and 2048 for viewing one photo.** A phone at 400 CSS px wide needs
   about 1200 px; a desktop wants closer to 2000. Serving the phone 1280 rather
   than 2048 halves the cost of every swipe.
@@ -359,6 +366,22 @@ That is why there are two sizes for each purpose rather than one:
 Sizes larger than the original are never generated. A photo that falls between
 two tiers — 1174 px, say — gets a copy at *its own* size rather than being
 dropped to the next tier down, so nothing loses resolution it had.
+
+### If thumbnails look soft
+
+They should not, but if they do, in order of likelihood:
+
+1. **Check the tier being fetched.** Watch the server output while loading an
+   album: the URLs contain the size, as in `GET /i/512/...`. If a thumbnail
+   renders wider on screen than the number in its URL, it is being upscaled —
+   that is a bug, please report it.
+2. **Raise the quality.** The defaults are deliberately frugal: `quality` in
+   `[encode]` is 52 at 256 px and 48 at 512 px. Raising those to, say, 62 and
+   58 costs roughly a third more disk for the grid. Then run `harelphotos
+   scan`, which notices the change and regenerates.
+3. **The photo may simply be small.** An old scan or a 2003 camera photo has
+   less detail than a modern phone image, and nothing can add it back. The
+   info panel on the photo page shows the original's dimensions.
 
 ## How a rescan decides what changed
 

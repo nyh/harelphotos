@@ -33,19 +33,39 @@
     var gap = parseInt(grid.dataset.gap, 10) || 4;
     var target = width < 600 ? 130 : 180;
 
+    function heightFor(n, sum) {
+      return (width - gap * (n - 1)) / sum;
+    }
+
     var rows = [];
     var row = [];
     var sum = 0;
     items.forEach(function (item) {
-      row.push(item);
       // Clamp when accumulating, or one 3:1 panorama drags its whole row down
       // to a sliver.
-      sum += Math.min(3.0, Math.max(0.4, item.ar));
-      var h = (width - gap * (row.length - 1)) / sum;
-      if (h <= target) {
-        rows.push({ items: row, height: h });
-        row = [];
-        sum = 0;
+      var ar = Math.min(3.0, Math.max(0.4, item.ar));
+      var withoutIt = row.length ? heightFor(row.length, sum) : Infinity;
+      row.push(item);
+      sum += ar;
+      var withIt = heightFor(row.length, sum);
+      if (withIt <= target) {
+        // Adding this one took the row past the target. Whether to keep it
+        // depends on which side lands closer: breaking as soon as the height
+        // dips below target systematically overshoots, and with portrait
+        // photos (whose narrow tiles accumulate slowly) rows came out at
+        // ~150px against a 180px target — visibly smaller thumbnails than
+        // intended.
+        if (Math.abs(withoutIt - target) < Math.abs(withIt - target)) {
+          row.pop();
+          sum -= ar;
+          rows.push({ items: row, height: withoutIt });
+          row = [item];
+          sum = ar;
+        } else {
+          rows.push({ items: row, height: withIt });
+          row = [];
+          sum = 0;
+        }
       }
     });
     if (row.length) {
@@ -64,8 +84,15 @@
       // virtualisation, for free, because we laid out in rows.
       div.style.containIntrinsicSize = Math.round(r.height) + "px";
       r.items.forEach(function (item) {
-        item.el.style.width = Math.round(r.height * item.ar) + "px";
+        var w = Math.round(r.height * item.ar);
+        item.el.style.width = w + "px";
         item.el.style.height = Math.round(r.height) + "px";
+        // Now that the real width is known, tell the browser: otherwise it
+        // picks from srcset using an estimate and visibly upscales the wider
+        // photos. Set before most lazy images have loaded, so in practice the
+        // right file is the only one ever fetched.
+        var img = item.el.firstElementChild;
+        if (img && img.srcset) img.sizes = w + "px";
         div.appendChild(item.el);
       });
       frag.appendChild(div);
@@ -105,6 +132,51 @@
 
     function go(url) { if (url) window.location.href = url; }
 
+    // Returning to the album must restore the scroll position, which only the
+    // browser's own history can do — navigating to the album URL afresh lands
+    // you back at the top. So Escape (and a downward swipe) step *back*
+    // through history rather than navigating.
+    //
+    // Paging with the arrow keys pushes a history entry per photo, so after
+    // three photos the album is three steps back, not one. That depth is
+    // tracked in sessionStorage, keyed by album, and reset whenever we arrive
+    // from somewhere that is not another photo in the same album.
+    var DEPTH_KEY = "hp:depth:" + nav.album;
+
+    function sameOrigin(url) {
+      return !!url && url.indexOf(window.location.origin + "/") === 0;
+    }
+
+    function trackDepth() {
+      var ref = document.referrer;
+      var depth = 1;
+      if (sameOrigin(ref)) {
+        var path = ref.slice(window.location.origin.length);
+        if (path.indexOf("/p/") === 0) {
+          // Arrived from another photo page: one step deeper.
+          try {
+            depth = (parseInt(sessionStorage.getItem(DEPTH_KEY), 10) || 1) + 1;
+          } catch (e) { depth = 2; }
+        }
+      }
+      try { sessionStorage.setItem(DEPTH_KEY, String(depth)); } catch (e) {}
+      return depth;
+    }
+
+    var depth = trackDepth();
+
+    function backToAlbum() {
+      // Only trust history if we actually came from within the site: someone
+      // opening a shared link directly has nothing to go back to, and
+      // history.back() would take them off the site entirely.
+      if (sameOrigin(document.referrer) && window.history.length > 1) {
+        try { sessionStorage.removeItem(DEPTH_KEY); } catch (e) {}
+        window.history.go(-depth);
+        return;
+      }
+      go(nav.album);
+    }
+
     // Fetch the neighbours now, so paging feels instant rather than like a
     // page load.
     (nav.preload || []).forEach(function (src) {
@@ -128,7 +200,7 @@
       switch (e.key) {
         case "ArrowLeft":  go(nav.prev); break;
         case "ArrowRight": go(nav.next); break;
-        case "Escape":     go(nav.album); break;
+        case "Escape":     backToAlbum(); break;
         case "i": case "I": toggleInfo(); break;
         case "d": case "D": go(nav.download); break;
         default: return;
@@ -152,7 +224,7 @@
       if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
         go(dx < 0 ? nav.next : nav.prev);
       } else if (dy > 90 && Math.abs(dy) > Math.abs(dx)) {
-        go(nav.album);
+        backToAlbum();
       }
     }, { passive: true });
   }

@@ -1612,6 +1612,15 @@ Four details that separate a good implementation from a bad one:
 - **Layout is pure arithmetic, not DOM measurement.** Aspect ratios come from
   `data-` attributes the server emits, so the whole layout is computed in one
   pass with zero forced reflows — this is what keeps a 3000-photo album fast.
+- **Break the row wherever the height lands closest to the target**, not as
+  soon as it dips below. Breaking on the first dip systematically overshoots,
+  and with portrait photos — whose narrow tiles accumulate slowly — rows came
+  out around 150 px against a 180 px target, i.e. visibly smaller thumbnails
+  than intended.
+- **Set each `<img>`'s `sizes` to its real width once the row is laid out.**
+  Anything else is a guess, and the browser picks from `srcset` using that
+  guess: a flat `sizes="180px"` fetches a 256 px file for a tile that renders
+  540 px wide.
 - **Emit each row as a `<div>` with `content-visibility: auto` and
   `contain-intrinsic-size: <rowHeight>px`.** The browser then skips rendering
   off-screen rows entirely — native virtualisation, no custom virtual scroller,

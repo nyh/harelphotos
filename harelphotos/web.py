@@ -211,6 +211,23 @@ def _register_filters(app: Flask, cfg: Config) -> None:
             parts.append(f"/i/{tier}/{photo.relpath}?v={photo.deriv_key} {w}w")
         return ", ".join(parts)
 
+    @app.template_filter("grid_sizes")
+    def grid_sizes(photo: Photo) -> str:
+        """How wide this tile will actually be.
+
+        A justified row scales every tile to the row height, so the width is
+        the aspect ratio times that height — NOT a single figure shared by
+        every photo. Telling the browser a flat "180px" makes it fetch a 256 px
+        file for a tile that renders 540 px wide, and the upscaling is
+        obvious. app.js overwrites this with the exact value once it has laid
+        the rows out; this is the honest estimate until then, and the correct
+        value for the no-JS fallback, whose CSS uses the same arithmetic.
+        """
+        ar = max(0.4, min(3.0, photo.aspect))
+        return (
+            f"(max-width: 600px) {round(ar * 130)}px, {round(ar * 180)}px"
+        )
+
     @app.template_filter("img_src")
     def img_src(photo: Photo, want: int) -> str:
         tier = photo.tier_for(want)
@@ -246,8 +263,15 @@ def _register_filters(app: Flask, cfg: Config) -> None:
         return f"https://www.openstreetmap.org/?mlat={lat}&mlon={lon}#map=15/{lat}/{lon}"
 
     app.jinja_env.globals["cfg"] = cfg
+    # The grid offers EVERY generated tier, not just the "thumbnail" ones.
+    # A justified row makes a wide photo far wider than the row is tall — a
+    # 3:1 panorama at 180 px tall is 540 CSS px, or 1080 device px on a retina
+    # screen — so a ladder stopping at 512 would visibly upscale it. Offering
+    # the larger tiers costs nothing: they already exist, and `sizes` stops a
+    # small tile from ever fetching one.
+    app.jinja_env.globals["all_tiers"] = sorted(cfg.sizes.tiers)
     app.jinja_env.globals["thumb_tiers"] = list(cfg.sizes.thumb)
-    app.jinja_env.globals["view_tiers"] = list(cfg.sizes.view)
+    app.jinja_env.globals["view_tiers"] = sorted(cfg.sizes.view)
 
 
 def wsgi_app(config_path: str | Path | None = None) -> Flask:

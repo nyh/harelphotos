@@ -21,6 +21,7 @@ def client(tmp_path):
     app.config.update(TESTING=True)
     with app.test_client() as c:
         c.harelphotos_cfg = cfg
+        c.harelphotos_app = app
         yield c
 
 
@@ -183,10 +184,20 @@ def test_srcset_uses_real_per_photo_widths(client):
 
 def test_no_srcset_entry_for_a_tier_that_was_never_generated(client):
     body = client.get("/a/2019/01/").get_data(as_text=True)
-    # 800x600 sources: the 1280 and 2048 tiers do not exist and must not be
-    # advertised, or the browser fetches a 404.
-    assert "/i/1280/" not in body
+    # 800x600 sources: 2048 is far larger than the original and was never
+    # generated, so it must not be advertised or the browser fetches a 404.
     assert "/i/2048/" not in body
+
+
+def test_grid_offers_the_larger_tiers_too(client):
+    """A wide tile in a justified row can need more than 512 px.
+
+    On a retina screen a 3:1 panorama at a 180 px row height wants 1080
+    device px, so a ladder stopping at the thumbnail tiers would upscale it.
+    The larger tiers already exist and `sizes` stops a small tile fetching one.
+    """
+    body = client.get("/a/2019/01/").get_data(as_text=True)
+    assert "/i/1280/" in body        # 800x600 fixtures have a 1280 tier
 
 
 # ------------------------------------------------------------------- misc
@@ -216,3 +227,89 @@ def test_static_assets_are_served(client):
 def test_grid_carries_aspect_ratios_for_the_layout(client):
     body = client.get("/a/2019/01/").get_data(as_text=True)
     assert 'data-ar="1.3333"' in body        # 800x600
+
+
+# ------------------------------------------------- serving during a scan
+
+def test_pages_are_served_while_a_scan_holds_a_write_transaction(client, tmp_path):
+    """A scan must never take the site down (DESIGN.md 8).
+
+    WAL is what makes this work: readers do not block on a writer, and the
+    application's connection is read-only and per-request.
+    """
+    import sqlite3
+
+    cfg = client.harelphotos_cfg
+    writer = sqlite3.connect(cfg.index_db)
+    try:
+        writer.execute("BEGIN IMMEDIATE")
+        writer.execute("UPDATE photos SET title = 'mid-scan'")
+        # Uncommitted: the reader must still work, and must see the old value.
+        assert client.get("/a/2019/01/").status_code == 200
+        assert client.get("/p/2019/01/a.jpg").status_code == 200
+        assert "mid-scan" not in client.get("/a/2019/01/").get_data(as_text=True)
+        writer.rollback()
+    finally:
+        writer.close()
+
+
+def test_a_full_rescan_alongside_requests_never_fails_one(client):
+    """Interleave a real scan with real requests, in one process."""
+    import threading
+
+    from harelphotos import db, scanner
+
+    cfg = client.harelphotos_cfg
+    conn = db.open_index(cfg.index_db)
+    conn.execute("UPDATE photos SET hdr_stale = 1, deriv_key = NULL")
+    conn.commit()
+
+    errors: list[str] = []
+    stop = threading.Event()
+
+    def hammer():
+        # A Flask test client is bound to the thread that made it, so the
+        # thread gets its own.
+        own = client.harelphotos_app.test_client()
+        while not stop.is_set():
+            for url in ("/a/", "/a/2019/01/", "/p/2019/01/a.jpg", "/healthz"):
+                r = own.get(url)
+                if r.status_code != 200:
+                    errors.append(f"{url} -> {r.status_code}")
+
+    t = threading.Thread(target=hammer, daemon=True)
+    t.start()
+    try:
+        stats = scanner.scan(cfg, conn, jobs=1)
+    finally:
+        stop.set()
+        t.join(timeout=10)
+        conn.close()
+
+    assert stats.photos_derived > 0        # the scan really did work
+    assert errors == []
+
+
+def test_regenerating_an_image_never_leaves_it_missing(client):
+    """Atomic writes mean the old file stays until the new one is complete."""
+    from harelphotos import derive
+
+    cfg = client.harelphotos_cfg
+    before = client.get("/i/512/2019/01/a.jpg", headers={"Accept": "image/avif"})
+    assert before.status_code == 200
+    derive.derive(cfg.photo_root / "2019/01/a.jpg", "2019/01/a.jpg", cfg)
+    after = client.get("/i/512/2019/01/a.jpg", headers={"Accept": "image/avif"})
+    assert after.status_code == 200
+
+
+def test_sizes_reflects_the_real_tile_width(client):
+    """A flat `sizes` makes the browser upscale every non-square photo.
+
+    Justified rows scale each tile to the row height, so a 3:1 panorama
+    renders three times wider than a square one and needs a correspondingly
+    bigger file.
+    """
+    body = client.get("/a/2019/01/").get_data(as_text=True)
+    # 800x600 is 4:3, so 1.333 * 180 = 240px, not a flat 180px.
+    assert "240px" in body
+    assert "33vw, 180px" not in body
