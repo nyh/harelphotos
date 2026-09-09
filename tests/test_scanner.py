@@ -94,14 +94,14 @@ def test_exif_dates_and_dimensions(tree):
     cfg, conn, _ = tree
     scanner.scan(cfg, conn)
     row = conn.execute("SELECT * FROM photos WHERE name = 'a.jpg'").fetchone()
-    assert row["width"] == 64 and row["height"] == 48
+    assert row["width"] == 800 and row["height"] == 600
     assert row["taken"] is not None
     assert time.strftime("%Y-%m-%d", time.localtime(row["taken"])) == "2019-01-15"
     # A photo with no EXIF date is indexed with taken = NULL; the sort falls
     # back to mtime (DESIGN.md 5.3).
     row = conn.execute("SELECT * FROM photos WHERE name = 'd.jpg'").fetchone()
     assert row["taken"] is None
-    assert row["width"] == 64
+    assert row["width"] == 800
 
 
 def test_rollup_counts_recursively(tree):

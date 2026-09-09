@@ -26,16 +26,19 @@ class Report:
     config_errors: list[tuple[str, str]] = field(default_factory=list)
     photo_errors: list[tuple[str, str]] = field(default_factory=list)
     missing_covers: list[str] = field(default_factory=list)
+    missing_derivatives: list[str] = field(default_factory=list)
     restricted: list[tuple[str, str]] = field(default_factory=list)
     date_range: tuple[int | None, int | None] = (None, None)
     biggest: list[tuple[str, int]] = field(default_factory=list)
 
     @property
     def problems(self) -> int:
-        return len(self.config_errors) + len(self.photo_errors) + len(self.missing_covers)
+        return (len(self.config_errors) + len(self.photo_errors)
+                + len(self.missing_covers) + len(self.missing_derivatives))
 
 
-def run(cfg: Config, conn: sqlite3.Connection, *, sample: int = 10) -> Report:
+def run(cfg: Config, conn: sqlite3.Connection, *, sample: int = 10,
+        verify_files: bool = False) -> Report:
     r = Report()
     r.dirs = conn.execute("SELECT count(*) AS n FROM dirs").fetchone()["n"]
     r.photos = conn.execute("SELECT count(*) AS n FROM photos").fetchone()["n"]
@@ -88,6 +91,11 @@ def run(cfg: Config, conn: sqlite3.Connection, *, sample: int = 10) -> Report:
             "SELECT path, acl_chain FROM dirs WHERE acl_chain != '[]' ORDER BY path"
         )
     ]
+    if verify_files:
+        from .scanner import find_missing_derivatives
+
+        r.missing_derivatives = find_missing_derivatives(cfg, conn)
+
     r.biggest = [
         (d["path"] or ".", d["n_photos"])
         for d in conn.execute(

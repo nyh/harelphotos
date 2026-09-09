@@ -7,9 +7,9 @@ they are — the measurements, the alternatives rejected, the plan for what isn'
 built yet — see [DESIGN.md](DESIGN.md). Where the two disagree, this file is
 right and DESIGN.md is out of date.
 
-> **Implemented so far:** indexing a photo tree (`init`, `scan`, `check`,
-> `config show`, `user`). There is **no web interface yet** — that is M4. What
-> exists is the command-line half: it reads your photos and builds an index.
+> **Implemented so far:** indexing a photo tree and generating its images
+> (`init`, `scan`, `check`, `gc`, `stats`, `geocode`, `config show`, `user`).
+> There is **no web interface yet** — that is M4.
 
 ---
 
@@ -119,9 +119,10 @@ photo tree is `.album.toml` files, which you create yourself.
 |---|---|---|
 | `photo_root` | you choose | your photos. Read-only to this software |
 | `index_db` | `<state>/index.sqlite` | the index. **A cache** — delete it and rescan |
-| `derived_root` | `<state>/derived` | generated images (not built yet — M3) |
+| `derived_root` | `<state>/derived` | generated images. **A cache** — rebuildable |
 | `users_file` | next to `config.toml` | accounts, mode 0600 |
 | `secret_key_file` | next to `config.toml` | 32 random bytes, mode 0600 |
+| `geonames.sqlite` | `<state>/` | place-name dataset, if installed. Re-downloadable |
 
 Back up `photo_root` and the config directory. Do **not** bother backing up the
 index or the derived tree; both are reproducible from your photos.
@@ -143,7 +144,9 @@ Index the photo tree. Safe to interrupt and re-run.
 | `--dir SUBPATH` | index only this subdirectory (and prune only within it) |
 | `--jobs N` | parallel header readers (default: all cores) |
 | `--limit N` | stop after N photos, to chip away at a big backlog |
-| `--full` | re-read every photo header |
+| `--full` | re-read every header and regenerate every image |
+| `--repair` | regenerate images whose files have gone missing |
+| `--headers-only` | index metadata but generate no images |
 | `--dry-run` | report what would happen, write nothing |
 | `--force-unlock` | remove a lock left behind by a killed run |
 
@@ -151,11 +154,67 @@ Only one `scan` may run at a time; a second exits with a message naming the
 first one's process. Photos that cannot be read are recorded and reported by
 `check` rather than stopping the run.
 
-### `harelphotos check`
+### `harelphotos check [--verify-files]`
 
 Read-only report: how much was indexed, how much has EXIF dates and GPS, the
 date range, the biggest directories, restricted directories, directories with
 no photos, and anything that went wrong. Exits non-zero if there are problems.
+
+`--verify-files` additionally checks that every image the database says it
+generated is actually on disk. Worth running if you have deleted part of the
+derived tree, or after an interrupted copy: because the recipe fingerprint
+still matches, an ordinary rescan would skip those photos forever. The fix it
+suggests is `scan --repair`.
+
+### `harelphotos stats`
+
+Counts, the size of the derived tree broken down per tier with average file
+sizes, and the biggest directories. The quickest way to see what the images are
+costing you in disk.
+
+### `harelphotos gc [--deep] [--dry-run]`
+
+Remove generated images that are no longer wanted: tier directories left behind
+after changing the size ladder, and temporary files from an interrupted encode.
+`--deep` walks the whole derived tree looking for files with no matching photo,
+which is the only way to find files orphaned by a crash — by definition the
+database never learned about those. `--dry-run` reports without deleting.
+
+### `harelphotos geocode [--force]`
+
+Turn GPS coordinates into place names like `Náxos, South Aegean, Greece`.
+
+This never opens a photo: the coordinates are already in the index from the
+scan, so it is a database operation taking seconds, not a re-read of your
+collection. It needs the place-name dataset (below). `--force` re-resolves
+photos that already have a place, after a dataset update.
+
+`scan` does not geocode automatically; run this once after the dataset is
+installed, and again when you add photos with GPS.
+
+### `harelphotos init --geonames`
+
+Download and build the offline place-name dataset that `geocode` uses. Run it
+once:
+
+```sh
+harelphotos init --geonames
+```
+
+It fetches about 14 MB from [geonames.org](https://www.geonames.org/) —
+`cities500.zip` plus the country and region name tables — and builds
+`geonames.sqlite` (~18 MB, 235,694 populated places worldwide) next to your
+index. The downloads are cached, so re-running it does not re-fetch.
+
+**This is the only time the software makes a network connection**, and it is
+deliberate that it happens here rather than during a scan. The alternative —
+asking an online geocoding service about each photo — would mean sending the
+coordinates of every photo your family has taken, including your house, to a
+third party. Doing it from a local dataset means the coordinates never leave
+your machine.
+
+The data is from GeoNames under CC BY 4.0; attribute it if you publish
+anything derived from it.
 
 ### `harelphotos config show`
 
@@ -181,6 +240,36 @@ Commands not yet implemented (`serve`, `geocode`, `gc`, `stats`, `cover`,
 `acl`, `sync`) exist and will tell you which milestone they belong to.
 
 ---
+
+## The generated images
+
+`scan` produces, for every photo, a set of downsized copies under
+`derived_root`. Those are what a browser will actually load; the originals are
+only ever sent when someone asks to download one.
+
+Four sizes by default — 256 and 512 px for grid thumbnails, 1280 and 2048 px
+for viewing a single photo — encoded as AVIF. They are laid out by pixel size:
+
+```
+derived/256/2019/summer/IMG_1234.jpg.avif
+derived/512/2019/summer/IMG_1234.jpg.avif
+```
+
+Things worth knowing:
+
+- **Nothing is ever upscaled.** A photo smaller than a tier simply has no file
+  for it, and the database records which tiers really exist. A 400 px scan gets
+  one 256 px copy and nothing else.
+- **Aspect ratios are preserved**; no image is cropped.
+- **Metadata is stripped** from the generated images — smaller files, and no
+  GPS coordinates travelling with a thumbnail somebody saves.
+- **Writes are atomic**, so interrupting a scan never leaves a half-written
+  image. Re-running continues where it stopped.
+- Regenerating everything is a matter of changing `recipe_version`, a size, or
+  a quality in `config.toml`: the fingerprint changes and the next scan rebuilds
+  what it must.
+
+To see what they cost, `harelphotos stats`.
 
 ## How a rescan decides what changed
 
@@ -326,6 +415,9 @@ built.
 Also skipped: anything matching `scan.exclude` (dotfiles, `Thumbs.db` and
 `@eaDir` by default), and any filename that is not valid UTF-8 — those are
 counted and listed rather than stopping the scan.
+
+For reference, in the collection this was built for: 98,460 JPEGs, and also
+4,069 HEIC images and 779 videos that are currently invisible.
 
 ---
 

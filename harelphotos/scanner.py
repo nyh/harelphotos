@@ -2,11 +2,8 @@
 
 Phase 1  walk        os.scandir, upsert rows, detect what disappeared
 Phase 2  header      content signature + EXIF + dimensions, in parallel
-Phase 4  rollup      recursive counts, date spans, cover resolution
-
-Phase 3 (deriving images) is M3. The rollup half of phase 4 is done here
-because it is pure SQL and without it the index reports nothing useful; the
-derivative-pruning half belongs with phase 3.
+Phase 3  derive      generate every image tier, in parallel (the expensive part)
+Phase 4  rollup      recursive counts, date spans, covers; prune stale files
 
 The load-bearing idea is in phase 2: **mtime decides whether to look,
 content_sig decides whether to work.** Timestamps get rewritten by ordinary
@@ -27,7 +24,7 @@ from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from pathlib import Path
 
-from . import acl, album, exif
+from . import acl, album, derive, exif
 from .config import Config
 from .util import natkey
 
@@ -50,6 +47,11 @@ class ScanStats:
     photos_unchanged: int = 0      # ...and the bytes turned out to be the same
     photos_changed: int = 0        # ...and they really had changed
     photos_failed: int = 0
+    photos_derived: int = 0
+    derive_failed: int = 0
+    bytes_written: int = 0
+    files_removed: int = 0
+    repaired: int = 0
     skipped_names: list[str] = field(default_factory=list)
     config_errors: list[str] = field(default_factory=list)
 
@@ -67,8 +69,16 @@ class ScanStats:
                 f"{self.photos_checked} headers read "
                 f"({self.photos_unchanged} unchanged, {self.photos_changed} changed)"
             )
-        if self.photos_failed:
-            parts.append(f"{self.photos_failed} FAILED")
+        if self.photos_derived:
+            parts.append(
+                f"{self.photos_derived} derived ({self.bytes_written / 1e9:.2f} GB)"
+            )
+        if self.repaired:
+            parts.append(f"{self.repaired} with missing files repaired")
+        if self.files_removed:
+            parts.append(f"{self.files_removed} stale files removed")
+        if self.photos_failed or self.derive_failed:
+            parts.append(f"{self.photos_failed + self.derive_failed} FAILED")
         if self.skipped_names:
             parts.append(f"{len(self.skipped_names)} unusable names skipped")
         if self.config_errors:
@@ -132,6 +142,53 @@ def _phase2_worker(job: tuple[int, str]) -> dict:
     out["taken"] = hdr.taken
     out["exif_json"] = hdr.exif_json
     return out
+
+
+def find_missing_derivatives(
+    cfg: Config, conn: sqlite3.Connection, repair: bool = False
+) -> list[str]:
+    """Photos whose recorded tiers are not actually on disk.
+
+    The database can legitimately disagree with the filesystem: part of the
+    derived tree deleted to reclaim space, an interrupted copy, a disk that
+    filled mid-write. Because `deriv_key` still matches, an ordinary rescan
+    would skip those photos forever, so the mismatch has to be looked for
+    deliberately — and `--repair` clears the key so the next pass rebuilds them.
+
+    Read-only unless `repair`, so `check --verify-files` can call it on a
+    read-only connection.
+    """
+    missing: list[str] = []
+    rows = conn.execute(
+        "SELECT p.id, p.deriv_tiers, d.path, p.name FROM photos p "
+        "JOIN dirs d ON d.id = p.dir_id WHERE p.deriv_key IS NOT NULL"
+    ).fetchall()
+    for r in rows:
+        try:
+            tiers = json.loads(r["deriv_tiers"] or "[]")
+        except ValueError:
+            tiers = []
+        relpath = f"{r['path']}/{r['name']}" if r["path"] else r["name"]
+        if any(not derive.derived_path(cfg, t, relpath).exists() for t in tiers):
+            missing.append(relpath)
+            if repair:
+                conn.execute("UPDATE photos SET deriv_key = NULL WHERE id = ?", (r["id"],))
+    if repair and missing:
+        conn.commit()
+    return missing
+
+
+def _phase3_worker(job: tuple[int, str, str, "Config"]) -> dict:
+    """Runs in a pool process: derive every tier for one photo."""
+    photo_id, path_str, relpath, cfg = job
+    res = derive.derive(Path(path_str), relpath, cfg)
+    return {
+        "id": photo_id,
+        "tiers": res.tiers,
+        "colour": res.colour,
+        "bytes": res.bytes_written,
+        "error": res.error,
+    }
 
 
 class Scanner:
@@ -317,8 +374,27 @@ class Scanner:
             )
         return False
 
-    def prune(self, subpath: str = "") -> None:
-        """Delete rows for files and directories that disappeared."""
+    def prune(self, subpath: str = "") -> list[str]:
+        """Delete rows for vanished files/directories; return their paths."""
+        # Scope this exactly like the DELETE below. Collecting orphans across
+        # the whole tree while deleting only within the subtree would have
+        # `scan --dir X` delete every *other* directory's derivative files
+        # while leaving their rows claiming the files still exist.
+        if subpath:
+            orphan_rows = self.conn.execute(
+                "SELECT d.path, p.name FROM photos p JOIN dirs d ON d.id = p.dir_id "
+                "WHERE p.seen != ? AND (d.path = ? OR d.path LIKE ?)",
+                (self.generation, subpath, f"{subpath}/%"),
+            )
+        else:
+            orphan_rows = self.conn.execute(
+                "SELECT d.path, p.name FROM photos p JOIN dirs d ON d.id = p.dir_id "
+                "WHERE p.seen != ?",
+                (self.generation,),
+            )
+        orphans = [
+            (f"{r['path']}/{r['name']}" if r["path"] else r["name"]) for r in orphan_rows
+        ]
         if subpath:
             like = f"{subpath}/%"
             dirs = self.conn.execute(
@@ -350,6 +426,7 @@ class Scanner:
             self.conn.execute("DELETE FROM dirs WHERE seen != ?", (self.generation,))
         self.stats.dirs_removed = dirs
         self.stats.photos_removed = photos
+        return orphans
 
     # ---------------------------------------------------------------- phase 2
 
@@ -420,7 +497,87 @@ class Scanner:
         if progress:
             progress(done, len(pending), time.monotonic() - started)
 
+    # ---------------------------------------------------------------- phase 3
+
+    def pending_derives(self, limit: int | None = None) -> list[tuple[int, str, str, Config]]:
+        """Photos whose derivatives do not match the current recipe."""
+        rows = self.conn.execute(
+            "SELECT p.id, p.content_sig, p.deriv_key, d.path, p.name "
+            "FROM photos p JOIN dirs d ON d.id = p.dir_id "
+            "WHERE p.content_sig IS NOT NULL ORDER BY d.path, p.name"
+        ).fetchall()
+        jobs = []
+        for r in rows:
+            want = derive.deriv_key(r["content_sig"], self.cfg)
+            if r["deriv_key"] == want:
+                continue
+            relpath = f"{r['path']}/{r['name']}" if r["path"] else r["name"]
+            jobs.append((r["id"], str(self.cfg.photo_root / relpath), relpath, self.cfg))
+            if limit and len(jobs) >= limit:
+                break
+        return jobs
+
+    def derive_all(self, jobs_n: int | None = None, limit: int | None = None,
+                   progress=None) -> None:
+        pending = self.pending_derives(limit)
+        if not pending:
+            return
+        jobs_n = jobs_n or self.cfg.scan.effective_jobs
+        done = 0
+        started = time.monotonic()
+        sigs = {
+            r["id"]: r["content_sig"]
+            for r in self.conn.execute("SELECT id, content_sig FROM photos")
+        }
+
+        def apply(res: dict) -> None:
+            nonlocal done
+            done += 1
+            if res["error"]:
+                self.stats.derive_failed += 1
+                self.conn.execute(
+                    "UPDATE photos SET deriv_error = ? WHERE id = ?", (res["error"], res["id"])
+                )
+            else:
+                self.stats.photos_derived += 1
+                self.stats.bytes_written += res["bytes"]
+                # deriv_key is stored only once every tier is on disk, so an
+                # interrupted run simply resumes.
+                self.conn.execute(
+                    "UPDATE photos SET deriv_key = ?, deriv_tiers = ?, color = ?, "
+                    "deriv_error = NULL WHERE id = ?",
+                    (
+                        derive.deriv_key(sigs.get(res["id"]), self.cfg),
+                        json.dumps(res["tiers"]),
+                        res["colour"],
+                        res["id"],
+                    ),
+                )
+            if done % COMMIT_BATCH == 0:
+                self.conn.commit()
+                if progress:
+                    progress(done, len(pending), time.monotonic() - started)
+
+        if jobs_n > 1 and len(pending) > 1:
+            with multiprocessing.Pool(
+                jobs_n, initializer=_nice, initargs=(self.cfg.scan.nice,)
+            ) as p:
+                for res in p.imap_unordered(_phase3_worker, pending, chunksize=4):
+                    apply(res)
+        else:
+            for job in pending:
+                apply(_phase3_worker(job))
+        self.conn.commit()
+        if progress:
+            progress(done, len(pending), time.monotonic() - started)
+
     # ---------------------------------------------------------------- phase 4
+
+    def prune_derivatives(self, orphans: list[str]) -> None:
+        """Delete derivative files whose original is gone."""
+        for relpath in orphans:
+            self.stats.files_removed += derive.remove_derivatives(self.cfg, relpath)
+        derive.prune_empty_dirs(self.cfg.derived_root)
 
     def rollup(self) -> None:
         """Recursive counts, date spans and cover photos, computed bottom-up.
@@ -525,17 +682,26 @@ def scan(
     jobs: int | None = None,
     limit: int | None = None,
     full: bool = False,
+    repair: bool = False,
+    headers_only: bool = False,
     progress=None,
+    derive_progress=None,
 ) -> ScanStats:
-    """Run phases 1, 2 and the rollup."""
+    """Run phases 1-4."""
     s = Scanner(cfg, conn)
     if full:
         # Force every header to be re-read, e.g. to pick up a new EXIF field.
         conn.execute("UPDATE photos SET hdr_stale = 1")
+        conn.execute("UPDATE photos SET deriv_key = NULL")
+    if repair:
+        s.stats.repaired = len(find_missing_derivatives(cfg, conn, repair=True))
     s.walk(subpath)
     conn.commit()
-    s.prune(subpath)
+    orphans = s.prune(subpath)
     conn.commit()
     s.read_headers(jobs=jobs, limit=limit, progress=progress)
+    if not headers_only:
+        s.derive_all(jobs_n=jobs, limit=limit, progress=derive_progress or progress)
+        s.prune_derivatives(orphans)
     s.rollup()
     return s.stats

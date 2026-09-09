@@ -19,7 +19,7 @@ from harelphotos import db
 def make_jpeg(
     path: Path,
     *,
-    size: tuple[int, int] = (64, 48),
+    size: tuple[int, int] = (800, 600),
     taken: str | None = None,
     orientation: int | None = None,
     colour: tuple[int, int, int] = (120, 90, 60),

@@ -15,14 +15,12 @@ from pathlib import Path
 
 from . import check as check_mod
 from . import config as config_mod
-from . import db, initialise, lock, scanner, users as users_mod
+from . import db, geocode as geocode_mod, geonames, initialise, lock
+from . import maintenance, scanner, users as users_mod
 
 log = logging.getLogger("harelphotos")
 
 NOT_YET = {
-    "geocode": "M3",
-    "gc": "M3",
-    "stats": "M3",
     "serve": "M4",
     "cover": "M9",
     "acl": "M5",
@@ -46,13 +44,19 @@ def _load_config(args: argparse.Namespace) -> config_mod.Config:
 
 
 def cmd_init(args: argparse.Namespace) -> int:
-    if args.geonames or args.landmarks:
-        print(
-            "init --geonames/--landmarks is not implemented yet (M3); "
-            "see DESIGN.md 9.5.",
-            file=sys.stderr,
-        )
+    if args.landmarks:
+        print("init --landmarks is not implemented yet (M9); see DESIGN.md 9.5.",
+              file=sys.stderr)
         return 2
+    if args.geonames:
+        cfg = _load_config(args)
+        dest = cfg.state_dir / "geonames.sqlite"
+        print(f"downloading the place-name dataset (~14 MB) to {dest} ...")
+        n = geonames.build(dest, progress=lambda msg: print(f"  {msg}"))
+        print(f"built {dest} with {n:,} places "
+              f"({dest.stat().st_size / 1e6:.0f} MB)")
+        print("Data from GeoNames (https://www.geonames.org/), CC BY 4.0.")
+        return 0
     config_path = Path(args.config) if args.config else Path("config.toml")
     photo_root = Path(args.photo_root).expanduser().resolve() if args.photo_root else None
     if photo_root is None:
@@ -232,6 +236,16 @@ def _progress(done: int, total: int, elapsed: float) -> None:
     sys.stderr.flush()
 
 
+def _derive_progress(done: int, total: int, elapsed: float) -> None:
+    rate = done / elapsed if elapsed > 0 else 0
+    eta = (total - done) / rate if rate > 0 else 0
+    sys.stderr.write(
+        f"\r  {done:,}/{total:,} images · {rate:,.1f}/s · "
+        f"ETA {int(eta) // 3600}:{int(eta) % 3600 // 60:02d}:{int(eta) % 60:02d}   "
+    )
+    sys.stderr.flush()
+
+
 def cmd_scan(args: argparse.Namespace) -> int:
     cfg = _load_config(args)
     if not cfg.photo_root.is_dir():
@@ -261,7 +275,10 @@ def cmd_scan(args: argparse.Namespace) -> int:
                 jobs=args.jobs,
                 limit=args.limit,
                 full=args.full,
+                repair=args.repair,
+                headers_only=args.headers_only,
                 progress=None if args.quiet else _progress,
+                derive_progress=None if args.quiet else _derive_progress,
             )
     except lock.LockBusy as e:
         print(f"error: {e}", file=sys.stderr)
@@ -286,10 +303,77 @@ def cmd_scan(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_geocode(args: argparse.Namespace) -> int:
+    cfg = _load_config(args)
+    conn = db.open_index(cfg.index_db)
+    lock_path = cfg.state_dir / "scan.lock"
+    try:
+        with lock.ScanLock(lock_path):
+            stats = geocode_mod.geocode(cfg, conn, force=args.force)
+    except geonames.GeonamesError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    print(stats.summary())
+    conn.close()
+    return 0
+
+
+def cmd_gc(args: argparse.Namespace) -> int:
+    cfg = _load_config(args)
+    conn = db.open_index(cfg.index_db, read_only=True)
+    r = maintenance.collect(cfg, conn, deep=args.deep, dry_run=args.dry_run)
+    what = "would remove" if args.dry_run else "removed"
+    if r.stale_tiers:
+        print(f"{what} tier directories no longer configured: {', '.join(r.stale_tiers)}")
+    if r.orphan_files:
+        print(f"{what} {len(r.orphan_files):,} orphaned files")
+        for f in r.orphan_files[:10]:
+            print(f"  {f}")
+        if len(r.orphan_files) > 10:
+            print(f"  ... and {len(r.orphan_files) - 10:,} more")
+    if r.dirs_removed:
+        print(f"removed {r.dirs_removed} empty directories")
+    if not (r.stale_tiers or r.orphan_files or r.dirs_removed):
+        print("nothing to collect")
+    else:
+        print(f"{r.bytes_freed / 1e6:.1f} MB {'reclaimable' if args.dry_run else 'freed'}")
+    if not args.deep:
+        print("(use --deep to also look for files with no matching photo)")
+    conn.close()
+    return 0
+
+
+def cmd_stats(args: argparse.Namespace) -> int:
+    cfg = _load_config(args)
+    conn = db.open_index(cfg.index_db, read_only=True)
+    s = maintenance.gather(cfg, conn)
+    print(f"directories      {s.dirs:,}")
+    print(f"photos           {s.photos:,}")
+    print(f"  derived        {s.derived_photos:,}")
+    if s.pending:
+        print(f"  pending        {s.pending:,}   (run 'harelphotos scan')")
+    if s.failed:
+        print(f"  failed         {s.failed:,}   (see 'harelphotos check')")
+    print(f"  with a place   {s.with_place:,}")
+    if s.per_tier:
+        print(f"\nderived tree     {s.derived_bytes / 1e9:.2f} GB in {s.derived_files:,} files")
+        for label, n, size in s.per_tier:
+            avg = size / n if n else 0
+            print(f"  {label:10} {n:8,} files  {size / 1e9:6.2f} GB  avg {avg / 1024:6.1f} KB")
+        if s.derived_photos:
+            print(f"  per photo  {s.derived_bytes / s.derived_photos / 1024:.0f} KB")
+    if s.biggest:
+        print("\nbiggest directories:")
+        for path, n in s.biggest:
+            print(f"  {n:7,}  {path}")
+    conn.close()
+    return 0
+
+
 def cmd_check(args: argparse.Namespace) -> int:
     cfg = _load_config(args)
     conn = db.open_index(cfg.index_db, read_only=True)
-    r = check_mod.run(cfg, conn)
+    r = check_mod.run(cfg, conn, verify_files=args.verify_files)
     print(f"index          {cfg.index_db}")
     print(f"directories    {r.dirs:,}")
     print(f"photos         {r.photos:,}")
@@ -324,6 +408,11 @@ def cmd_check(args: argparse.Namespace) -> int:
             print(f"  photo        {path}: {err}")
         for path in r.missing_covers[:20]:
             print(f"  cover        {path}: 'cover' names a photo that does not exist")
+        if r.missing_derivatives:
+            print(f"  derivatives  {len(r.missing_derivatives):,} photos have recorded "
+                  f"images that are not on disk — run 'harelphotos scan --repair'")
+            for path in r.missing_derivatives[:5]:
+                print(f"                 {path}")
     else:
         print("\nno problems found")
     conn.close()
@@ -357,12 +446,30 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--jobs", type=int, help="parallel header readers (default: all cores)")
     ps.add_argument("--limit", type=int, help="stop after N header reads")
     ps.add_argument("--full", action="store_true", help="re-read every header")
+    ps.add_argument("--repair", action="store_true",
+                    help="rebuild derivatives whose files have gone missing")
+    ps.add_argument("--headers-only", action="store_true",
+                    help="index metadata but do not generate images")
     ps.add_argument("--dry-run", action="store_true", help="report, write nothing")
     ps.add_argument("--force-unlock", action="store_true", help="remove a stale lock file")
     ps.set_defaults(func=cmd_scan)
 
     pk = sub.add_parser("check", help="report index contents and problems")
+    pk.add_argument("--verify-files", action="store_true",
+                    help="also check that every recorded derivative is on disk")
     pk.set_defaults(func=cmd_check)
+
+    pg = sub.add_parser("geocode", help="resolve place names from GPS already indexed")
+    pg.add_argument("--force", action="store_true", help="re-resolve photos that have a place")
+    pg.set_defaults(func=cmd_geocode)
+
+    pgc = sub.add_parser("gc", help="remove derivatives with no matching photo")
+    pgc.add_argument("--deep", action="store_true", help="walk the whole derived tree")
+    pgc.add_argument("--dry-run", action="store_true", help="report, delete nothing")
+    pgc.set_defaults(func=cmd_gc)
+
+    pst = sub.add_parser("stats", help="counts and derived-tree size")
+    pst.set_defaults(func=cmd_stats)
 
     pu = sub.add_parser("user", help="manage accounts in users.toml")
     usub = pu.add_subparsers(dest="subcommand", required=True)
@@ -411,7 +518,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return args.func(args)
     except (config_mod.ConfigError, users_mod.UsersError, db.SchemaMismatch,
-            initialise.InitError, lock.LockBusy, NotADirectoryError) as e:
+            initialise.InitError, lock.LockBusy, geonames.GeonamesError,
+            NotADirectoryError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
     except FileNotFoundError as e:
