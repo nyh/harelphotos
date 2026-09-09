@@ -18,6 +18,7 @@ import shutil
 import socket
 import ssl
 import subprocess
+import urllib.request
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -370,16 +371,37 @@ def _live(r: Report, url: str) -> None:
         r.add(OK if hsts else WARN, "strict-transport-security", hsts or "missing")
 
     # The album must NOT be reachable without logging in.
+    #
+    # Redirects are deliberately NOT followed. urlopen follows them by
+    # default, which made a correct 302-to-the-login-page look like a 200 and
+    # reported a properly locked-down site as PUBLIC -- a false alarm on the
+    # one check here that really matters.
+    for path, what in (("/a/", "album"), ("/api/a/", "album JSON")):
+        code = _status_no_redirect(base + path)
+        # A redirect to the login page, or a refusal, are both correct.
+        locked = code in (301, 302, 303, 307, 308, 401, 403)
+        r.add(OK if locked else FAIL, f"login required ({what})",
+              f"{path} answered {code}"
+              + ("" if locked else " — THIS IS READABLE WITHOUT LOGGING IN"))
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _status_no_redirect(url: str) -> int:
+    import urllib.error
+    import urllib.request
+
+    opener = urllib.request.build_opener(_NoRedirect)
     try:
-        req = urllib.request.Request(base + "/a/")
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            reachable, code = True, resp.status
+        with opener.open(url, timeout=15) as resp:
+            return resp.status
     except urllib.error.HTTPError as e:
-        reachable, code = e.code not in (302, 401, 403), e.code
+        return e.code
     except Exception:
-        reachable, code = False, 0
-    r.add(FAIL if reachable else OK, "login required",
-          f"/a/ answered {code}" + (" — the collection is PUBLIC" if reachable else ""))
+        return 0
 
 
 def _explain_cert_error(e: Exception) -> str:
