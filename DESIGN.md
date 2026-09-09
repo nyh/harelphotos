@@ -831,6 +831,77 @@ My recommendation stays AVIF, on the grounds that the fallback makes the
 downside a non-event while the upside is 8 GB and half the bandwidth. But it's
 a reversible decision either way, which is the main thing.
 
+(Decode speed is the other fair objection to AVIF, and it gets its own
+measurements in §9.5.)
+
+---
+
+### 9.5 Decode cost on the client
+
+AVIF is genuinely more expensive to *decode* than JPEG or WebP, so "100
+thumbnails must appear instantly" is the right thing to worry about. Measured
+per image, decoding the same pictures from each format:
+
+| tier | format | KB | wall | **CPU** | cores used |
+|---:|---|---:|---:|---:|---:|
+| 256 | AVIF | 5.2 | 1.05 ms | **1.43 ms** | 1.37 |
+| 256 | WebP | 5.9 | 0.62 ms | **0.61 ms** | 1.00 |
+| 256 | JPEG | 11.8 | 0.57 ms | **0.56 ms** | 0.99 |
+| 512 | AVIF | 12.8 | 2.37 ms | **3.12 ms** | 1.32 |
+| 512 | WebP | 17.3 | 1.82 ms | **1.80 ms** | 1.00 |
+| 512 | JPEG | 38.4 | 1.78 ms | **1.77 ms** | 1.00 |
+
+So yes: **AVIF costs about 1.7–2.3× the CPU of WebP or JPEG to decode.** The
+"cores used" column is why CPU time is the honest measure here — the AVIF
+decoder is multithreaded, so wall-clock flatters it. In a grid the browser is
+already decoding many images in parallel across all cores, so the extra threads
+have nowhere to go and CPU time is what you actually pay.
+
+#### Does it matter in practice? No, for three reasons
+
+**1. The absolute numbers are small.** 100 thumbnails at the 512 tier is 312 ms
+of CPU for AVIF versus 180 ms for WebP — a 132 ms difference, spread across
+cores, on work the browser does off the main thread (`decoding="async"`), so it
+never blocks scrolling.
+
+**2. We never decode 100 at once.** `loading="lazy"` plus `content-visibility:
+auto` on each row (§11.1c) means only the images actually on screen are
+fetched and decoded — 15–25, not 100. That cuts the real difference to roughly
+**30 ms of CPU spread over several cores**, which is imperceptible.
+
+**3. Network dominates, and there the smaller file wins.** For those same 100
+thumbnails at the 512 tier, AVIF sends 1.25 MB against WebP's 1.69 MB:
+
+| link | AVIF transfer | WebP transfer | AVIF's net advantage |
+|---|---:|---:|---|
+| 10 Mbit/s | 1048 ms | 1421 ms | **AVIF ~340 ms ahead** |
+| 50 Mbit/s | 210 ms | 284 ms | **AVIF ~40 ms ahead** |
+| 100+ Mbit/s | 105 ms | 142 ms | roughly a wash |
+
+Break-even is around **110 Mbit/s** of *end-to-end* throughput on a 4-core
+client. And the ceiling here is your server's **upload** bandwidth on a
+residential connection, not the visitor's download speed — so in practice this
+site will live permanently on the side of the table where the smaller file wins.
+
+#### The asymmetry worth knowing
+
+The multithreading that doesn't help a grid *does* help the single-photo view,
+where one large image is decoded alone and the spare cores are free. At the 2048
+tier: AVIF **10.8 ms** wall versus WebP **22.6 ms** and JPEG **21.8 ms** — AVIF
+is about twice as fast in wall-clock terms, on top of arriving in half the
+bytes. So the format is at its worst exactly where it matters least (many tiny
+thumbnails, where every format is sub-millisecond) and at its best exactly where
+it matters most (swiping through full-screen photos, §11.2).
+
+#### Caveat on method
+
+These are libavif, libwebp and libjpeg-turbo measured through Pillow, not the
+browsers' own decoders — Chrome and Firefox decode AVIF with dav1d, Safari uses
+its own. The relative magnitudes should carry over; the exact milliseconds will
+not. If the grid ever does feel sluggish on a specific old phone, the cheap
+first move is dropping that device to the 256 tier rather than changing format,
+and the config-level escape hatch (`format = "webp"`, §9.4) remains one line.
+
 ---
 
 ## 10. Web application
