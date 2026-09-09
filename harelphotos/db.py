@@ -30,7 +30,8 @@ CREATE TABLE dirs (
   location      TEXT,
   hidden        INTEGER NOT NULL DEFAULT 0,
   acl_chain     TEXT NOT NULL DEFAULT '[]',
-  cover_photo   INTEGER,
+  cover_spec    TEXT,                       -- the raw `cover` from .album.toml
+  cover_photo   INTEGER,                    -- resolved photo id
   cfg_mtime     INTEGER,
   cfg_size      INTEGER,
   cfg_error     TEXT,
@@ -51,6 +52,7 @@ CREATE TABLE photos (
   size        INTEGER NOT NULL,        -- \\  cheap "should we look?" check
   mtime_ns    INTEGER NOT NULL,        -- /   (scan phase 1)
   content_sig BLOB,                    -- "did it really change?" (phase 2)
+  hdr_stale   INTEGER NOT NULL DEFAULT 1,  -- phase 1 says "look at this one"
   width       INTEGER,
   height      INTEGER,
   taken       INTEGER,                 -- EXIF DateTimeOriginal, unix epoch
@@ -69,7 +71,8 @@ CREATE TABLE photos (
 );
 CREATE INDEX photos_dir  ON photos(dir_id, name);
 CREATE INDEX photos_date ON photos(taken);
-CREATE INDEX photos_seen ON photos(seen);
+CREATE INDEX photos_seen  ON photos(seen);
+CREATE INDEX photos_stale ON photos(hdr_stale) WHERE hdr_stale = 1;
 
 -- Login throttling (DESIGN.md 12.1). It lives here rather than in users.toml
 -- because it is transient state, not configuration; losing it on a rebuild

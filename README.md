@@ -4,8 +4,9 @@ A self-hosted photo gallery for a personal collection — a Google-Photos-like
 browsing experience over an ordinary directory tree of JPEGs, served from a
 small Linux server to a handful of invited family members.
 
-> **Status: design stage.** There is no code yet. This repository currently
-> holds the plan; [`DESIGN.md`](DESIGN.md) is written to be followed.
+> **Status: in progress.** The indexing half works — see
+> [`MANUAL.md`](MANUAL.md). There is no web interface yet.
+> [`DESIGN.md`](DESIGN.md) is the plan being followed.
 
 ## The problem
 
@@ -59,6 +60,7 @@ machine they stay exactly where they are.
 
 ## Documents
 
+- [`MANUAL.md`](MANUAL.md) — **how to use what exists today.**
 - [`PLAN`](PLAN) — the original statement of intent.
 - [`DESIGN.md`](DESIGN.md) — the full design: data model, scanner, image
   pipeline, web app, authentication, deployment, testing, and a milestone

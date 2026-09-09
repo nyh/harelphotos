@@ -13,18 +13,17 @@ import logging
 import sys
 from pathlib import Path
 
+from . import check as check_mod
 from . import config as config_mod
-from . import db, initialise, users as users_mod
+from . import db, initialise, lock, scanner, users as users_mod
 
 log = logging.getLogger("harelphotos")
 
 NOT_YET = {
-    "scan": "M2/M3",
     "geocode": "M3",
     "gc": "M3",
     "stats": "M3",
     "serve": "M4",
-    "check": "M2",
     "cover": "M9",
     "acl": "M5",
     "sync": "M8",
@@ -217,6 +216,120 @@ def cmd_config_show(args: argparse.Namespace) -> int:
     return 0
 
 
+def _fmt_date(ts: int | None) -> str:
+    if ts is None:
+        return "-"
+    import datetime
+    return datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+
+
+def _progress(done: int, total: int, elapsed: float) -> None:
+    rate = done / elapsed if elapsed > 0 else 0
+    eta = (total - done) / rate if rate > 0 else 0
+    sys.stderr.write(
+        f"\r  {done:,}/{total:,} headers · {rate:,.0f}/s · ETA {int(eta) // 60}:{int(eta) % 60:02d}   "
+    )
+    sys.stderr.flush()
+
+
+def cmd_scan(args: argparse.Namespace) -> int:
+    cfg = _load_config(args)
+    if not cfg.photo_root.is_dir():
+        print(f"photo_root is not a directory: {cfg.photo_root}", file=sys.stderr)
+        return 1
+    lock_path = cfg.state_dir / "scan.lock"
+    if args.force_unlock and lock.break_lock(lock_path):
+        print(f"removed stale lock {lock_path}")
+
+    if args.dry_run:
+        # A dry run must not touch the real index, so point the scanner at a
+        # throwaway copy of the schema in memory.
+        import sqlite3 as _sq
+        conn = _sq.connect(":memory:")
+        conn.row_factory = _sq.Row
+        db.initialise(conn)
+        print("dry run: counting what a scan would find, writing nothing")
+    else:
+        conn = db.open_index(cfg.index_db)
+
+    try:
+        with lock.ScanLock(lock_path):
+            stats = scanner.scan(
+                cfg,
+                conn,
+                subpath=args.dir or "",
+                jobs=args.jobs,
+                limit=args.limit,
+                full=args.full,
+                progress=None if args.quiet else _progress,
+            )
+    except lock.LockBusy as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    finally:
+        if not args.dry_run:
+            conn.commit()
+
+    if not args.quiet:
+        sys.stderr.write("\r" + " " * 70 + "\r")
+    print(stats.summary())
+    for path in stats.skipped_names[:10]:
+        print(f"  skipped (not valid UTF-8): {path}", file=sys.stderr)
+    if len(stats.skipped_names) > 10:
+        print(f"  ... and {len(stats.skipped_names) - 10} more", file=sys.stderr)
+    for msg in stats.config_errors[:10]:
+        print(f"  {msg}", file=sys.stderr)
+    if stats.photos_failed:
+        print(f"  {stats.photos_failed} photos could not be read; see 'harelphotos check'",
+              file=sys.stderr)
+    conn.close()
+    return 0
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    cfg = _load_config(args)
+    conn = db.open_index(cfg.index_db, read_only=True)
+    r = check_mod.run(cfg, conn)
+    print(f"index          {cfg.index_db}")
+    print(f"directories    {r.dirs:,}")
+    print(f"photos         {r.photos:,}")
+    pct = (100 * r.photos_with_headers / r.photos) if r.photos else 0
+    print(f"  headers read {r.photos_with_headers:,} ({pct:.0f}%)")
+    pct = (100 * r.photos_with_dates / r.photos) if r.photos else 0
+    print(f"  EXIF date    {r.photos_with_dates:,} ({pct:.0f}%)")
+    pct = (100 * r.photos_with_gps / r.photos) if r.photos else 0
+    print(f"  GPS          {r.photos_with_gps:,} ({pct:.0f}%)")
+    print(f"date range     {_fmt_date(r.date_range[0])} .. {_fmt_date(r.date_range[1])}")
+
+    if r.biggest:
+        print("\nbiggest directories:")
+        for path, n in r.biggest:
+            print(f"  {n:7,}  {path}")
+    if r.restricted:
+        print(f"\nrestricted directories ({len(r.restricted)}):")
+        for path, chain in r.restricted[:20]:
+            print(f"  {path}  {chain}")
+    if r.empty_dirs:
+        print(f"\ndirectories with no photos anywhere ({len(r.empty_dirs)}):")
+        for path in r.empty_dirs[:20]:
+            print(f"  {path}")
+        if len(r.empty_dirs) > 20:
+            print(f"  ... and {len(r.empty_dirs) - 20} more")
+
+    if r.problems:
+        print(f"\nPROBLEMS ({r.problems}):")
+        for path, err in r.config_errors[:20]:
+            print(f"  .album.toml  {path}: {err}")
+        for path, err in r.photo_errors[:20]:
+            print(f"  photo        {path}: {err}")
+        for path in r.missing_covers[:20]:
+            print(f"  cover        {path}: 'cover' names a photo that does not exist")
+    else:
+        print("\nno problems found")
+    conn.close()
+    return 1 if r.problems else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="harelphotos",
@@ -238,6 +351,18 @@ def build_parser() -> argparse.ArgumentParser:
     csub = pc.add_subparsers(dest="subcommand", required=True)
     pcs = csub.add_parser("show", help="print the effective configuration")
     pcs.set_defaults(func=cmd_config_show)
+
+    ps = sub.add_parser("scan", help="index the photo tree (phases 1-2)")
+    ps.add_argument("--dir", help="rescan only this subdirectory")
+    ps.add_argument("--jobs", type=int, help="parallel header readers (default: all cores)")
+    ps.add_argument("--limit", type=int, help="stop after N header reads")
+    ps.add_argument("--full", action="store_true", help="re-read every header")
+    ps.add_argument("--dry-run", action="store_true", help="report, write nothing")
+    ps.add_argument("--force-unlock", action="store_true", help="remove a stale lock file")
+    ps.set_defaults(func=cmd_scan)
+
+    pk = sub.add_parser("check", help="report index contents and problems")
+    pk.set_defaults(func=cmd_check)
 
     pu = sub.add_parser("user", help="manage accounts in users.toml")
     usub = pu.add_subparsers(dest="subcommand", required=True)
@@ -286,7 +411,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return args.func(args)
     except (config_mod.ConfigError, users_mod.UsersError, db.SchemaMismatch,
-            initialise.InitError) as e:
+            initialise.InitError, lock.LockBusy, NotADirectoryError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
     except FileNotFoundError as e:

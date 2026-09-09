@@ -2655,7 +2655,7 @@ Each milestone is independently useful and independently testable.
 | **M5** | Landing page (§11.5), local accounts, sessions, `?next=` deep links, ACL enforcement | the security-critical milestone; write these tests first |
 | **M6** | TLS (§13.3), firewall/SELinux (§13.4), then Google Sign-In | TLS comes first. The Google half is optional (§12.2) — local accounts already work, so M6 can be dropped or deferred without affecting anything else |
 | **M7** | Lightbox: keyboard, swipe, prefetch, **info panel + download original** (§11.2), album `location` | the "feels like Google Photos" milestone |
-| **M8** | Deployment: **`INSTALL.md`** (§13.0), `check --env`, gunicorn unit, Apache vhost, `sync`, README | ⚠️ needs the §0.1 manual steps done first — above all, photos moved out of `/home` on the server |
+| **M8** | Deployment: **`INSTALL.md`** (§13.0), `check --env`, gunicorn unit, Apache vhost, `sync`, README; final pass over `MANUAL.md` | ⚠️ needs the §0.1 manual steps done first — above all, photos moved out of `/home` on the server |
 | **M9** | Polish: date-group headers, cover-picker UI, dark mode, **opt-in landmark geocoding** (§9.5), >5000-photo safety valve | |
 
 M4 is usable on the home machine from day one via `harelphotos serve` (§13.5) —
@@ -2678,6 +2678,11 @@ For whoever picks this up later, including a future session reading this cold:
 - **Commit straight to `main`**, in logical chunks, and push. There is no
   pull-request review step, which raises rather than lowers the bar on tests
   and on saying clearly when something is unverified.
+- **`MANUAL.md` is updated as part of each milestone**, not at the end. It
+  describes only what is implemented and working; this document describes why,
+  and the plan. Writing the manual incrementally is what keeps it true —
+  deferring it to the end is how documentation ends up describing software that
+  was never built.
 - **Tests are written with the code, not after**, and must pass before a
   milestone is called done. §16 lists what matters; the scanner-diff and ACL
   tests are the ones that earn their keep.
