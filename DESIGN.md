@@ -45,6 +45,40 @@ Decided during this design pass, from measurements (§2, §3) rather than taste:
 
 ---
 
+## 0.1 Manual steps — things no code will do for you
+
+⚠️ **Read this before starting implementation.** These are actions on the real
+machines, not programming tasks. Each one blocks a specific milestone, and
+forgetting them looks like a bug rather than a missing step.
+
+| # | Action | Machine | Blocks | Detail |
+|---|---|---|---|---|
+| 1 | **Move the photos out of your home directory** — e.g. `/home/nyh/pictures` → `/srv/photos`, then `chown -R nyh:nyh /srv/photos` | **server only** | M8 | §13.1a |
+| 2 | Point DNS at the server and run `certbot --apache -d photos.harel.org.il` | server | M6 | §13.3 |
+| 3 | Open ports 80 and 443; `setsebool -P httpd_can_network_connect 1` | server | M8 | §13.4 |
+| 4 | Copy the hero image (`newsign2.jpg`) to `/etc/harelphotos/` | both | M5 | §11.5 |
+| 5 | Create the accounts: `harelphotos user add …` for each family member | both | M5 | §15 |
+| 6 | *(optional)* Register the Google OAuth client and publish the consent screen | — | M6 | §12.2 |
+
+**On step 1 specifically**, since it is the one with real work behind it: on the
+**server** the photos must end up somewhere outside `/home`. Leaving them under
+your home directory works, but only at the price of a POSIX ACL, an SELinux
+boolean and a weakened `ProtectHome` — three workarounds that all vanish if the
+directory simply lives at `/srv/photos` instead (§13.1a).
+
+On the **home machine, change nothing**: `~/pictures` is fine exactly where it
+is, because `harelphotos serve` runs as you, with no service account, no Apache
+and no SELinux confinement. The two machines legitimately have different
+`photo_root` values; the index stores relative paths, so this costs nothing.
+
+Before moving 300 GB, check `df /home /srv` — same filesystem makes `mv` an
+instant rename, different filesystems make it a real copy worth running under
+`screen`.
+
+Nothing here blocks M1–M5, which run entirely on the home machine.
+
+---
+
 ## 1. Guiding principles
 
 1. **The filesystem is the database.** Photos and `.album.toml` files are the
@@ -1990,8 +2024,9 @@ why §0 chose "both local and Google" rather than Google alone.
 ### 13.0 Package requirements — deliverable: `INSTALL.md`
 
 A standalone `INSTALL.md` is an explicit deliverable of milestone M8, covering
-both distros, both roles (home workstation / server), and the post-install
-verification. Its substance:
+both distros, both roles (home workstation / server), the manual prerequisites
+of §0.1 — **starting with moving the photos out of `/home` on the server** — and
+the post-install verification. Its substance:
 
 **System packages — Fedora** (workstation or server):
 
@@ -2620,7 +2655,7 @@ Each milestone is independently useful and independently testable.
 | **M5** | Landing page (§11.5), local accounts, sessions, `?next=` deep links, ACL enforcement | the security-critical milestone; write these tests first |
 | **M6** | TLS (§13.3), firewall/SELinux (§13.4), then Google Sign-In | TLS comes first. The Google half is optional (§12.2) — local accounts already work, so M6 can be dropped or deferred without affecting anything else |
 | **M7** | Lightbox: keyboard, swipe, prefetch, **info panel + download original** (§11.2), album `location` | the "feels like Google Photos" milestone |
-| **M8** | Deployment: **`INSTALL.md`** (§13.0), `check --env`, gunicorn unit, Apache vhost, `sync`, README | |
+| **M8** | Deployment: **`INSTALL.md`** (§13.0), `check --env`, gunicorn unit, Apache vhost, `sync`, README | ⚠️ needs the §0.1 manual steps done first — above all, photos moved out of `/home` on the server |
 | **M9** | Polish: date-group headers, cover-picker UI, dark mode, **opt-in landmark geocoding** (§9.5), >5000-photo safety valve | |
 
 M4 is usable on the home machine from day one via `harelphotos serve` (§13.5) —

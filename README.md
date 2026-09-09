@@ -48,6 +48,15 @@ AVIF encoder), **requests**, **gunicorn** — behind Apache on the server. No
 build step, no npm, no ORM, no job queue, no database server. Targets Fedora and
 Rocky Linux 9, installed identically on both from one virtualenv.
 
+## Before implementation starts
+
+A short list of things on the real machines that no code will do — see
+[§0.1 of the design](DESIGN.md#01-manual-steps--things-no-code-will-do-for-you).
+The one with real work behind it: **on the server, the photos must be moved out
+of the home directory** (e.g. to `/srv/photos`), which removes the need for
+POSIX ACLs, an SELinux boolean and a weakened `ProtectHome`. On the home
+machine they stay exactly where they are.
+
 ## Documents
 
 - [`PLAN`](PLAN) — the original statement of intent.
