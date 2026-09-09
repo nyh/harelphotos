@@ -710,3 +710,43 @@ def test_public_assets_are_built_when_the_app_starts(scanned, tmp_path):
 
     assert (public_assets.public_dir(scanned) / "landing-640.jpeg").is_file()
     assert public_assets.icons(scanned), "no icons were produced at startup"
+
+
+def test_hero_width_controls_both_the_files_and_the_drawn_size(scanned, tmp_path):
+    """640 was a hardcoded choice of mine; it is the site owner's to make."""
+    from PIL import Image
+
+    from harelphotos import public_assets
+
+    src = tmp_path / "hero2.jpg"
+    Image.new("RGB", (2000, 1000), (40, 80, 160)).save(src)
+    object.__setattr__(scanned.ui, "landing_image", src)
+    object.__setattr__(scanned.ui, "hero_width", 420)
+
+    public_assets.build(scanned, force=True)
+    # The display width and a 2x companion for high-density screens.
+    assert public_assets.widths(scanned) == (420, 840)
+    for w in (420, 840):
+        with Image.open(public_assets.public_dir(scanned) / f"landing-{w}.avif") as im:
+            assert im.size[0] == w
+    assert public_assets.hero(scanned)["width"] == 420
+
+
+def test_a_configured_hero_width_reaches_the_page(scanned, tmp_path):
+    from PIL import Image
+
+    from harelphotos import public_assets
+    from harelphotos.web import create_app
+
+    src = tmp_path / "hero3.jpg"
+    Image.new("RGB", (2000, 1000), (40, 80, 160)).save(src)
+    object.__setattr__(scanned.ui, "landing_image", src)
+    object.__setattr__(scanned.ui, "hero_width", 380)
+    for p in public_assets.public_dir(scanned).glob("*"):
+        p.unlink()
+
+    app = create_app(scanned, require_login=True)
+    app.config.update(TESTING=True)
+    body = app.test_client().get("/login").get_data(as_text=True)
+    assert "max-inline-size: 380px" in body
+    assert "/public/landing-380." in body

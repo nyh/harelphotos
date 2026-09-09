@@ -32,6 +32,7 @@ site_title      = "Photo Album"
 heading         = "Photo Album"
 tagline         = "By invitation only. Please login to continue."
 # landing_image = "{config_dir}/landing.jpg"
+hero_width      = 640                       # width of the login page picture
 # app_icon      = "{config_dir}/icon.jpg"   # home-screen icon; defaults to
                                             # landing_image. Any image; it is
                                             # cropped to a square.

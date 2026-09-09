@@ -733,6 +733,10 @@ which on a phone held sideways is about a sixth of the screen, and is the only
 way to get that space back for good. It is also just easier for relatives than
 finding a bookmark.
 
+The login page's picture is `[ui] landing_image`, drawn `[ui] hero_width`
+pixels wide (default 640) with a file twice that size generated alongside it
+for high-density screens. Lower `hero_width` if the picture dominates the page.
+
 The name under the icon is `[ui] site_title`. The icon itself is cut from
 `[ui] app_icon`, or from `[ui] landing_image` if that is not set; the image is
 centre-cropped to a square, so pick one that survives that. With neither set

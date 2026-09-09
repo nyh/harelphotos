@@ -328,6 +328,8 @@ h2.section:first-child { margin-block-start: 0.25rem; }
 }
 .landing .hero {
   inline-size: 100%;
+  /* The template sets max-inline-size from [ui] hero_width; this is the
+     fallback when no picture is configured at all. */
   max-inline-size: 640px;
   block-size: auto;
   border-radius: var(--radius);
@@ -379,9 +381,27 @@ form.login button {
   cursor: pointer;
 }
 
+/* Two ways in, beside each other where the window allows it. Stacked, the
+   Google button ended up below the fold on a laptop once a hero image was
+   configured. The divider turns with the layout: a line down the middle when
+   side by side, across when stacked. */
+.signin { display: grid; gap: 1.5rem; justify-items: center; }
+.signin > * { inline-size: 100%; }
+
+@media (min-width: 46rem) {
+  .signin.two-ways {
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 0 1.75rem;
+    max-inline-size: 46rem;
+    margin-inline: auto;
+  }
+  .signin.two-ways form.login { margin-inline: 0; }
+  .signin.two-ways .alt { display: flex; justify-content: center; }
+}
+
 .landing .or {
   position: relative;
-  margin-block: 1.75rem;
   color: var(--dim);
   font-size: 0.85rem;
 }
@@ -394,14 +414,34 @@ form.login button {
 }
 .landing .or span { position: relative; background: var(--bg); padding-inline: 0.75rem; }
 
+@media (min-width: 46rem) {
+  /* A vertical rule between the two columns instead of a horizontal one. */
+  .signin.two-ways .or { inline-size: auto; align-self: stretch; display: grid; place-items: center; }
+  .signin.two-ways .or::before {
+    inset-block: 0;
+    inset-inline-start: 50%;
+    inset-inline-end: auto;
+    border-block-start: 0;
+    border-inline-start: 1px solid var(--line);
+  }
+  .signin.two-ways .or span { padding-block: 0.75rem; padding-inline: 0; }
+}
+
 .landing .google {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
   min-block-size: 44px;
   padding: 0 1.1rem;
+  font-weight: 500;
+  color: var(--fg);
+  background: var(--bg);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
 }
+.landing .google .g { inline-size: 18px; block-size: 18px; flex: none; }
 .landing .google:hover { border-color: var(--accent); text-decoration: none; }
 .landing .legal { margin-block-start: 2.5rem; font-size: 0.85rem; color: var(--dim); }
 

@@ -80,6 +80,9 @@ class Ui:
     # right picture anyway; set it separately when the hero photo does not
     # survive being cropped to a small square.
     app_icon: Path | None = None
+    # How wide the login page's picture is drawn, in CSS pixels. A file twice
+    # this size is generated alongside it for high-density screens.
+    hero_width: int = 640
     show_gps: bool = True
     map_link: str = "osm"           # "osm" | "google" | "none"
     album_page_size: int = 5000
@@ -265,6 +268,7 @@ def from_dict(raw: dict, src: Path) -> Config:
         landing_image=Path(landing).expanduser() if landing else None,
         app_icon=(Path(str(u["app_icon"])).expanduser()
                   if u.get("app_icon") else None),
+        hero_width=_positive_int(u.get("hero_width"), "[ui] hero_width", src, 640),
         show_gps=bool(u.get("show_gps", True)),
         map_link=_enum(u.get("map_link"), ("osm", "google", "none"), "[ui] map_link", src, "osm"),
         album_page_size=int(u.get("album_page_size", 5000)),

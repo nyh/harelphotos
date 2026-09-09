@@ -23,6 +23,8 @@ from .config import Config
 
 log = logging.getLogger("harelphotos.public")
 
+# The default display width, and twice it for high-density screens. Both are
+# derived from `[ui] hero_width`; this pair is only the fallback.
 WIDTHS = (640, 1280)
 PUBLIC_DIR = "public"
 STEM = "landing"
@@ -38,9 +40,15 @@ def public_dir(cfg: Config) -> Path:
     return cfg.derived_root / PUBLIC_DIR
 
 
+def widths(cfg: Config) -> tuple[int, int]:
+    """The display width and its 2x companion."""
+    w = max(64, int(cfg.ui.hero_width or 640))
+    return (w, w * 2)
+
+
 def asset_path(cfg: Config, name: str) -> Path | None:
     """Resolve one of the fixed names. Anything else is None, never a path."""
-    for width in WIDTHS:
+    for width in widths(cfg):
         for ext in ("avif", "jpeg"):
             if name == f"{STEM}-{width}.{ext}":
                 return public_dir(cfg) / name
@@ -65,7 +73,7 @@ def build(cfg: Config, force: bool = False) -> list[str]:
     try:
         with Image.open(src) as im:
             im = ImageOps.exif_transpose(im).convert("RGB")
-            for width in WIDTHS:
+            for width in widths(cfg):
                 scale = min(1.0, width / im.width)
                 size = (max(1, round(im.width * scale)), max(1, round(im.height * scale)))
                 small = im if scale == 1.0 else im.resize(size, Image.LANCZOS)
@@ -171,10 +179,11 @@ def manifest(cfg: Config) -> dict:
 def hero(cfg: Config) -> dict | None:
     """What the template needs, or None if there is no image to show."""
     d = public_dir(cfg)
-    have = [w for w in WIDTHS if (d / f"{STEM}-{w}.avif").is_file()]
+    ws = widths(cfg)
+    have = [w for w in ws if (d / f"{STEM}-{w}.avif").is_file()]
     if not have:
         # Fall back to the JPEG, in case AVIF encoding was unavailable.
-        have = [w for w in WIDTHS if (d / f"{STEM}-{w}.jpeg").is_file()]
+        have = [w for w in ws if (d / f"{STEM}-{w}.jpeg").is_file()]
         if not have:
             return None
         ext = "jpeg"
@@ -183,4 +192,6 @@ def hero(cfg: Config) -> dict | None:
     return {
         "src": f"/public/{STEM}-{max(have)}.{ext}",
         "srcset": ", ".join(f"/public/{STEM}-{w}.{ext} {w}w" for w in sorted(have)),
+        # The width it is drawn at, so the page does not have to guess.
+        "width": ws[0],
     }
