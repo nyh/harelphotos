@@ -222,6 +222,34 @@
       window.location.href = nav.album;
     }
 
+    // Fetch the neighbouring photos while this one is being looked at.
+    //
+    // Paging is a page load, so without this every arrow press waits a full
+    // round trip for an image that could have been fetched during the seconds
+    // the previous photo was on screen. The browser chooses the size from the
+    // same srcset/sizes the visible image uses -- a phone must not pull the
+    // 1600px file just because it is next.
+    //
+    // Deliberately after load: a prefetch that competes with the photo you are
+    // actually looking at has made things worse, not better.
+    function prefetchNeighbours() {
+      var list = nav.prefetch || [];
+      for (var i = 0; i < list.length; i++) {
+        if (!list[i]) continue;
+        var img = new Image();
+        if (nav.sizes) img.sizes = nav.sizes;
+        img.srcset = list[i];
+        // Lowest priority: this is speculative work for a photo nobody has
+        // asked for yet.
+        if ("fetchPriority" in img) img.fetchPriority = "low";
+      }
+    }
+    if (document.readyState === "complete") {
+      prefetchNeighbours();
+    } else {
+      window.addEventListener("load", prefetchNeighbours);
+    }
+
     var info = document.getElementById("info");
     var toggle = document.getElementById("info-toggle");
     function toggleInfo() {

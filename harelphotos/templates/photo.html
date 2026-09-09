@@ -61,11 +61,15 @@
 {{ chrome.footer(viewer) }}
 
 <script id="nav-data" type="application/json">
+{#- `prefetch` carries srcset/sizes rather than one URL, so the browser picks
+    the size it would actually display, exactly as it does for the visible
+    image. Pinning a tier here would fetch a 1600px file onto a phone. -#}
 {{ {"prev": prev.page_url if prev else none,
     "next": next.page_url if next else none,
     "album": album.url if album else "/a/",
     "download": "/orig/" ~ photo.url_relpath,
-    "preload": [ (prev|img_src(2048)) if prev else none,
-                 (next|img_src(2048)) if next else none ]}|tojson }}
+    "sizes": photo|view_sizes,
+    "prefetch": [ (prev|srcset(all_tiers)) if prev and prev.tiers else none,
+                  (next|srcset(all_tiers)) if next and next.tiers else none ]}|tojson }}
 </script>
 {% endblock %}

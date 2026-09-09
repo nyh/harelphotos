@@ -285,6 +285,13 @@ thumbnails already loaded, so it appears instantly instead of being rebuilt.
 Arriving straight at a photo — a bookmark or a pasted link — has no album
 behind it, so `Esc` navigates to the album normally instead.
 
+While you are looking at a photo, the ones on either side of it are fetched in
+the background, so paging with the arrow keys does not wait for the network.
+The browser picks the size for those the same way it does for the visible
+image, from `srcset` — a phone does not pull the 1600px file just because it is
+next. The prefetch starts only after the photo you are actually looking at has
+loaded, so it never competes with it.
+
 ### `harelphotos init --geonames`
 
 Download and build the offline place-name dataset that `geocode` uses. Run it

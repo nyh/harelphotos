@@ -110,6 +110,12 @@ def main():
         depth_at_album = b.eval("history.length")
         print(f"album: {album}  (history.length {depth_at_album})")
 
+        # Armed here so it is part of the document that gets cached; if that
+        # document is restored rather than rebuilt, the flag comes back with it.
+        b.eval("window.__hpRestored = false;"
+               "window.addEventListener('pageshow', function (e) {"
+               "  if (e.persisted) window.__hpRestored = true; });")
+
         # Open the first photo the way a person does.
         opened = b.eval(
             "(function(){var a=document.querySelector('#grid a');"
@@ -138,13 +144,39 @@ def main():
         failures += not check("...without having grown history",
                               b.eval("history.length"), depth_at_album + 1)
 
-        # And it must have been a history step, so the grid came from the
-        # back/forward cache rather than being rebuilt.
-        nav_type = b.eval(
-            "(function(){var e=performance.getEntriesByType('navigation');"
-            "return e.length?e[0].type:null;})()")
-        failures += not check("Escape was a history step (bfcache-eligible)",
-                              nav_type, "back_forward")
+        # And the grid must have come from the back/forward cache rather than
+        # being rebuilt.
+        #
+        # Measured with pageshow.persisted, not the navigation type. A genuine
+        # bfcache restore reuses the very same document, so its navigation
+        # entry still reads "navigate" from the original load -- reading
+        # "back_forward" there actually means the page was rebuilt, which is
+        # the opposite of what is wanted. The listener below survives into the
+        # restored document precisely because it is the same document.
+        failures += not check("the album was restored from the bfcache",
+                              b.eval("window.__hpRestored === true"), True)
+
+        # The neighbouring photo must be fetched while this one is on screen,
+        # or every arrow press waits a full round trip for an image that could
+        # have been loaded during the seconds you spent looking at the last one.
+        b.goto(URL)
+        b.eval("(function(){document.querySelector('#grid a').click();})()")
+        b.settle(2.5)
+        nxt = b.eval("(function(){var d=document.getElementById('nav-data');"
+                     "return d?JSON.parse(d.textContent).next:null;})()")
+        if nxt:
+            stem = nxt.rsplit("/", 1)[-1]
+            fetched = b.eval(
+                "performance.getEntriesByType('resource')"
+                ".filter(function(e){return e.name.indexOf('/i/')>=0 &&"
+                " e.name.indexOf(" + json.dumps(stem) + ")>=0;})"
+                ".map(function(e){return e.name;})")
+            failures += not check("the next photo was prefetched",
+                                  bool(fetched), True)
+            if fetched:
+                tier = fetched[0].split("/i/")[1].split("/")[0]
+                print(f"         prefetched tier {tier} "
+                      f"(window is 1280 wide, so 1280 is right; 1600 would be waste)")
 
         # A photo opened cold must not send you off the site.
         b.goto("about:blank")

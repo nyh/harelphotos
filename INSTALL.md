@@ -180,13 +180,35 @@ vhost — it does that correctly and, more to the point, it renews it.
 ```sh
 sudo mkdir -p /var/www/harelphotos-acme
 sudo cp contrib/harelphotos-vhost.conf /etc/httpd/conf.d/harelphotos.conf
-sudo vi /etc/httpd/conf.d/harelphotos.conf   # ServerName and the two paths
+sudo vi /etc/httpd/conf.d/harelphotos.conf
 sudo apachectl configtest && sudo systemctl reload httpd
 ```
 
-Nothing needs commenting out. The TLS vhost in that file is wrapped in
-`<IfFile>` on the certificate, so it is inert until certbot has run and turns
-itself on at the next reload. Both states are checked by `configtest`.
+**Replace `photos.example.org` everywhere in that file, not just in
+`ServerName`.** The domain also appears inside the certificate paths, and those
+are what the `<IfFile>` guard tests:
+
+```
+<IfFile /etc/letsencrypt/live/photos.example.org/fullchain.pem>
+SSLCertificateFile    /etc/letsencrypt/live/photos.example.org/fullchain.pem
+SSLCertificateKeyFile /etc/letsencrypt/live/photos.example.org/privkey.pem
+```
+
+Miss those and the guard tests a path that will never exist, so the TLS vhost
+stays inert forever and the site never comes up on 443 — while `configtest`
+passes, because the file is perfectly valid. In `vi`, one command does it:
+
+```
+:%s/photos.example.org/photos.harel.org.il/g
+```
+
+Afterwards `grep photos.example.org /etc/httpd/conf.d/harelphotos.conf` must
+print nothing. The only other thing to change is
+`XSendFilePath /var/lib/harelphotos/derived`, if your state directory differs.
+
+Nothing needs commenting out. The TLS vhost is wrapped in `<IfFile>` on the
+certificate, so it is inert until certbot has run and turns itself on at the
+next reload. Both states are valid to `configtest`.
 
 Before running certbot, confirm the two things it needs, because its failure
 messages are much worse than these:
@@ -218,7 +240,24 @@ harelphotos check --env --url https://photos.example.org
 
 That last command checks the live site end to end from outside: TLS, whether
 compression is actually on, the security headers, and — the one that matters —
-that `/a/` is **not** reachable without logging in.
+that `/a/` is **not** reachable without logging in. It can be run from any
+machine; when run from elsewhere only the `live check` lines say anything about
+the server, and the lines above them describe whatever machine you ran it on.
+
+If it reports a **self-signed certificate**, the TLS vhost is not active and
+the distribution's stock `/etc/httpd/conf.d/ssl.conf` is answering on 443
+instead — it ships a `_default_:443` on `localhost.crt`. Three things to check,
+in order:
+
+```sh
+grep photos.example.org /etc/httpd/conf.d/harelphotos.conf   # must print nothing
+sudo ls /etc/letsencrypt/live/            # what did certbot actually name it?
+sudo httpd -t -D DUMP_VHOSTS | grep -i photos   # is the :443 vhost live at all?
+```
+
+The middle one matters: after a half-failed first attempt certbot names the
+directory `photos.example.org-0001`, and the vhost paths must then match
+*that*. If `DUMP_VHOSTS` shows only port 80, the `<IfFile>` guard is false.
 
 HSTS is commented out at the bottom of the vhost, and is genuinely optional.
 The redirect already sends http to https and the session cookie is `Secure`, so
@@ -319,6 +358,46 @@ harelphotos user add cousin --google cousin@gmail.com --google-only
 the only way in. Use it for relatives you would rather not invent a password
 for.
 
+To attach a Google address to an account that already exists, add one line to
+its block in `/etc/harelphotos/users.toml`:
+
+```toml
+[users.nyh]
+name     = "Nadav"
+password = "scrypt:..."
+google   = "your.address@gmail.com"
+```
+
+No restart is needed — `users.toml` is read on each request. Deleting the
+`password` line leaves Google as the only way in, which is the same state
+`--google-only` produces.
+
+Check the configuration took:
+
+```sh
+sudo systemctl restart harelphotos
+harelphotos check --env | grep -i google        # expect: google sign-in  configured
+```
+
+"enabled but incomplete" means one of `client_id`/`client_secret` is empty.
+
+### When Google sign-in does not work
+
+| what you see | cause |
+|---|---|
+| `redirect_uri_mismatch` | the URI registered in step 4 is not exactly `base_url` + `/auth/google/callback` |
+| "Access blocked: … has not completed verification" | still in **Testing** — press **Publish app** |
+| "… has not been invited to this album" | Google worked; that address is not in `users.toml` |
+| no "Sign in with Google" button | `enabled = true` missing, or the service was not restarted |
+| the page just says "Could not sign in with Google" | see the log — the detail is deliberately not shown |
+
+That last one is deliberate: the underlying message can name your client secret
+or the mismatched redirect URI, so it goes to the log rather than the page.
+
+```sh
+journalctl -u harelphotos -f
+```
+
 Two details the code insists on, both about not letting the wrong person in:
 
 - The address must be **verified** with Google. An unverified one is just a
@@ -342,11 +421,29 @@ Reclaim space from photos that were deleted or replaced:
 harelphotos gc
 ```
 
+Manage accounts. None of these need a restart:
+
+```sh
+harelphotos user list
+harelphotos user passwd nyh          # prompts twice, never echoes
+harelphotos user revoke nyh          # invalidate every existing session for it
+harelphotos user del someone
+```
+
+Changing a password does **not** sign anyone out; `revoke` is what does that,
+by bumping the account's epoch so every cookie already issued stops working.
+Avoid `user add --password`: it exists for scripting but puts the password in
+your shell history and in `ps` output.
+
 Upgrade:
 
 ```sh
 git pull && .venv/bin/pip install -e . && sudo systemctl restart harelphotos
 ```
+
+After an upgrade that changed `app.js` or the caching headers, reload the
+browser once with Ctrl-Shift-R. Ordinary reloads will happily keep using the
+cached script and images.
 
 The index is a cache, not data. If it is ever damaged, delete it and rescan;
 you lose nothing but the time. The things that are *not* rebuildable are
@@ -363,3 +460,12 @@ Where things go wrong:
 | login always returns to the login page | `base_url` is not exactly what the browser asked for, so the cookie is dropped |
 | everyone throttled at once | `behind_proxy` is not `true` |
 | grey placeholder tiles | those photos have no images generated yet; finish the scan |
+| self-signed certificate warning | the TLS vhost is inert — see the end of §4 |
+| `Failed to connect to bus` from `systemd-run --user` | an ssh login has no user D-Bus session; use `tmux`, see §2 |
+| thumbnails re-download on every page load | an old build: fixed by not re-sending the session cookie each response |
+
+A note for the next time you install this: almost everything that went wrong
+the first time was a permission or a name typed in two places that had to
+agree — the state directory owned by root after a `sudo init`, the domain left
+as `example.org` inside the certificate paths, the redirect URI not matching
+`base_url`. `check --env`, with and without `--url`, catches most of them.
