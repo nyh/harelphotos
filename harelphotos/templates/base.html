@@ -7,7 +7,7 @@
 <title>{% block title %}{{ cfg.ui.site_title }}{% endblock %}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
-<body>
+<body{% block bodyclass %}{% endblock %}>
 {% block body %}{% endblock %}
 <script src="{{ url_for('static', filename='app.js') }}" defer></script>
 </body>

@@ -564,25 +564,6 @@ def _register_filters(app: Flask, cfg: Config) -> None:
     # screen — so a ladder stopping at 512 would visibly upscale it. Offering
     # the larger tiers costs nothing: they already exist, and `sizes` stops a
     # small tile from ever fetching one.
-    def footer_html(viewer: Viewer) -> str:
-        """Render `footer_text`, substituting only {user} and {logout}.
-
-        The surrounding text is escaped; the two placeholders become a name and
-        a real form-backed button, so logging out stays a POST.
-        """
-        template = cfg.ui.footer_text
-        logout_form = Markup(
-            '<form method="post" action="{}" class="inline">'
-            '<input type="hidden" name="csrf" value="{}">'
-            '<button type="submit" class="linklike">log out</button></form>'
-        ).format(url_for("logout"), auth.csrf_token())
-        out = escape(template)
-        out = out.replace("{user}", Markup("<strong>{}</strong>").format(
-            viewer.name or viewer.token or ""))
-        out = out.replace("{logout}", logout_form)
-        return out
-
-    app.jinja_env.globals["footer_html"] = footer_html
     app.jinja_env.globals["csrf_token"] = auth.csrf_token
     app.jinja_env.globals["all_tiers"] = sorted(cfg.sizes.tiers)
     app.jinja_env.globals["thumb_tiers"] = list(cfg.sizes.thumb)

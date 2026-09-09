@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% import "_chrome.html" as chrome with context %}
+{% block bodyclass %} class="photo-page"{% endblock %}
 {% block title %}{{ photo.title or photo.name }} — {{ cfg.ui.site_title }}{% endblock %}
 {% block body %}
 <div class="viewer">

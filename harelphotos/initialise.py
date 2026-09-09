@@ -31,7 +31,6 @@ sendfile_header = "auto"                    # "auto" | "X-Sendfile" | "none"
 site_title      = "Photo Album"
 heading         = "Photo Album"
 tagline         = "By invitation only. Please login to continue."
-footer_text     = "You can view this private album because you are logged in as {{user}}. If you wish, you can {{logout}}."
 # landing_image = "{config_dir}/landing.jpg"
 show_gps        = true
 map_link        = "osm"                     # "osm" | "google" | "none"

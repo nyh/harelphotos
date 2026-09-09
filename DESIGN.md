@@ -360,7 +360,6 @@ log_file        = "/var/lib/harelphotos/harelphotos.log"   # unset = stderr (§1
 site_title      = "The Har'El Family Photo Album"   # browser title
 heading         = "Photo Album"                     # landing page (§11.5)
 tagline         = "By invitation only. Please login to continue."
-footer_text     = "You can view this private album because you are logged in as {user}. If you wish, you can {logout}."
 landing_image   = "/etc/harelphotos/newsign2.jpg"
 show_gps        = true        # EXIF panel: show location at all (§11.2)
 map_link        = "osm"       # "osm" | "google" | "none" — outbound map link
@@ -1733,7 +1732,10 @@ configurable, with two placeholders substituted into the escaped text:
 
 ```toml
 [ui]
-footer_text = "You can view this private album because you are logged in as {user}. If you wish, you can {logout}."
+# footer_text: REMOVED. The bar at the top of every page already names the
+# viewer and carries Log out, so the footer repeated it and cost a strip of
+# every screen -- a sixth of a phone held sideways. The guarantee it existed
+# for (11.3: never a page you cannot leave from) is now the top bar's.
 ```
 
 `{user}` becomes the display `name` from `users.toml`, `{logout}` becomes the
@@ -1772,7 +1774,7 @@ Firefox and Chrome, desktop and Android/iOS widths.
 
 **English-only** (§19) — no i18n framework, no translation files, no locale
 machinery. The user-visible wording that does vary is already in `config.toml`
-(`site_title`, `heading`, `tagline`, `footer_text`); the rest is in the
+(`site_title`, `heading`, `tagline`); the rest is in the
 templates, in English.
 
 The one concession to a possible Hebrew interface later costs nothing now: use

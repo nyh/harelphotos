@@ -75,10 +75,6 @@ class Ui:
     site_title: str = "Photo Album"
     heading: str = "Photo Album"
     tagline: str = "By invitation only. Please login to continue."
-    footer_text: str = (
-        "You can view this private album because you are logged in as {user}. "
-        "If you wish, you can {logout}."
-    )
     landing_image: Path | None = None
     show_gps: bool = True
     map_link: str = "osm"           # "osm" | "google" | "none"
@@ -262,7 +258,6 @@ def from_dict(raw: dict, src: Path) -> Config:
         site_title=str(u.get("site_title", "Photo Album")),
         heading=str(u.get("heading", "Photo Album")),
         tagline=str(u.get("tagline", Ui.tagline)),
-        footer_text=str(u.get("footer_text", Ui.footer_text)),
         landing_image=Path(landing).expanduser() if landing else None,
         show_gps=bool(u.get("show_gps", True)),
         map_link=_enum(u.get("map_link"), ("osm", "google", "none"), "[ui] map_link", src, "osm"),

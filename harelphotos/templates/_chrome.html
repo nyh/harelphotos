@@ -12,12 +12,12 @@
   {% endif %}
 {% endmacro %}
 
+{# No footer for a logged-in viewer any more: the bar at the top of every page
+   already shows who you are and carries the Log out button, so the footer said
+   the same thing twice and cost a strip of every screen -- which on a phone
+   held sideways was a sixth of it. #}
 {% macro footer(viewer) %}
-  {% if viewer and viewer.token %}
-  <footer class="sitefoot">
-    {{ footer_html(viewer)|safe }}
-  </footer>
-  {% elif dev_no_login %}
+  {% if dev_no_login %}
   <footer class="sitefoot warn">
     Running without a login. Anyone who can reach this server sees everything.
   </footer>

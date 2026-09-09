@@ -211,11 +211,23 @@ def test_every_logged_in_page_offers_a_way_out(client):
         assert 'action="/logout"' in body, url
 
 
-def test_the_footer_names_who_you_are(client):
+def test_every_page_names_who_you_are_and_offers_a_way_out(client):
+    """DESIGN.md 11.3: there must never be a page you cannot leave from.
+
+    This used to be a footer as well as the top bar, which said the same thing
+    twice and cost a strip of every screen. The guarantee is what matters, not
+    where it lives, so it is asserted on both kinds of page.
+    """
     login(client)
-    body = client.get("/a/").get_data(as_text=True)
-    assert "Nadav" in body
-    assert "you are logged in as" in body
+    for url in ("/a/", "/a/2019/01/", "/p/2019/01/a.jpg"):
+        body = client.get(url).get_data(as_text=True)
+        assert "Nadav" in body, url
+        assert "Log out" in body, url
+        assert url_for_logout(body), f"{url}: no form posting to /logout"
+
+
+def url_for_logout(body: str) -> bool:
+    return 'action="/logout"' in body
 
 
 # ------------------------------------------------------------- revocation
