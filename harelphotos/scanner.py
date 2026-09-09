@@ -34,10 +34,29 @@ PHOTO_EXTENSIONS = {".jpg", ".jpeg"}
 SIG_BYTES = 16
 COMMIT_BATCH = 200
 
+# Generating images costs ~0.5-1 s each, so committing only every 200 of them
+# puts minutes of work at risk from a single Ctrl-C. Reading metadata is
+# hundreds per second, where a batch of 200 is a fraction of a second. So the
+# expensive phase commits on a timer instead of a count.
+DERIVE_COMMIT_INTERVAL = 3.0
+
 # How often to redraw the progress line. Tied to the clock, not to a count of
 # items: deriving images runs at a few per second, so a count-based trigger
 # either never fires on a small directory or scrolls uselessly on a big one.
 PROGRESS_INTERVAL = 0.25
+
+# How often to refresh the recursive counts and date spans *while reading
+# metadata*. They are stored rather than computed per request because a live
+# recursive count costs ~8 ms per 7,000 photos against 0.01 ms for a stored
+# row.
+#
+# The counts themselves are final as soon as the walk has finished — they come
+# from photo rows, which all exist by then — and a single rollup runs at that
+# point. What still fills in during the metadata phase is the *date span*,
+# since `taken` is read from each file there. Hence a periodic refresh in that
+# phase only, and none at all during image generation, which changes nothing
+# the rollup looks at.
+ROLLUP_INTERVAL = 8.0
 
 
 @dataclass
@@ -204,6 +223,7 @@ class Scanner:
         self._walk_progress = None
         self._walk_started = 0.0
         self._walk_last_shown = 0.0
+        self._last_rollup = 0.0
         self.generation = self._next_generation()
 
     def _next_generation(self) -> int:
@@ -550,6 +570,7 @@ class Scanner:
             )
             if done % COMMIT_BATCH == 0:
                 self.conn.commit()
+            self.maybe_rollup()
             now = time.monotonic()
             if progress and now - last_shown >= PROGRESS_INTERVAL:
                 last_shown = now
@@ -599,13 +620,14 @@ class Scanner:
         done = 0
         started = time.monotonic()
         last_shown = 0.0
+        last_commit = time.monotonic()
         sigs = {
             r["id"]: r["content_sig"]
             for r in self.conn.execute("SELECT id, content_sig FROM photos")
         }
 
         def apply(res: dict) -> None:
-            nonlocal done, last_shown
+            nonlocal done, last_shown, last_commit
             done += 1
             if res["error"]:
                 self.stats.derive_failed += 1
@@ -627,9 +649,14 @@ class Scanner:
                         res["id"],
                     ),
                 )
-            if done % COMMIT_BATCH == 0:
-                self.conn.commit()
             now = time.monotonic()
+            if now - last_commit >= DERIVE_COMMIT_INTERVAL:
+                last_commit = now
+                self.conn.commit()
+            # No rollup here on purpose: generating images writes deriv_key,
+            # deriv_tiers, color and deriv_error, and the rollup reads none of
+            # them. Refreshing during the long phase would be ~170 ms of
+            # nothing every few seconds.
             if progress and now - last_shown >= PROGRESS_INTERVAL:
                 last_shown = now
                 progress(done, len(pending), now - started)
@@ -654,6 +681,14 @@ class Scanner:
         for relpath in orphans:
             self.stats.files_removed += derive.remove_derivatives(self.cfg, relpath)
         derive.prune_empty_dirs(self.cfg.derived_root)
+
+    def maybe_rollup(self) -> None:
+        """Refresh the rollups mid-scan, so the site is not showing stale counts."""
+        now = time.monotonic()
+        if now - self._last_rollup < ROLLUP_INTERVAL:
+            return
+        self._last_rollup = now
+        self.rollup()
 
     def rollup(self) -> None:
         """Recursive counts, date spans and cover photos, computed bottom-up.
@@ -776,6 +811,8 @@ def scan(
     conn.commit()
     orphans = s.prune(subpath)
     conn.commit()
+    # Before the two slow phases, so a browser sees real counts throughout.
+    s.rollup()
     s.read_headers(jobs=jobs, limit=limit, progress=progress, subpath=subpath)
     if not headers_only:
         s.derive_all(

@@ -423,3 +423,69 @@ def test_break_lock(tmp_path):
     assert lock.break_lock(path) is False
     path.write_text("stale")
     assert lock.break_lock(path) is True
+
+
+def test_counts_are_refreshed_during_a_scan_not_only_at_the_end(tree):
+    """A browser watching a long scan must not see a stale count.
+
+    The rollups are stored rather than computed per request (a live recursive
+    count is ~8 ms per 7,000 photos against 0.01 ms for a stored row), so they
+    have to be refreshed as the scan proceeds.
+    """
+    cfg, conn, photos = tree
+    scanner.scan(cfg, conn)
+
+    fixtures.make_jpeg(photos / "2019" / "03" / "new.jpg", taken="2019:03:03 03:03:03")
+    s = scanner.Scanner(cfg, conn)
+    s.walk()
+    conn.commit()
+    s.prune()
+    s.rollup()
+    # The walk alone, before any metadata is read, already gives real counts.
+    row = conn.execute("SELECT n_photos_rec FROM dirs WHERE path = '2019'").fetchone()
+    assert row["n_photos_rec"] == 7
+
+    # And a directory that has just gained photos is no longer counted as
+    # empty, which is what decides whether it is listed at all.
+    row = conn.execute("SELECT n_photos_rec FROM dirs WHERE path = '2019/03'").fetchone()
+    assert row["n_photos_rec"] == 1
+
+
+def test_counts_are_final_as_soon_as_the_walk_finishes(tree):
+    """The count comes from photo rows, which all exist after phase 1.
+
+    Worth pinning down: it means the expensive phases cannot change it, so
+    there is nothing to refresh during them.
+    """
+    cfg, conn, photos = tree
+    s = scanner.Scanner(cfg, conn)
+    s.walk()
+    conn.commit()
+    s.prune()
+    s.rollup()
+    after_walk = conn.execute(
+        "SELECT n_photos_rec FROM dirs WHERE path = ''"
+    ).fetchone()["n_photos_rec"]
+    assert after_walk == 8
+
+    # Reading metadata and generating images must not move it.
+    scanner.scan(cfg, conn)
+    assert conn.execute(
+        "SELECT n_photos_rec FROM dirs WHERE path = ''"
+    ).fetchone()["n_photos_rec"] == after_walk
+
+
+def test_the_date_span_fills_in_while_metadata_is_read(tree):
+    """Unlike the count, dates are not known until each file is opened."""
+    cfg, conn, photos = tree
+    s = scanner.Scanner(cfg, conn)
+    s.walk()
+    conn.commit()
+    s.prune()
+    s.rollup()
+    row = conn.execute("SELECT date_min, date_max FROM dirs WHERE path = '2019'").fetchone()
+    assert row["date_min"] is None          # nothing has been opened yet
+
+    scanner.scan(cfg, conn)
+    row = conn.execute("SELECT date_min, date_max FROM dirs WHERE path = '2019'").fetchone()
+    assert row["date_min"] is not None and row["date_max"] is not None

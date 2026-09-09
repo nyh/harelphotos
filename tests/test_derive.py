@@ -310,3 +310,24 @@ def test_missing_derivative_files_are_detected_and_repaired(tmp_path):
     assert victim.exists()
     assert scanner.find_missing_derivatives(cfg, conn) == []
     conn.close()
+
+
+def test_an_interrupted_derive_keeps_what_it_finished(tmp_path):
+    """Ctrl-C and re-run must not start over.
+
+    Simulated by deriving with a limit, which is the same situation the
+    database ends up in: some photos done, the rest still pending.
+    """
+    photos = tmp_path / "pictures"
+    for i in range(6):
+        fixtures.make_jpeg(photos / f"p{i}.jpg", size=(1000, 800))
+    cfg = fixtures.make_config(tmp_path, photos)
+    conn = fixtures.fresh_index(cfg)
+
+    first = scanner.scan(cfg, conn, limit=2)
+    assert first.photos_derived == 2
+
+    second = scanner.scan(cfg, conn)
+    assert second.photos_derived == 4        # the remaining four, not all six
+    assert scanner.scan(cfg, conn).photos_derived == 0
+    conn.close()

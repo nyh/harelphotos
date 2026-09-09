@@ -176,6 +176,12 @@ Only one `scan` may run at a time; a second exits with a message naming the
 first one's process. Photos that cannot be read are recorded and reported by
 `check` rather than stopping the run.
 
+**Interrupting a scan is safe.** Ctrl-C and re-run: metadata and images are
+committed as it goes, and a photo is only recorded as done once every one of
+its images is safely on disk. You lose at most the last batch of image work,
+which gets redone. A killed encode can leave a stray temporary file behind;
+`harelphotos gc` clears those, and nothing ever serves them.
+
 ### `harelphotos check [--verify-files]`
 
 Read-only report: how much was indexed, how much has EXIF dates and GPS, the
@@ -297,8 +303,9 @@ harelphotos user revoke NAME     # invalidate that user's existing sessions
 account, use the email address as the name. (Nothing uses these accounts yet —
 logging in arrives with the web interface in M5.)
 
-Commands not yet implemented (`serve`, `geocode`, `gc`, `stats`, `cover`,
-`acl`, `sync`) exist and will tell you which milestone they belong to.
+Three commands are still stubs and will say so: `cover` (set an album's cover
+photo from the command line), `acl` (inspect or set who may see a directory),
+and `sync` (copy the generated images to the server).
 
 ---
 
