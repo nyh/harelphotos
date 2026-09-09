@@ -96,10 +96,9 @@ files:
   deferred (§18) — it trades a JS dependency and cache-invalidation logic for
   milliseconds we don't need.
 
-The 3000-photo row above flags the real scaling issue, and it isn't CPU: **1.1 MB
-of HTML**. That's why `album_page_size` (§5.1) paginates large directories —
-the fix is sending less markup, which static generation would not have helped
-with either.
+The 3000-photo row above looks like a scaling problem — **1.1 MB of HTML** — but
+album markup compresses about 31×, so it is ~35 KB on the wire and we send it in
+one piece (§10.3). Static generation would not have helped with that either.
 
 ---
 
@@ -324,7 +323,7 @@ tagline         = "By invitation only. Please login to continue."
 footer_text     = "You can view this private album because you are logged in as {user}. If you wish, you can {logout}."
 landing_image   = "/etc/harelphotos/newsign2.jpg"
 show_gps        = true        # EXIF panel: show/link GPS coordinates
-album_page_size = 2000        # paginate directories larger than this
+album_page_size = 5000        # safety valve only (§10.3); below this, one page
 dirsort         = "name"      # default subdirectory order (§11.1b); "-name" = newest first
 dir_card_aspect = "4/3"       # subdirectory card shape; "native" = don't crop covers
 
@@ -923,7 +922,7 @@ subdirectories" — the URL *is* the directory path.
 | `/p/2019/summer/IMG_1234.jpg` | single-photo page (shareable, works on reload) |
 | `/i/256/2019/summer/IMG_1234.jpg?v=KEY` | one derivative tier; the tier must be one that's configured |
 | `/orig/2019/summer/IMG_1234.jpg` | original download (`Content-Disposition: attachment`) |
-| `/api/a/2019/summer/?page=2` | JSON, for pagination and lightbox prefetch |
+| `/api/a/2019/summer/?after=<id>` | JSON, for the >5000-photo safety valve (§10.3) and lightbox prefetch |
 | `/login` | local login form (GET) and submission (POST) |
 | `/logout` | **POST only**, CSRF-protected — never a GET link (§11.3) |
 | `/privacy`, `/terms` | **public** (no login) — required by Google's consent screen (§12.2); static text, no photo data |
@@ -947,13 +946,69 @@ rather than filtered against. (Belt and braces: reject any path segment equal to
 ### 10.3 Album page rendering
 
 One query for subdirectories (with their cover photos), one for photos. Both are
-covered by indexes. For a directory with more than `album_page_size` photos,
-render the first page server-side and append subsequent pages from
-`/api/a/…?page=N` on scroll.
+covered by indexes.
 
 Every `<img>` gets explicit `width`/`height` (from the DB) so the layout never
 shifts, `loading="lazy"`, `decoding="async"`, and the dominant colour as the
 background.
+
+#### Large albums: send the whole page
+
+A 1000–2000 photo trip directory is the case to get right, and you're correct
+that classic paging ("page 3 of 14") is a bad answer. But the *right* answer
+turns out to be simpler than infinite scroll, because the markup is tiny once
+compressed. Measured on the real album template:
+
+| photos | raw HTML | gzip | brotli | gzip bytes/photo |
+|---:|---:|---:|---:|---:|
+| 500 | 182 KB | **6.4 KB** | 2.8 KB | 13 |
+| 1000 | 361 KB | **12.0 KB** | 4.7 KB | 12 |
+| 2000 | 719 KB | **23.2 KB** | 8.8 KB | 12 |
+| 5000 | 1794 KB | **56.5 KB** | 24.1 KB | 12 |
+
+Album markup is intensely repetitive, so it compresses about **31×**. The entire
+HTML for a 2000-photo album costs **23 KB — about the same as two thumbnails.**
+Chunking that over the network would be optimising the one part of the page that
+is already free.
+
+**And you already get the experience you're describing.** The "transparent
+scrolling" you want — content appearing seamlessly as you scroll, as if it had
+always been there — comes from `loading="lazy"` on the images, not from chunking
+the HTML. The browser fetches each thumbnail as it approaches the viewport,
+natively, with no JavaScript. Sending complete markup up front doesn't weaken
+that; it makes it better, because there are no chunk boundaries to stutter at.
+
+What sending everything additionally buys, all of which infinite scroll breaks:
+
+- **An honest scrollbar.** Its size tells you how big the album is, and it
+  doesn't shrink as you scroll — the single most common infinite-scroll
+  annoyance.
+- **The back button works.** Open a photo, press Back, and the browser restores
+  your exact scroll position by itself. With appended content you must
+  reimplement that, and it is fiddly.
+- **Ctrl-F finds every photo**, and so does the browser's "find on page" on
+  mobile.
+- **The footer is reachable** — including the logout link (§11.3). A footer
+  below infinitely-appending content can never be reached, which is a
+  well-known and genuinely irritating failure.
+- **No JavaScript required** for the page to be complete and navigable.
+
+Rendering cost is bounded by `content-visibility: auto` on each row (§11.1c):
+the browser skips layout and paint for off-screen rows entirely, so 2000 photos
+of DOM cost about what the visible screenful costs. Server-side, 2000 photos
+render in ~14 ms (§1).
+
+**This makes `mod_deflate` a requirement, not a nicety** — without compression
+that 23 KB is 719 KB. It's enabled by default on both Fedora and Rocky, and
+§13.2 asserts it explicitly.
+
+#### The safety valve
+
+Beyond `album_page_size` (default **5000**) the page switches to appending
+further batches from `/api/a/…?after=<id>` as you scroll. At that size the
+concern is no longer bytes but DOM node count. This exists so a pathological
+directory degrades gracefully rather than well; it is not the normal path, and
+if you have no directory that large it will never run.
 
 **Responsive images.** The tiers of §9.2 are delivered by plain `srcset`/`sizes`
 with `w` descriptors — no JavaScript, the browser picks by viewport *and* device
@@ -1594,7 +1649,9 @@ rather than at install time:
 ```
 
 `harelphotos check --env` performs this and the other environment assertions
-(Python version, writable state dir, readable photo root, Apache modules).
+(Python version, writable state dir, readable photo root, Apache modules —
+including that `mod_deflate` is actually compressing `text/html`, which §10.3
+depends on and which fails silently if misconfigured).
 
 ### 13.1 Layout on disk
 
@@ -1687,6 +1744,11 @@ ProxyPass        /static/ !
 ProxyPass        / unix:/run/harelphotos/gunicorn.sock|http://localhost/
 ProxyPassReverse / unix:/run/harelphotos/gunicorn.sock|http://localhost/
 RequestHeader set X-Forwarded-Proto https
+
+# REQUIRED: album HTML is highly repetitive and compresses ~31x (§10.3).
+# Without this a 2000-photo album is 719 KB instead of 23 KB.
+AddOutputFilterByType DEFLATE text/html text/css application/javascript application/json
+# Do NOT add image/avif, image/webp or image/jpeg — already compressed, pure waste.
 # Optional, if mod_xsendfile is installed:
 #   XSendFile On
 #   XSendFilePath /var/lib/harelphotos/derived
@@ -2044,7 +2106,7 @@ Each milestone is independently useful and independently testable.
 | **M6** | TLS (§13.3), firewall/SELinux (§13.4), then Google Sign-In | TLS comes first. The Google half is optional (§12.2) — local accounts already work, so M6 can be dropped or deferred without affecting anything else |
 | **M7** | Lightbox: keyboard, swipe, prefetch, EXIF panel | the "feels like Google Photos" milestone |
 | **M8** | Deployment: **`INSTALL.md`** (§13.0), `check --env`, gunicorn unit, Apache vhost, `sync`, README | |
-| **M9** | Polish: date-group headers, cover-picker UI, dark mode, pagination | |
+| **M9** | Polish: date-group headers, cover-picker UI, dark mode, >5000-photo safety valve | |
 
 M4 is usable on the home machine from day one via `harelphotos serve` (§13.5) —
 plain HTTP on localhost, `--no-auth` for pure UI work, `--bind 0.0.0.0` to try
