@@ -14,9 +14,11 @@ The security-critical module. Three things it must get right:
 
 from __future__ import annotations
 
+import contextlib
 import hmac
 import logging
 import secrets
+import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -133,15 +135,68 @@ def check_csrf() -> bool:
 
 
 # ------------------------------------------------------------- throttling
+#
+# This lives in its own small database rather than in the index.
+#
+# It is the only thing the web process writes, and SQLite permits exactly one
+# writer at a time: in the index it collided with a running scan and logging in
+# failed outright with "database is locked". Its own file removes the
+# contention entirely, and leaves the index genuinely read-only to the web
+# process, which was always the intent.
+#
+# Every operation here is also best-effort. Throttling is a precaution;
+# refusing a correct password because a counter could not be written would be a
+# far worse failure than not counting it.
+
+AUTH_DB = "auth.sqlite"
+BUSY_TIMEOUT_MS = 3000
+
+_AUTH_SCHEMA = """
+CREATE TABLE IF NOT EXISTS login_attempts (
+  key      TEXT PRIMARY KEY,
+  failures INTEGER NOT NULL DEFAULT 0,
+  last_try INTEGER NOT NULL DEFAULT 0
+);
+"""
+
 
 def _key() -> str:
     return f"{request.remote_addr or '?'}|{request.form.get('username', '')}"
 
 
+@contextlib.contextmanager
+def throttle_db(cfg: Config):
+    """Open the throttle database, or yield None if it cannot be opened."""
+    conn = None
+    try:
+        cfg.state_dir.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(cfg.state_dir / AUTH_DB, timeout=BUSY_TIMEOUT_MS / 1000)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
+        conn.executescript(_AUTH_SCHEMA)
+        yield conn
+    except sqlite3.Error as e:
+        log.warning("login throttle unavailable (%s); continuing without it", e)
+        yield None
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except sqlite3.Error:
+                pass
+
+
 def check_rate_limit(conn) -> None:
-    row = conn.execute(
-        "SELECT failures, last_try FROM login_attempts WHERE key = ?", (_key(),)
-    ).fetchone()
+    if conn is None:
+        return
+    try:
+        row = conn.execute(
+            "SELECT failures, last_try FROM login_attempts WHERE key = ?", (_key(),)
+        ).fetchone()
+    except sqlite3.Error as e:
+        log.warning("cannot read the login throttle: %s", e)
+        return
     if row is None or row["failures"] < MAX_FAILURES_BEFORE_DELAY:
         return
     # Exponential, capped: 2s, 4s, 8s ... 30s.
@@ -152,17 +207,29 @@ def check_rate_limit(conn) -> None:
 
 
 def record_failure(conn) -> None:
-    conn.execute(
-        "INSERT INTO login_attempts (key, failures, last_try) VALUES (?, 1, ?) "
-        "ON CONFLICT(key) DO UPDATE SET failures = failures + 1, last_try = excluded.last_try",
-        (_key(), int(time.time())),
-    )
-    conn.commit()
+    if conn is None:
+        return
+    try:
+        conn.execute(
+            "INSERT INTO login_attempts (key, failures, last_try) VALUES (?, 1, ?) "
+            "ON CONFLICT(key) DO UPDATE SET failures = failures + 1, "
+            "last_try = excluded.last_try",
+            (_key(), int(time.time())),
+        )
+        conn.commit()
+    except sqlite3.Error as e:
+        log.warning("cannot record a failed login: %s", e)
 
 
 def clear_failures(conn) -> None:
-    conn.execute("DELETE FROM login_attempts WHERE key = ?", (_key(),))
-    conn.commit()
+    if conn is None:
+        return
+    try:
+        conn.execute("DELETE FROM login_attempts WHERE key = ?", (_key(),))
+        conn.commit()
+    except sqlite3.Error as e:
+        # Never fatal: the login itself has already succeeded.
+        log.warning("cannot clear the login throttle: %s", e)
 
 
 # ------------------------------------------------------------ authenticate

@@ -126,6 +126,7 @@ photo tree is `.album.toml` files, which you create yourself.
 | `users_file` | next to `config.toml` | accounts, mode 0600 |
 | `secret_key_file` | next to `config.toml` | 32 random bytes, mode 0600 |
 | `geonames.sqlite` | `<state>/` | place-name dataset, if installed. Re-downloadable |
+| `auth.sqlite` | `<state>/` | failed-login counts. Safe to delete; resets the backoff |
 
 Back up `photo_root` and the config directory. Do **not** bother backing up the
 index or the derived tree; both are reproducible from your photos.
@@ -549,8 +550,18 @@ A few details that are deliberate:
 - **A wrong password never says which part was wrong**, and an unknown username
   takes just as long as a real one, so the site does not reveal who has an
   account.
-- **Repeated failures are slowed down** — a few seconds, growing to thirty —
-  per address and username. A relative mistyping their password is unaffected.
+- **Repeated failures are slowed down.** After three wrong guesses from the
+  same address for the same username, each further attempt has to wait — two
+  seconds, then four, then eight, capped at thirty. A correct password clears
+  the count, so a relative mistyping theirs twice notices nothing. The point is
+  that the site is on the open internet: without it, someone could try
+  passwords as fast as the server can check them.
+
+  It is a precaution, not a gate. If the counter cannot be written for any
+  reason, the login still proceeds and a warning goes to the log — refusing a
+  correct password because a counter failed would be the worse outcome by far.
+  The counts live in `auth.sqlite`, separate from the index, so that a running
+  scan and someone logging in never contend.
 - **Sessions last 30 days** and survive a restart. They stop working
   immediately if you delete the account or run `user revoke`.
 

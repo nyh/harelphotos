@@ -74,11 +74,13 @@ CREATE INDEX photos_date ON photos(taken);
 CREATE INDEX photos_seen  ON photos(seen);
 CREATE INDEX photos_stale ON photos(hdr_stale) WHERE hdr_stale = 1;
 
--- Login throttling (DESIGN.md 12.1). It lives here rather than in users.toml
--- because it is transient state, not configuration; losing it on a rebuild
--- just resets the backoff, which is harmless.
+-- Unused. Login throttling moved to its own auth.sqlite: it was the only
+-- thing the web process wrote, and SQLite permits one writer at a time, so in
+-- here it collided with a running scan and logging in failed with "database is
+-- locked". Left in place only because removing it would mean a schema bump and
+-- a full re-index; it should go the next time the version changes anyway.
 CREATE TABLE login_attempts (
-  key       TEXT PRIMARY KEY,          -- "ip|username"
+  key       TEXT PRIMARY KEY,
   failures  INTEGER NOT NULL DEFAULT 0,
   last_try  INTEGER NOT NULL DEFAULT 0
 );

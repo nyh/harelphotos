@@ -398,3 +398,57 @@ def test_no_login_mode_does_not_pretend_someone_is_logged_in(project):
     app.config.update(TESTING=True)
     body = app.test_client().get("/a/").get_data(as_text=True)
     assert 'action="/logout"' not in body
+
+
+def test_logging_in_works_while_a_scan_holds_the_index(project):
+    """Reported from real use: logging in failed with 'database is locked'.
+
+    SQLite permits one writer at a time. The login throttle was the only thing
+    the web process wrote, and it lived in the index — so a running scan made
+    logging in impossible. It now has its own database.
+    """
+    import sqlite3
+
+    scan_writer = sqlite3.connect(project.index_db)
+    try:
+        scan_writer.execute("PRAGMA journal_mode = WAL")
+        scan_writer.execute("BEGIN IMMEDIATE")          # as a scan does
+        scan_writer.execute("UPDATE photos SET title = 'mid-scan'")
+
+        app = create_app(project, require_login=True)
+        app.config.update(TESTING=True)
+        with app.test_client() as c:
+            assert login(c).status_code == 302          # logging in still works
+            assert c.get("/a/2019/01/").status_code == 200
+            # And so does a failed attempt, which is the path that writes.
+            page = c.get("/a/").get_data(as_text=True)
+            c.post("/logout", data={"csrf": _csrf_from(page)})
+            assert login(c, password="wrong").status_code == 401
+    finally:
+        scan_writer.rollback()
+        scan_writer.close()
+
+
+def test_a_login_succeeds_even_if_the_throttle_cannot_be_written(project, monkeypatch):
+    """Never refuse a correct password because a counter could not be saved."""
+    import contextlib
+
+    @contextlib.contextmanager
+    def broken(cfg):
+        yield None                                      # as an unopenable db does
+
+    monkeypatch.setattr(auth, "throttle_db", broken)
+    app = create_app(project, require_login=True)
+    app.config.update(TESTING=True)
+    with app.test_client() as c:
+        assert login(c).status_code == 302
+        assert c.get("/a/2019/01/").status_code == 200
+
+
+def test_the_throttle_lives_outside_the_index(project):
+    """So a scan and a login never contend for the same writer."""
+    app = create_app(project, require_login=True)
+    app.config.update(TESTING=True)
+    with app.test_client() as c:
+        login(c, password="wrong")
+    assert (project.state_dir / auth.AUTH_DB).exists()

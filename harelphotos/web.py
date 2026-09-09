@@ -141,11 +141,12 @@ def _register_routes(app: Flask, cfg: Config) -> None:
                 error="That form had expired. Please try again.",
             ), 400
 
-        # The throttle table is the one thing the web process writes.
-        writable = db.open_index(cfg.index_db)
-        try:
+        # The throttle has its own small database: it is the only thing the
+        # web process writes, and in the index it collided with a running scan
+        # (DESIGN.md 12.1).
+        with auth.throttle_db(cfg) as throttle:
             try:
-                auth.check_rate_limit(writable)
+                auth.check_rate_limit(throttle)
             except auth.LoginRateLimited as e:
                 return _render_landing(
                     cfg, next_url=nxt,
@@ -155,16 +156,14 @@ def _register_routes(app: Flask, cfg: Config) -> None:
             username = (request.form.get("username") or "").strip()
             user = auth.authenticate(cfg, username, request.form.get("password") or "")
             if user is None:
-                auth.record_failure(writable)
+                auth.record_failure(throttle)
                 log.info("failed login for %r from %s", username, request.remote_addr)
                 # Never says which of the two was wrong, nor whether the
                 # account exists.
                 return _render_landing(
                     cfg, next_url=nxt, error="Incorrect username or password.",
                 ), 401
-            auth.clear_failures(writable)
-        finally:
-            writable.close()
+            auth.clear_failures(throttle)
 
         auth.log_in(user, via="local")
         log.info("login: %s from %s", user.token, request.remote_addr)
