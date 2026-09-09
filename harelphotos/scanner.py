@@ -70,10 +70,10 @@ class ScanStats:
         if self.dirs_removed or self.photos_removed:
             parts.append(f"-{self.dirs_removed} dirs / -{self.photos_removed} photos")
         if self.photos_checked:
-            parts.append(
-                f"{self.photos_checked} headers read "
-                f"({self.photos_unchanged} unchanged, {self.photos_changed} changed)"
-            )
+            detail = f"{self.photos_changed} new or changed"
+            if self.photos_unchanged:
+                detail += f", {self.photos_unchanged} only re-dated"
+            parts.append(f"metadata read from {self.photos_checked} photos ({detail})")
         if self.photos_derived:
             parts.append(
                 f"{self.photos_derived} derived ({self.bytes_written / 1e9:.2f} GB)"

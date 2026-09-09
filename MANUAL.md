@@ -142,11 +142,11 @@ Index the photo tree. Safe to interrupt and re-run.
 | option | |
 |---|---|
 | `--dir SUBPATH` | index only this subdirectory (and prune only within it) |
-| `--jobs N` | parallel header readers (default: all cores) |
+| `--jobs N` | parallel workers (default: all cores) |
 | `--limit N` | stop after N photos, to chip away at a big backlog |
-| `--full` | re-read every header and regenerate every image |
+| `--full` | re-read all metadata and regenerate all images |
 | `--repair` | regenerate images whose files have gone missing |
-| `--headers-only` | index metadata but generate no images |
+| `--no-images` | index metadata only, generate no images |
 | `--dry-run` | report what would happen, write nothing |
 | `--force-unlock` | remove a lock left behind by a killed run |
 
@@ -156,6 +156,10 @@ A scan runs in two visible phases, each with its own progress line:
   reading metadata: 146/146 · 17.2/s · ETA 0:00
   generating images: 92/146 · 4.9/s · ETA 0:11
 ```
+
+"Reading metadata" means reading just the *start* of each photo file — the part
+holding the date, camera, GPS and dimensions — without decoding the picture
+itself. It is quick, which is why it is a separate phase from the slow one.
 
 **Generating images is much slower than reading metadata** — a few photos per
 second per core, against tens or hundreds per second — so most of the wait is
@@ -309,9 +313,8 @@ operation costs a few minutes of reading and regenerates nothing.
 
 So: **mtime decides whether to look. The signature decides whether to work.**
 
-`--full` forces every header to be re-read (useful after changing what metadata
-is extracted); it still compares signatures, so it does not invalidate anything
-that has not genuinely changed.
+`--full` forces all metadata to be re-read and all images regenerated — useful
+after upgrading, or when you want to be certain everything is current.
 
 ---
 

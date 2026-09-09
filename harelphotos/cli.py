@@ -384,11 +384,11 @@ def cmd_check(args: argparse.Namespace) -> int:
     print(f"directories    {r.dirs:,}")
     print(f"photos         {r.photos:,}")
     pct = (100 * r.photos_with_headers / r.photos) if r.photos else 0
-    print(f"  headers read {r.photos_with_headers:,} ({pct:.0f}%)")
+    print(f"  metadata read  {r.photos_with_headers:,} ({pct:.0f}%)")
     pct = (100 * r.photos_with_dates / r.photos) if r.photos else 0
-    print(f"  EXIF date    {r.photos_with_dates:,} ({pct:.0f}%)")
+    print(f"  EXIF date      {r.photos_with_dates:,} ({pct:.0f}%)")
     pct = (100 * r.photos_with_gps / r.photos) if r.photos else 0
-    print(f"  GPS          {r.photos_with_gps:,} ({pct:.0f}%)")
+    print(f"  GPS            {r.photos_with_gps:,} ({pct:.0f}%)")
     print(f"date range     {_fmt_date(r.date_range[0])} .. {_fmt_date(r.date_range[1])}")
 
     if r.biggest:
@@ -449,13 +449,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     ps = sub.add_parser("scan", help="index the photo tree (phases 1-2)")
     ps.add_argument("--dir", help="rescan only this subdirectory")
-    ps.add_argument("--jobs", type=int, help="parallel header readers (default: all cores)")
+    ps.add_argument("--jobs", type=int, help="parallel workers (default: all cores)")
     ps.add_argument("--limit", type=int, help="stop after N header reads")
-    ps.add_argument("--full", action="store_true", help="re-read every header")
+    ps.add_argument("--full", action="store_true",
+                    help="re-read all metadata and regenerate all images")
     ps.add_argument("--repair", action="store_true",
                     help="rebuild derivatives whose files have gone missing")
-    ps.add_argument("--headers-only", action="store_true",
-                    help="index metadata but do not generate images")
+    ps.add_argument("--headers-only", "--no-images", dest="headers_only",
+                    action="store_true",
+                    help="index metadata only, generate no images")
     ps.add_argument("--dry-run", action="store_true", help="report, write nothing")
     ps.add_argument("--force-unlock", action="store_true", help="remove a stale lock file")
     ps.set_defaults(func=cmd_scan)
