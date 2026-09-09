@@ -2603,3 +2603,32 @@ Nothing here blocks starting on M1 — these can be answered as we reach them.
    sharpness on retina screens and in phone bandwidth.
 ~~7. **Python 3.12 on Rocky**~~ — *resolved: confirmed available. `requires-python
    = ">=3.11"` stands, and the `tomli` shim is gone for good.*
+
+Raised by the full-document review, both genuinely unaddressed:
+
+8. **Language and date formatting.** The whole UI is currently English —
+   "214 photos", "Sunday, 14 August 2025, 16:50", "By invitation only". Your
+   family is Israeli; do you want Hebrew anywhere, or dates in a different
+   format (`14/08/2025`, or Hebrew month names)? This matters more than it
+   looks: Hebrew means RTL, which is a stylesheet-wide decision (`dir="rtl"`,
+   logical CSS properties) that is cheap to build in from M4 and expensive to
+   retrofit. English-only is a perfectly good answer — I just shouldn't assume
+   it. A middle option is English UI with a configurable date format, which
+   costs nothing.
+9. **Filename encoding in the older parts of the collection.** A 300 GB
+   collection spanning decades, with an "ancient" directory, may well contain
+   filenames that are not valid UTF-8 — Hebrew names written under ISO-8859-8,
+   or names created on Windows. Python's `os.scandir` hands those back with
+   surrogate escapes, which then blow up at the first attempt to put them in
+   JSON, a URL, or an HTML page. The design should either normalise them at scan
+   time or refuse them loudly with a listing, rather than crashing halfway
+   through a two-hour scan. Cheap to check before writing any code:
+
+   ```
+   find $PHOTO_ROOT -name '*' | grep -aP '[\x80-\xff]' | head
+   LC_ALL=C find $PHOTO_ROOT -type f ! -name '*[[:print:]]*' | head
+   ```
+
+   If nothing turns up, this is a non-issue and the scanner just needs a clear
+   error path. If it does, it needs a deliberate policy, and it is much better
+   to know that now.
