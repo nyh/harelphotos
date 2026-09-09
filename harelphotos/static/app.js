@@ -11,6 +11,8 @@
 (function () {
   "use strict";
 
+  var FROM_ALBUM_KEY = "hp:openedFrom";
+
   /* ------------------------------------------------ justified row layout */
 
   // Photos keep their true aspect ratio and are never cropped: each row is
@@ -134,9 +136,25 @@
     }
   }
 
+  // Records that we are leaving this album by opening one of its photos, so
+  // the photo page can tell whether Back leads to the grid (see backToAlbum).
+  function markOpenedFromAlbum(grid) {
+    grid.addEventListener("click", function (e) {
+      var a = e.target.closest ? e.target.closest("a") : null;
+      if (!a || !a.href) return;
+      try {
+        sessionStorage.setItem(FROM_ALBUM_KEY, JSON.stringify({
+          album: window.location.pathname,
+          depth: window.history.length
+        }));
+      } catch (err) {}
+    });
+  }
+
   function initGrid() {
     var grid = document.getElementById("grid");
     if (!grid) return;
+    markOpenedFromAlbum(grid);
     var lastWidth = 0;
     var pending = false;
     function relayout() {
@@ -163,16 +181,46 @@
     var nav;
     try { nav = JSON.parse(el.textContent); } catch (e) { return; }
 
-    function go(url) { if (url) window.location.href = url; }
+    // Paging replaces the current history entry instead of adding one.
+    //
+    // With a push per photo, Back walked backwards through every photo you had
+    // looked at -- ten arrow presses meant ten Backs to reach the album again,
+    // which is not what Back means here. Replacing keeps history at
+    // [album, the photo you are on], so Back always means "return to the
+    // grid", however far along you have paged.
+    function go(url) { if (url) window.location.replace(url); }
 
-    // Escape and a downward swipe return to the album. They navigate to it
-    // rather than calling history.back(): a first attempt used the referrer to
-    // decide whether history was safe to use, which could never work, because
-    // this site sends `Referrer-Policy: no-referrer` and so document.referrer
-    // is always empty. The album page restores its own scroll position
-    // instead (see rememberScroll), which needs no history at all and also
-    // works after paging through several photos.
-    function backToAlbum() { go(nav.album); }
+    // Opening a photo from the grid is a normal link, so it does add one
+    // entry -- which is the one Back consumes.
+    function openedFromAlbum() {
+      var raw;
+      try { raw = sessionStorage.getItem(FROM_ALBUM_KEY); } catch (e) { return false; }
+      if (!raw) return false;
+      var mark;
+      try { mark = JSON.parse(raw); } catch (e) { return false; }
+      // Same album, and exactly one entry deeper than when the tile was
+      // clicked. Both must hold: a stale mark from earlier in the session
+      // would otherwise send a deep link (a bookmark, a pasted URL) backwards
+      // out of the site entirely.
+      return mark && mark.album === nav.album &&
+             window.history.length === mark.depth + 1;
+    }
+
+    // Escape and a downward swipe return to the album.
+    //
+    // history.back() where it is genuinely a step back, because that restores
+    // the grid from the browser's back/forward cache: already laid out, images
+    // already painted, scroll position kept. A fresh navigation cannot use
+    // that cache and rebuilds the whole page instead.
+    //
+    // The fallback matters: arriving straight at a photo means there is no
+    // album behind us to go back to. An earlier attempt used document.referrer
+    // to tell the two apart, which could never work -- this site sends
+    // `Referrer-Policy: no-referrer`, so the referrer is always empty.
+    function backToAlbum() {
+      if (openedFromAlbum()) { window.history.back(); return; }
+      window.location.href = nav.album;
+    }
 
     var info = document.getElementById("info");
     var toggle = document.getElementById("info-toggle");

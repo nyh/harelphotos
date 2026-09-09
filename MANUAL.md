@@ -265,18 +265,25 @@ outright, because it would hand the whole collection to anyone who can reach
 the machine. Use `--login` (recommended), or `--insecure` if you really mean
 it — testing on a phone over your own LAN, say.
 
-This is still the development server; the real deployment behind Apache with
-TLS is not built yet.
-
 What you can do: browse albums, follow subdirectories, click a photo to see it
 large, move between photos with the arrow keys or by swiping, press `i` for
 date/camera/location details, `d` to download the original, and `Esc` to go
 back to the album.
 
-`Esc` and a downward swipe return you to the album **exactly where you left
-it**, including after paging through several photos with the arrow keys. The
-album remembers your position for the rest of the browser session, so the Back
-button and `Esc` behave the same way.
+`Esc`, a downward swipe and the browser's Back button all return you to the
+album **exactly where you left it**, in one step, however many photos you
+paged through first.
+
+That last part is deliberate. Paging with the arrow keys replaces the current
+page rather than stacking a new one, so viewing twenty photos does not put
+twenty entries in your history for Back to walk back through — Back means
+"return to the grid", not "the previous photo". Use the left arrow for that.
+
+Returning is also a real history step, which lets the browser restore the
+album from its back/forward cache: the grid is already laid out and the
+thumbnails already loaded, so it appears instantly instead of being rebuilt.
+Arriving straight at a photo — a bookmark or a pasted link — has no album
+behind it, so `Esc` navigates to the album normally instead.
 
 ### `harelphotos init --geonames`
 
