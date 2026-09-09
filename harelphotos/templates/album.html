@@ -26,13 +26,14 @@
       <a class="card" href="{{ sub.url }}">
         <div class="card-img">
           {% if sub.cover %}
-            <img src="{{ sub.cover|img_src(512) }}"
+            {% if sub.cover.pending %}<div class="card-blank" aria-hidden="true">🗀</div>
+            {% else %}<img src="{{ sub.cover|img_src(512) }}"
                  srcset="{{ sub.cover|srcset(all_tiers) }}"
                  sizes="(max-width: 600px) 45vw, 240px"
                  width="{{ sub.cover.size_at(512)[0] }}"
                  height="{{ sub.cover.size_at(512)[1] }}"
                  loading="lazy" decoding="async"
-                 style="background: {{ sub.cover.colour }}" alt="">
+                 style="background: {{ sub.cover.colour }}" alt="">{% endif %}
           {% else %}
             <div class="card-blank" aria-hidden="true">🗀</div>
           {% endif %}
@@ -53,8 +54,14 @@
     {% if subalbums %}<h2 class="section">Photos</h2>{% endif %}
     <div class="grid" id="grid" data-gap="4">
       {% for p in photos %}
-      <a class="tile" href="{{ p.page_url }}" data-ar="{{ '%.4f'|format(p.aspect) }}"
-         style="--ar: {{ '%.4f'|format(p.aspect) }}">
+      <a class="tile{% if p.pending %} pending{% endif %}" href="{{ p.page_url }}"
+         data-ar="{{ '%.4f'|format(p.aspect) }}" style="--ar: {{ '%.4f'|format(p.aspect) }}"
+         {% if p.pending %}title="{{ p.name }} — image not generated yet"{% endif %}>
+        {%- if p.pending %}
+          {# No <img> at all: the original may be tens of megabytes, and a
+             grid of those would be far worse than a blank tile. #}
+          <span class="pending-mark" aria-label="not generated yet">⋯</span>
+        {%- else %}
         <img src="{{ p|img_src(256) }}"
              {% if p.tiers %}srcset="{{ p|srcset(all_tiers) }}"
              sizes="{{ p|grid_sizes }}"{% endif %}
@@ -62,6 +69,7 @@
              loading="lazy" decoding="async"
              style="background: {{ p.colour }}"
              alt="{{ p.title or p.name }}">
+        {%- endif %}
       </a>
       {% endfor %}
     </div>

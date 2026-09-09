@@ -88,6 +88,10 @@ def make_tree(root: Path) -> Path:
     # Uppercase extension, and a unicode name.
     make_jpeg(root / "2019" / "02" / "UPPER.JPG", taken="2019:02:21 12:00:00")
     make_jpeg(root / "2019" / "02" / "שלום.jpg", taken="2019:02:22 12:00:00")
+    # A space in the name. Not exotic: 107 of the real collection's photos
+    # have one, and it broke `srcset` outright, because whitespace is what
+    # separates a candidate URL from its width descriptor there.
+    make_jpeg(root / "2019" / "02" / "zPic 4.jpg", taken="2019:02:23 12:00:00")
 
     return root
 

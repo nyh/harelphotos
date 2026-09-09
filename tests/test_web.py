@@ -223,7 +223,7 @@ def test_robots_noindex(client):
 def test_healthz(client):
     r = client.get("/healthz")
     assert r.status_code == 200
-    assert r.get_json()["photos"] == 8
+    assert r.get_json()["photos"] == 9
 
 
 def test_static_assets_are_served(client):
@@ -320,3 +320,108 @@ def test_sizes_reflects_the_real_tile_width(client):
     # 800x600 is 4:3, so 1.333 * 180 = 240px, not a flat 180px.
     assert "240px" in body
     assert "33vw, 180px" not in body
+
+
+def test_a_pending_photo_does_not_put_its_original_in_the_grid(tmp_path):
+    """The grid must never link an ungenerated original.
+
+    Those can be tens of megabytes — one album of them would pull hundreds.
+    Distinct from a photo that legitimately has no derivatives because it is
+    smaller than every size, where the original is genuinely small.
+    """
+    from harelphotos import db, scanner
+
+    photos = tmp_path / "pictures"
+    fixtures.make_jpeg(photos / "a" / "done.jpg", size=(2000, 1500))
+    fixtures.make_jpeg(photos / "a" / "waiting.jpg", size=(2000, 1500))
+    cfg = fixtures.make_config(tmp_path, photos)
+    conn = fixtures.fresh_index(cfg)
+    scanner.scan(cfg, conn)
+    # Put one photo back into the pending state, as an interrupted scan would.
+    conn.execute("UPDATE photos SET deriv_key = NULL, deriv_tiers = NULL "
+                 "WHERE name = 'waiting.jpg'")
+    conn.commit()
+    conn.close()
+
+    app = create_app(cfg, require_login=False)
+    app.config.update(TESTING=True)
+    body = app.test_client().get("/a/a/").get_data(as_text=True)
+
+    assert "/i/orig/a/waiting.jpg" not in body      # the whole point
+    assert "image not generated yet" in body
+    assert "/i/512/a/done.jpg" in body              # the finished one is fine
+
+
+def test_a_photo_with_no_worthwhile_derivative_uses_its_original(tmp_path):
+    """The case /i/orig/ exists for.
+
+    A photo can end up with no derivatives legitimately: re-encoding something
+    very small can produce a *larger* file, which is then discarded in favour
+    of the original. The distinguishing mark is that deriv_key is set — the
+    scan did look at it and decided — unlike a pending photo, where it is NULL.
+    """
+    from harelphotos import scanner
+
+    photos = tmp_path / "pictures"
+    fixtures.make_jpeg(photos / "b" / "small.jpg", size=(200, 150))
+    cfg = fixtures.make_config(tmp_path, photos)
+    conn = fixtures.fresh_index(cfg)
+    scanner.scan(cfg, conn)
+    conn.execute("UPDATE photos SET deriv_tiers = '[]'")     # nothing was worth keeping
+    conn.commit()
+    conn.close()
+
+    app = create_app(cfg, require_login=False)
+    app.config.update(TESTING=True)
+    c = app.test_client()
+    body = c.get("/a/b/").get_data(as_text=True)
+    assert "/i/orig/b/small.jpg" in body            # shown, not blanked
+    assert "image not generated yet" not in body    # and not called pending
+    assert c.get("/i/orig/b/small.jpg").status_code == 200
+
+
+def test_a_filename_with_a_space_works_everywhere(client):
+    """A space breaks `srcset`, where whitespace separates URL from descriptor.
+
+    One photo called "zPic 4.jpg" rendered as a grey box because of this, and
+    107 photos in the real collection have a space in the name.
+    """
+    import re
+
+    body = client.get("/a/2019/02/").get_data(as_text=True)
+    # Every candidate in every srcset must be free of raw spaces, or the
+    # browser cannot parse the list at all.
+    for srcset in re.findall(r'srcset="([^"]*)"', body):
+        for candidate in srcset.split(","):
+            url, _, descriptor = candidate.strip().rpartition(" ")
+            assert " " not in url, f"raw space in srcset URL: {url!r}"
+            assert descriptor.endswith("w"), candidate
+
+    page = client.get("/p/2019/02/zPic 4.jpg")
+    assert page.status_code == 200
+    html = page.get_data(as_text=True)
+    assert "zPic%204.jpg" in html
+    assert "zPic 4.jpg?v=" not in html          # never raw inside a URL
+
+    # And the encoded URLs actually resolve.
+    for url in ("/i/512/2019/02/zPic%204.jpg", "/i/orig/2019/02/zPic%204.jpg",
+                "/orig/2019/02/zPic%204.jpg", "/p/2019/02/zPic%204.jpg"):
+        assert client.get(url).status_code == 200, url
+
+
+def test_album_urls_are_encoded_too(tmp_path):
+    """Directory names can contain spaces just as easily as filenames."""
+    from harelphotos import scanner
+
+    photos = tmp_path / "pictures"
+    fixtures.make_jpeg(photos / "a trip" / "x.jpg", size=(900, 700))
+    cfg = fixtures.make_config(tmp_path, photos)
+    conn = fixtures.fresh_index(cfg)
+    scanner.scan(cfg, conn)
+    conn.close()
+    app = create_app(cfg, require_login=False)
+    app.config.update(TESTING=True)
+    c = app.test_client()
+    body = c.get("/a/").get_data(as_text=True)
+    assert 'href="/a/a%20trip/"' in body
+    assert c.get("/a/a%20trip/").status_code == 200

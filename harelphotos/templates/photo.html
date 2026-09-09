@@ -11,7 +11,7 @@
     <div class="actions">
       <button type="button" id="info-toggle" aria-expanded="false"
               aria-controls="info" title="Photo information (i)">Info</button>
-      <a class="button" href="/orig/{{ photo.relpath }}" download
+      <a class="button" href="/orig/{{ photo.url_relpath }}" download
          title="Download the original file (d)">Download original</a>
       {{ chrome.user_menu(viewer) }}
     </div>
@@ -49,6 +49,11 @@
       {% if photo.exif.camera %}<dt>Camera</dt><dd>{{ photo.exif.camera }}
         {%- if photo.exif.lens %}<br><span class="dim">{{ photo.exif.lens }}</span>{% endif %}</dd>{% endif %}
       {% if photo.exif|exposure %}<dt>Exposure</dt><dd>{{ photo.exif|exposure }}</dd>{% endif %}
+      {% if photo.pending %}
+        <dt>Note</dt>
+        <dd class="dim">Resized copies have not been generated yet, so this is
+          the full-size original. Run <code>harelphotos scan</code>.</dd>
+      {% endif %}
     </dl>
   </aside>
 </div>
@@ -59,7 +64,7 @@
 {{ {"prev": prev.page_url if prev else none,
     "next": next.page_url if next else none,
     "album": album.url if album else "/a/",
-    "download": "/orig/" ~ photo.relpath,
+    "download": "/orig/" ~ photo.url_relpath,
     "preload": [ (prev|img_src(2048)) if prev else none,
                  (next|img_src(2048)) if next else none ]}|tojson }}
 </script>

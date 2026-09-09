@@ -183,7 +183,7 @@ def test_scan_generates_and_records_derivatives(tmp_path):
     cfg = fixtures.make_config(tmp_path, photos)
     conn = fixtures.fresh_index(cfg)
     stats = scanner.scan(cfg, conn)
-    assert stats.photos_derived == 8
+    assert stats.photos_derived == 9
     assert stats.derive_failed == 0
     assert stats.bytes_written > 0
     row = conn.execute("SELECT * FROM photos WHERE name = 'a.jpg'").fetchone()

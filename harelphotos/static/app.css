@@ -366,3 +366,14 @@ button.linklike:hover { color: var(--fg); }
 .prose { max-inline-size: 44rem; margin-inline: auto; padding: 2rem 1.25rem; }
 .prose h1 { font-size: 1.6rem; }
 .prose a { color: var(--accent); }
+
+/* A photo the scan has not reached yet. Deliberately no image: the original
+   can be tens of megabytes, and a grid of those would be far worse than a
+   blank tile. */
+.tile.pending {
+  display: grid;
+  place-items: center;
+  background: var(--card);
+  border: 1px dashed var(--line);
+}
+.pending-mark { color: var(--dim); font-size: 1.2rem; letter-spacing: 0.1em; }

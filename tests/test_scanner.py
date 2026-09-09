@@ -43,10 +43,10 @@ def snapshot(conn):
 def test_scan_finds_the_photos(tree):
     cfg, conn, _ = tree
     stats = scanner.scan(cfg, conn)
-    # 6 real photos: 2019/01 x2, 2019/02 x4 (c, d, UPPER.JPG, unicode),
-    # private x1, ancient x1 = 8
-    assert stats.photos_seen == 8
-    assert stats.photos_added == 8
+    # 2019/01 x2, 2019/02 x5 (c, d, UPPER.JPG, unicode, "zPic 4.jpg"),
+    # private x1, ancient x1 = 9
+    assert stats.photos_seen == 9
+    assert stats.photos_added == 9
     names = {r["name"] for r in conn.execute("SELECT name FROM photos")}
     assert "a.jpg" in names
     assert "UPPER.JPG" in names          # extension match is case-insensitive
@@ -108,10 +108,10 @@ def test_rollup_counts_recursively(tree):
     cfg, conn, _ = tree
     scanner.scan(cfg, conn)
     root = conn.execute("SELECT * FROM dirs WHERE path = ''").fetchone()
-    assert root["n_photos_rec"] == 8
+    assert root["n_photos_rec"] == 9
     y = conn.execute("SELECT * FROM dirs WHERE path = '2019'").fetchone()
     assert y["n_photos"] == 0            # no photos directly in 2019/
-    assert y["n_photos_rec"] == 6        # but six beneath it
+    assert y["n_photos_rec"] == 7        # but seven beneath it
     m = conn.execute("SELECT * FROM dirs WHERE path = '2019/01'").fetchone()
     assert m["n_photos"] == 2
 
@@ -185,8 +185,8 @@ def test_touching_every_file_re_reads_but_regenerates_nothing(tree):
         os.utime(p, (future, future))
 
     stats = scanner.scan(cfg, conn)
-    assert stats.photos_checked == 8         # mtime changed, so we looked
-    assert stats.photos_unchanged == 8       # ...and the bytes were identical
+    assert stats.photos_checked == 9         # mtime changed, so we looked
+    assert stats.photos_unchanged == 9       # ...and the bytes were identical
     assert stats.photos_changed == 0         # ...so nothing needs re-encoding
     sigs_after = {
         r["id"]: r["content_sig"] for r in conn.execute("SELECT id, content_sig FROM photos")
@@ -227,7 +227,7 @@ def test_deleting_a_directory_removes_its_photos(tree):
     stats = scanner.scan(cfg, conn)
     assert stats.dirs_removed == 1
     assert stats.photos_removed == 2
-    assert conn.execute("SELECT count(*) AS n FROM photos").fetchone()["n"] == 6
+    assert conn.execute("SELECT count(*) AS n FROM photos").fetchone()["n"] == 7
 
 
 def test_moving_a_subtree_converges(tree):
@@ -293,7 +293,7 @@ def test_corrupt_jpeg_is_recorded_not_raised(tree):
     row = conn.execute("SELECT * FROM photos WHERE name = 'broken.jpg'").fetchone()
     assert row["deriv_error"]
     # ...and every other photo was still indexed.
-    assert conn.execute("SELECT count(*) AS n FROM photos").fetchone()["n"] == 9
+    assert conn.execute("SELECT count(*) AS n FROM photos").fetchone()["n"] == 10
 
 
 def test_malformed_album_toml_is_recorded_not_raised(tree):
@@ -347,7 +347,7 @@ def test_scanning_a_subdirectory_only(tree):
     scanner.scan(cfg, conn)
     stats = scanner.scan(cfg, conn, subpath="2019/01")
     assert stats.photos_removed == 0
-    assert conn.execute("SELECT count(*) AS n FROM photos").fetchone()["n"] == 8
+    assert conn.execute("SELECT count(*) AS n FROM photos").fetchone()["n"] == 9
 
 
 def test_subdirectory_scan_does_not_do_work_elsewhere(tree):
@@ -373,15 +373,15 @@ def test_limit_stops_early(tree):
     stats = scanner.scan(cfg, conn, limit=3)
     assert stats.photos_checked == 3
     # The rest stay pending, so a later run finishes the job.
-    assert scanner.scan(cfg, conn).photos_checked == 5
+    assert scanner.scan(cfg, conn).photos_checked == 6
 
 
 def test_full_rereads_every_header(tree):
     cfg, conn, _ = tree
     scanner.scan(cfg, conn)
     stats = scanner.scan(cfg, conn, full=True)
-    assert stats.photos_checked == 8       # every header re-read...
-    assert stats.photos_unchanged == 8     # ...and correctly found unchanged
+    assert stats.photos_checked == 9       # every header re-read...
+    assert stats.photos_unchanged == 9     # ...and correctly found unchanged
 
 
 def test_missing_photo_root_is_an_error(tmp_path):
@@ -443,7 +443,7 @@ def test_counts_are_refreshed_during_a_scan_not_only_at_the_end(tree):
     s.rollup()
     # The walk alone, before any metadata is read, already gives real counts.
     row = conn.execute("SELECT n_photos_rec FROM dirs WHERE path = '2019'").fetchone()
-    assert row["n_photos_rec"] == 7
+    assert row["n_photos_rec"] == 8
 
     # And a directory that has just gained photos is no longer counted as
     # empty, which is what decides whether it is listed at all.
@@ -466,7 +466,7 @@ def test_counts_are_final_as_soon_as_the_walk_finishes(tree):
     after_walk = conn.execute(
         "SELECT n_photos_rec FROM dirs WHERE path = ''"
     ).fetchone()["n_photos_rec"]
-    assert after_walk == 8
+    assert after_walk == 9
 
     # Reading metadata and generating images must not move it.
     scanner.scan(cfg, conn)

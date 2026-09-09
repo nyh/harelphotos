@@ -13,10 +13,23 @@ import json
 import sqlite3
 from dataclasses import dataclass
 from typing import Sequence
+from urllib.parse import quote
 
 from . import acl
 from .config import Config
 from .util import prettify_name
+
+
+def url_path(relpath: str) -> str:
+    """Percent-encode a path for use in a URL, keeping the separators.
+
+    Necessary rather than cosmetic. A filename containing a space breaks
+    `srcset` outright, because whitespace is what separates a candidate URL
+    from its width descriptor there — so one photo called "zPic 4.jpg"
+    silently rendered as a grey box. `#`, `?` and `%` would each break
+    something too.
+    """
+    return quote(relpath, safe="/")
 
 
 @dataclass(frozen=True)
@@ -46,7 +59,7 @@ class Album:
 
     @property
     def url(self) -> str:
-        return f"/a/{self.path}/" if self.path else "/a/"
+        return f"/a/{url_path(self.path)}/" if self.path else "/a/"
 
 
 @dataclass
@@ -72,8 +85,25 @@ class Photo:
         return f"{self.dir_path}/{self.name}" if self.dir_path else self.name
 
     @property
+    def url_relpath(self) -> str:
+        """The relative path, percent-encoded for a URL."""
+        return url_path(self.relpath)
+
+    @property
     def page_url(self) -> str:
-        return f"/p/{self.relpath}"
+        return f"/p/{self.url_relpath}"
+
+    @property
+    def pending(self) -> bool:
+        """True when this photo's images have not been generated yet.
+
+        Distinct from having no derivatives *legitimately*, which happens when
+        a photo is smaller than every configured size: there, `deriv_key` is
+        set and the original is genuinely small, so serving it is right. Here
+        the scan simply has not reached it, and the original may be 29 MB —
+        putting that in a grid of thumbnails would be catastrophic.
+        """
+        return self.deriv_key is None
 
     @property
     def aspect(self) -> float:
