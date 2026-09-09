@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ photo.title or photo.name }} — {{ cfg.ui.site_title }}{% endblock %}
+{% block body %}
+<div class="viewer">
+  <header class="topbar viewer-bar">
+    <nav class="crumbs">
+      {%- for c in crumbs %}<a href="{{ c.url }}">{{ c.title }}</a><span class="sep">/</span>{% endfor -%}
+      <span class="here">{{ photo.title or photo.name }}</span>
+    </nav>
+    <div class="actions">
+      <button type="button" id="info-toggle" aria-expanded="false"
+              aria-controls="info" title="Photo information (i)">Info</button>
+      <a class="button" href="/orig/{{ photo.relpath }}" download
+         title="Download the original file (d)">Download original</a>
+    </div>
+  </header>
+
+  <div class="stage">
+    {% if prev %}<a class="nav prev" href="{{ prev.page_url }}" title="Previous">&#8249;</a>{% endif %}
+    <img id="main" src="{{ photo|img_src(2048) }}"
+         {% if photo.tiers %}srcset="{{ photo|srcset(view_tiers) }}" sizes="100vw"{% endif %}
+         {% if photo.width %}width="{{ photo.width }}" height="{{ photo.height }}"{% endif %}
+         style="background: {{ photo.colour }}"
+         alt="{{ photo.title or photo.name }}">
+    {% if next %}<a class="nav next" href="{{ next.page_url }}" title="Next">&#8250;</a>{% endif %}
+  </div>
+
+  <aside id="info" class="info" hidden>
+    <dl>
+      <dt>File</dt><dd>{{ photo.name }}
+        {%- if photo.width %} <span class="dim">{{ photo.width }} × {{ photo.height }}</span>{% endif %}
+        {%- if photo.size %} <span class="dim">{{ photo.size|filesize }}</span>{% endif %}</dd>
+      {% if photo.taken %}
+        <dt>Taken</dt><dd>{{ photo.taken|photo_date }}</dd>
+      {% else %}
+        <dt>File date</dt>
+        <dd>{{ photo.when|photo_date }} <span class="dim">(no date recorded in the photo)</span></dd>
+      {% endif %}
+      {% set place = photo.place or album.location %}
+      {% if place and cfg.ui.show_gps %}
+        <dt>Location</dt>
+        <dd>{{ place }}
+          {%- if photo.exif|maplink %} <a href="{{ photo.exif|maplink }}" target="_blank"
+             rel="noopener noreferrer">view on map ↗</a>{% endif %}</dd>
+      {% endif %}
+      {% if photo.exif.camera %}<dt>Camera</dt><dd>{{ photo.exif.camera }}
+        {%- if photo.exif.lens %}<br><span class="dim">{{ photo.exif.lens }}</span>{% endif %}</dd>{% endif %}
+      {% if photo.exif|exposure %}<dt>Exposure</dt><dd>{{ photo.exif|exposure }}</dd>{% endif %}
+    </dl>
+  </aside>
+</div>
+
+<script id="nav-data" type="application/json">
+{{ {"prev": prev.page_url if prev else none,
+    "next": next.page_url if next else none,
+    "album": album.url if album else "/a/",
+    "download": "/orig/" ~ photo.relpath,
+    "preload": [ (prev|img_src(2048)) if prev else none,
+                 (next|img_src(2048)) if next else none ]}|tojson }}
+</script>
+{% endblock %}

@@ -169,19 +169,35 @@ def derive(path: Path, relpath: str, cfg: Config) -> DeriveResult:
         return out
 
     longest = max(im.size)
+    # Never upscale — but do not throw away resolution either. A 1174 px photo
+    # with tiers 2048/1280/512 must not end up with 512 px as its largest
+    # view; the smallest tier that covers it is generated at the original's
+    # own size instead. Bigger tiers than that are skipped.
+    covering = [t for t in tiers if t >= longest]
+    native_tier = min(covering) if covering else None
+
     cur = im
     try:
         for px in tiers:
-            # Never upscale: a tier bigger than the source is simply skipped,
-            # and the database records which tiers really exist so the page
-            # only ever advertises files that are there.
-            if px > longest:
+            if px > longest and px != native_tier:
                 continue
-            cur = fit(cur, px)
+            cur = fit(cur, px)      # a no-op at the native tier
             radius, percent, threshold = UNSHARP_LARGE if px > SMALL_TIER_PX else UNSHARP_SMALL
-            shaped = cur.filter(ImageFilter.UnsharpMask(radius, percent, threshold))
-            out.bytes_written += save_atomic(shaped, derived_path(cfg, px, relpath), cfg, px)
-            out.tiers.append(px)
+            # Sharpening compensates for downscaling; at native size there was
+            # no downscale, so it would just add noise and bytes.
+            shaped = (
+                cur if px == native_tier
+                else cur.filter(ImageFilter.UnsharpMask(radius, percent, threshold))
+            )
+            dest = derived_path(cfg, px, relpath)
+            written = save_atomic(shaped, dest, cfg, px)
+            # Re-encoding a small photo can produce something bigger than the
+            # original. Serving that would be worse than serving the original.
+            if px == native_tier and written >= path.stat().st_size:
+                dest.unlink(missing_ok=True)
+            else:
+                out.bytes_written += written
+                out.tiers.append(px)
             if px == tiers[-1]:
                 out.colour = dominant_colour(shaped)
     except Exception as e:

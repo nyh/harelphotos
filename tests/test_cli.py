@@ -116,9 +116,9 @@ def test_config_show(project, capsys):
 
 
 def test_unimplemented_commands_say_which_milestone(project, capsys):
-    assert cli.main(["serve"]) == 2
+    assert cli.main(["sync"]) == 2
     err = capsys.readouterr().err
-    assert "not implemented" in err and "M4" in err
+    assert "not implemented" in err and "M8" in err
 
 
 def test_missing_config_is_a_clean_error(tmp_path, monkeypatch, capsys):

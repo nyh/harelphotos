@@ -7,9 +7,9 @@ they are — the measurements, the alternatives rejected, the plan for what isn'
 built yet — see [DESIGN.md](DESIGN.md). Where the two disagree, this file is
 right and DESIGN.md is out of date.
 
-> **Implemented so far:** indexing a photo tree and generating its images
-> (`init`, `scan`, `check`, `gc`, `stats`, `geocode`, `config show`, `user`).
-> There is **no web interface yet** — that is M4.
+> **Implemented so far:** indexing a photo tree, generating its images, and
+> browsing them in a web interface. There is **no login yet** — anyone who can
+> reach the server sees everything, so keep it on `localhost` until M5.
 
 ---
 
@@ -208,6 +208,27 @@ photos that already have a place, after a dataset update.
 `scan` does not geocode automatically; run this once after the dataset is
 installed, and again when you add photos with GPS.
 
+### `harelphotos serve [--bind ADDR] [--port N]`
+
+Run the web interface. Listens on `127.0.0.1:5000` by default, so only your own
+machine can reach it:
+
+```sh
+harelphotos serve
+```
+
+Then open <http://127.0.0.1:5000/>.
+
+**There is no authentication yet.** Binding anywhere other than localhost hands
+your whole collection to anyone on the network; the command warns you if you
+do. Logging in arrives in M5, and the server deployment (Apache, TLS) in M8 —
+until then this is the development server and should stay on localhost.
+
+What you can do: browse albums, follow subdirectories, click a photo to see it
+large, move between photos with the arrow keys or by swiping, press `i` for
+date/camera/location details, `d` to download the original, and `Esc` to go
+back to the album.
+
 ### `harelphotos init --geonames`
 
 Download and build the offline place-name dataset that `geocode` uses. Run it
@@ -286,6 +307,39 @@ Things worth knowing:
   what it must.
 
 To see what they cost, `harelphotos stats`.
+
+## How the browser picks an image size
+
+Each photo is generated at several sizes (256, 512, 1280, 2048 px by default),
+and **the server does not choose between them** — the page offers all of them
+and the browser picks:
+
+```html
+<img src="/i/256/2019/summer/IMG_1234.jpg?v=a1b2c3"
+     srcset="/i/256/2019/summer/IMG_1234.jpg?v=a1b2c3 256w,
+             /i/512/2019/summer/IMG_1234.jpg?v=a1b2c3 512w"
+     sizes="(max-width: 600px) 33vw, 180px">
+```
+
+`srcset` lists the available files with their real pixel widths; `sizes` says
+how large the picture will actually appear on the page. The browser combines
+those with the one thing the server cannot know — the device's pixel ratio —
+and downloads exactly one of them.
+
+That is why there are two sizes for each purpose rather than one:
+
+- **256 and 512 for the grid.** An ordinary desktop screen needs about 180 px
+  per thumbnail and takes the 256; a phone or a retina laptop takes the 512.
+  Album pages are where the bandwidth goes — 500 thumbnails is 2.5 MB at 256
+  against 6.3 MB at 512 — so it matters that a non-retina screen is not made to
+  pay retina prices.
+- **1280 and 2048 for viewing one photo.** A phone at 400 CSS px wide needs
+  about 1200 px; a desktop wants closer to 2000. Serving the phone 1280 rather
+  than 2048 halves the cost of every swipe.
+
+Sizes larger than the original are never generated. A photo that falls between
+two tiers — 1174 px, say — gets a copy at *its own* size rather than being
+dropped to the next tier down, so nothing loses resolution it had.
 
 ## How a rescan decides what changed
 

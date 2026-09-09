@@ -21,7 +21,6 @@ from . import maintenance, scanner, users as users_mod
 log = logging.getLogger("harelphotos")
 
 NOT_YET = {
-    "serve": "M4",
     "cover": "M9",
     "acl": "M5",
     "sync": "M8",
@@ -376,6 +375,28 @@ def cmd_stats(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serve(args: argparse.Namespace) -> int:
+    cfg = _load_config(args)
+    if not cfg.index_db.exists():
+        print("no index yet — run 'harelphotos scan' first", file=sys.stderr)
+        return 1
+    from .web import create_app
+
+    app = create_app(cfg)
+    host = args.bind or "127.0.0.1"
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        # M4 has no authentication at all. Reaching it from the network is a
+        # deliberate act, not a default.
+        print(
+            f"WARNING: binding to {host} exposes the whole collection to your "
+            f"network with NO login (authentication arrives in M5).",
+            file=sys.stderr,
+        )
+    print(f"serving {cfg.photo_root} at http://{host}:{args.port}/  (Ctrl-C to stop)")
+    app.run(host=host, port=args.port, debug=False, threaded=True)
+    return 0
+
+
 def cmd_check(args: argparse.Namespace) -> int:
     cfg = _load_config(args)
     conn = db.open_index(cfg.index_db, read_only=True)
@@ -478,6 +499,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     pst = sub.add_parser("stats", help="counts and derived-tree size")
     pst.set_defaults(func=cmd_stats)
+
+    pv = sub.add_parser("serve", help="run the web interface (development server)")
+    pv.add_argument("--bind", help="address to listen on (default: 127.0.0.1)")
+    pv.add_argument("--port", type=int, default=5000)
+    pv.set_defaults(func=cmd_serve)
 
     pu = sub.add_parser("user", help="manage accounts in users.toml")
     usub = pu.add_subparsers(dest="subcommand", required=True)

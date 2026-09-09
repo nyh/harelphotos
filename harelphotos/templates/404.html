@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Not found — {{ cfg.ui.site_title }}{% endblock %}
+{% block body %}
+<div class="empty-page">
+  <h1>Not found</h1>
+  <p>There is no album or photo here.</p>
+  <p><a href="/a/">Back to {{ cfg.ui.site_title }}</a></p>
+</div>
+{% endblock %}

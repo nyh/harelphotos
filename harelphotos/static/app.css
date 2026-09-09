@@ -1,0 +1,244 @@
+/* harelphotos (DESIGN.md 11).
+ *
+ * One stylesheet, no build step, no framework. Written with CSS *logical*
+ * properties throughout (margin-inline, padding-block, text-align: start)
+ * rather than left/right. That costs nothing today and is the difference
+ * between a future Hebrew interface being one `dir="rtl"` and being a rewrite.
+ */
+
+:root {
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --dim: #6b6b6b;
+  --line: #e2e2e2;
+  --card: #f6f6f6;
+  --accent: #2d6cdf;
+  --gap: 4px;
+  --radius: 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121212;
+    --fg: #ececec;
+    --dim: #9a9a9a;
+    --line: #2c2c2c;
+    --card: #1c1c1c;
+    --accent: #6ba3ff;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+a { color: inherit; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ---------------------------------------------------------------- topbar */
+
+.topbar {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-block-end: 1px solid var(--line);
+}
+
+.crumbs { font-size: 1.05rem; }
+.crumbs a { color: var(--dim); }
+.crumbs .sep { color: var(--dim); margin-inline: 0.35em; }
+.crumbs .here { font-weight: 600; }
+.meta, .dim { color: var(--dim); font-size: 0.85rem; }
+
+main {
+  padding: 1rem;
+  padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+}
+
+.blurb { color: var(--dim); max-inline-size: 60ch; }
+
+h2.section {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+  margin-block: 1.5rem 0.75rem;
+}
+h2.section:first-child { margin-block-start: 0.25rem; }
+
+/* ------------------------------------------------- album cards (11.1a)
+ * Uniform tiles with the caption BELOW the image. An overlay would need a
+ * scrim to survive a snow photo, and would dim the cover it sits on; since
+ * albums have their own section, nothing requires the label to be inside.
+ */
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem 0.75rem;
+}
+
+.card { display: block; }
+.card:hover { text-decoration: none; }
+
+.card-img {
+  aspect-ratio: 4 / 3;          /* uniform, so the captions line up */
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--card);
+  transition: transform 0.12s ease;
+}
+.card:hover .card-img,
+.card:focus-visible .card-img { transform: scale(1.02); }
+.card-img img { inline-size: 100%; block-size: 100%; object-fit: cover; display: block; }
+
+.card-blank {
+  display: grid;
+  place-items: center;
+  block-size: 100%;
+  font-size: 2.5rem;
+  color: var(--dim);
+}
+
+/* Fixed height, so one long album name cannot shove its neighbours out of
+ * alignment. */
+.card-text {
+  display: flex;
+  flex-direction: column;
+  margin-block-start: 0.45rem;
+  min-block-size: 2.9rem;
+}
+.card-title {
+  font-weight: 600;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.card-sub { color: var(--dim); font-size: 0.8rem; }
+
+/* ------------------------------------------------- photo grid (11.1c)
+ * Justified rows: true aspect ratios, never cropped. The flexbox rule below
+ * is the no-JS fallback and the first-paint layout; app.js then replaces it
+ * with exact rows.
+ */
+
+.grid { display: flex; flex-wrap: wrap; gap: var(--gap); }
+
+.grid .tile {
+  flex: 1 1 calc(var(--ar, 1) * 180px);
+  block-size: 180px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--card);
+}
+.grid .tile img { inline-size: 100%; block-size: 100%; object-fit: cover; display: block; }
+
+/* Once JS has measured, rows are exact and nothing is cropped. */
+.grid.justified { display: block; }
+.grid.justified .row {
+  display: flex;
+  gap: var(--gap);
+  margin-block-end: var(--gap);
+  content-visibility: auto;     /* the browser skips off-screen rows entirely */
+}
+.grid.justified .tile { flex: none; border-radius: 3px; }
+.grid.justified .tile img { object-fit: fill; }
+
+/* ------------------------------------------------------ single photo view */
+
+.viewer { display: flex; flex-direction: column; min-block-size: 100dvh; }
+.viewer-bar { background: var(--bg); }
+
+.actions { display: flex; gap: 0.5rem; align-items: center; }
+.actions button, .actions .button {
+  font: inherit;
+  color: var(--fg);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+  min-block-size: 44px;         /* touch target */
+  display: inline-flex;
+  align-items: center;
+}
+.actions .button:hover, .actions button:hover { border-color: var(--accent); text-decoration: none; }
+
+.stage {
+  position: relative;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 0.5rem;
+  min-block-size: 0;
+}
+.stage img {
+  max-inline-size: 100%;
+  max-block-size: calc(100dvh - 8rem);
+  inline-size: auto;
+  block-size: auto;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.nav {
+  position: absolute;
+  inset-block: 0;
+  display: flex;
+  align-items: center;
+  padding-inline: 0.75rem;
+  font-size: 2.5rem;
+  color: var(--fg);
+  opacity: 0.35;
+  text-decoration: none;
+  user-select: none;
+  min-inline-size: 44px;
+}
+.nav:hover { opacity: 1; text-decoration: none; }
+.nav.prev { inset-inline-start: 0; }
+.nav.next { inset-inline-end: 0; }
+
+.info {
+  border-block-start: 1px solid var(--line);
+  padding: 1rem;
+  padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+  background: var(--card);
+}
+.info dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.35rem 1.25rem;
+  margin: 0;
+  max-inline-size: 70ch;
+}
+.info dt { color: var(--dim); font-size: 0.85rem; }
+.info dd { margin: 0; }
+.info a { color: var(--accent); }
+
+.empty-page { padding: 4rem 1rem; text-align: center; }
+
+@media (max-width: 600px) {
+  .grid .tile { block-size: 120px; flex-basis: calc(var(--ar, 1) * 120px); }
+  .cards { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .stage img { max-block-size: calc(100dvh - 10rem); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}

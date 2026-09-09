@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ album.title }} — {{ cfg.ui.site_title }}{% endblock %}
+{% block body %}
+<header class="topbar">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    {%- for c in crumbs %}<a href="{{ c.url }}">{{ c.title }}</a><span class="sep">/</span>{% endfor -%}
+    <span class="here">{{ album.title }}</span>
+  </nav>
+  <div class="meta">
+    {%- if album.n_photos_rec %}{{ "{:,}".format(album.n_photos_rec) }} photos{% endif -%}
+    {%- if album|date_span %} <span class="sep">·</span> {{ album|date_span }}{% endif -%}
+  </div>
+</header>
+
+<main>
+  {% if album.description %}<p class="blurb">{{ album.description }}</p>{% endif %}
+
+  {# Albums and photos are different kinds of thing, so they get different
+     layouts. Headings only appear when there is more than one kind. #}
+  {% if subalbums %}
+    {% if photos %}<h2 class="section">Albums</h2>{% endif %}
+    <div class="cards">
+      {% for sub in subalbums %}
+      <a class="card" href="{{ sub.url }}">
+        <div class="card-img">
+          {% if sub.cover %}
+            <img src="{{ sub.cover|img_src(512) }}"
+                 srcset="{{ sub.cover|srcset(thumb_tiers) }}"
+                 sizes="(max-width: 600px) 45vw, 220px"
+                 width="{{ sub.cover.size_at(512)[0] }}"
+                 height="{{ sub.cover.size_at(512)[1] }}"
+                 loading="lazy" decoding="async"
+                 style="background: {{ sub.cover.colour }}" alt="">
+          {% else %}
+            <div class="card-blank" aria-hidden="true">🗀</div>
+          {% endif %}
+        </div>
+        <div class="card-text">
+          <span class="card-title" title="{{ sub.title }}">{{ sub.title }}</span>
+          <span class="card-sub">
+            {{ "{:,}".format(sub.n_photos_rec) }} photo{{ '' if sub.n_photos_rec == 1 else 's' }}
+            {%- if sub|date_span %} · {{ sub|date_span }}{% endif -%}
+          </span>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% if photos %}
+    {% if subalbums %}<h2 class="section">Photos</h2>{% endif %}
+    <div class="grid" id="grid" data-gap="4">
+      {% for p in photos %}
+      <a class="tile" href="{{ p.page_url }}" data-ar="{{ '%.4f'|format(p.aspect) }}"
+         style="--ar: {{ '%.4f'|format(p.aspect) }}">
+        <img src="{{ p|img_src(256) }}"
+             {% if p.tiers %}srcset="{{ p|srcset(thumb_tiers) }}"
+             sizes="(max-width: 600px) 33vw, 180px"{% endif %}
+             width="{{ p.size_at(256)[0] }}" height="{{ p.size_at(256)[1] }}"
+             loading="lazy" decoding="async"
+             style="background: {{ p.colour }}"
+             alt="{{ p.title or p.name }}">
+      </a>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% if not subalbums and not photos %}
+    <p class="blurb">This album is empty.</p>
+  {% endif %}
+</main>
+{% endblock %}

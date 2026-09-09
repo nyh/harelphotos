@@ -230,16 +230,40 @@ class Scanner:
         if not start.is_dir():
             raise NotADirectoryError(f"not a directory: {start}")
 
-        parent_chain: acl.Chain = ()
-        parent_id = None
-        if subpath:
-            # Rescanning a subtree: inherit the chain its ancestors imposed.
-            row = self.conn.execute(
-                "SELECT id, acl_chain FROM dirs WHERE path = ?", (subpath,)
-            ).fetchone()
-            if row:
-                parent_chain = acl.loads(row["acl_chain"])
+        parent_id, parent_chain = self._ensure_ancestors(subpath)
         self._walk_dir(start, subpath, parent_id, parent_chain)
+
+    def _ensure_ancestors(self, subpath: str) -> tuple[int | None, acl.Chain]:
+        """Create rows for the directories above `subpath`, without recursing.
+
+        Two things go wrong without this. The tree becomes unnavigable — the
+        root album does not exist, so there is nothing to browse down from. And
+        much worse, the ACL chain is read from ancestors that were never
+        scanned, so a restriction on a parent directory would be silently
+        missing and a private subtree would be served to everyone. Both are
+        reasons to build the chain from the .album.toml files on disk rather
+        than trusting whatever happens to be in the database.
+        """
+        chain: acl.Chain = ()
+        parent_id: int | None = None
+        parts = subpath.split("/") if subpath else []
+        # Every ancestor including the root itself, but not `subpath`.
+        for i in range(len(parts)):
+            path = "/".join(parts[:i])
+            abspath = self.cfg.photo_root / path if path else self.cfg.photo_root
+            cfg = album.load(abspath)
+            chain = acl.extend_chain(chain, cfg.allow, cfg.allow_replace)
+            name = parts[i - 1] if i else ""
+            dir_id, added = self._upsert_dir(path, name, parent_id, cfg, chain, abspath)
+            if added:
+                self.stats.dirs_added += 1
+            # Stamp it as seen so the prune does not delete an ancestor we
+            # deliberately did not walk into.
+            self.conn.execute(
+                "UPDATE dirs SET seen = ? WHERE id = ?", (self.generation, dir_id)
+            )
+            parent_id = dir_id
+        return parent_id, chain
 
     def _walk_dir(
         self, abspath: Path, relpath: str, parent_id: int | None, parent_chain: acl.Chain

@@ -23,5 +23,8 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["harelphotos*"]
 
+[tool.setuptools.package-data]
+harelphotos = ["templates/*.html", "static/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

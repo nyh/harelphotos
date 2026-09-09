@@ -35,27 +35,48 @@ def test_aspect_ratio_is_preserved_never_cropped(tmp_path):
         assert im.size == (512, 171)       # 3:1 kept, not squared off
 
 
-def test_never_upscales_and_records_which_tiers_exist(tmp_path):
+def test_never_upscales(tmp_path):
     photos = tmp_path / "pictures"
     fixtures.make_jpeg(photos / "small.jpg", size=(400, 300))
     cfg = fixtures.make_config(tmp_path, photos)
     res = derive.derive(photos / "small.jpg", "small.jpg", cfg)
-    # 2048 and 1280 are larger than the source, so they are skipped entirely.
-    assert res.tiers == [256]
-    assert not derive.derived_path(cfg, 2048, "small.jpg").exists()
-    with Image.open(derive.derived_path(cfg, 256, "small.jpg")) as im:
-        assert im.size == (256, 192)
+    assert 2048 not in res.tiers and 1280 not in res.tiers
+    for tier in res.tiers:
+        with Image.open(derive.derived_path(cfg, tier, "small.jpg")) as im:
+            assert max(im.size) <= 400, tier
 
 
-def test_a_photo_smaller_than_every_tier_gets_nothing(tmp_path):
-    # It still has to be displayable; the web layer falls back to the original.
+def test_resolution_between_two_tiers_is_not_thrown_away(tmp_path):
+    """A 1174 px photo must not end up with 512 px as its largest view.
+
+    Skipping every tier above the original loses most of the resolution of
+    anything falling between two tiers — which, in a collection spanning
+    decades of cameras, is a great many photos.
+    """
     photos = tmp_path / "pictures"
-    fixtures.make_jpeg(photos / "tiny.jpg", size=(100, 80))
+    fixtures.make_jpeg(photos / "mid.jpg", size=(1174, 789))
+    cfg = fixtures.make_config(tmp_path, photos)
+    res = derive.derive(photos / "mid.jpg", "mid.jpg", cfg)
+    assert 2048 not in res.tiers          # far bigger than the source: skipped
+    assert 1280 in res.tiers              # the smallest covering tier...
+    with Image.open(derive.derived_path(cfg, 1280, "mid.jpg")) as im:
+        assert im.size == (1174, 789)     # ...holds the original's own size
+    assert 512 in res.tiers and 256 in res.tiers
+
+
+def test_a_derivative_bigger_than_the_original_is_discarded(tmp_path):
+    # Re-encoding a very small photo can produce something larger. Serving
+    # that would be worse than serving the original, so it is thrown away and
+    # the web layer falls back to the original.
+    photos = tmp_path / "pictures"
+    fixtures.make_jpeg(photos / "tiny.jpg", size=(40, 30))
     cfg = fixtures.make_config(tmp_path, photos)
     res = derive.derive(photos / "tiny.jpg", "tiny.jpg", cfg)
-    assert res.tiers == []
     assert res.error is None
     assert res.colour is not None
+    original = (photos / "tiny.jpg").stat().st_size
+    for tier in res.tiers:
+        assert derive.derived_path(cfg, tier, "tiny.jpg").stat().st_size < original
 
 
 def test_orientation_is_applied(tmp_path):
@@ -145,9 +166,9 @@ def test_scan_generates_and_records_derivatives(tmp_path):
     row = conn.execute("SELECT * FROM photos WHERE name = 'a.jpg'").fetchone()
     assert row["deriv_key"] is not None
     assert row["color"].startswith("#")
-    # 800x600 fixtures: the two tiers at or below 800 are built, the rest
-    # skipped rather than upscaled.
-    assert json.loads(row["deriv_tiers"]) == [512, 256]
+    # 800x600 fixtures: 512 and 256 downscaled, plus 1280 holding the
+    # original's own size (2048 is far bigger, so skipped).
+    assert json.loads(row["deriv_tiers"]) == [1280, 512, 256]
     conn.close()
 
 

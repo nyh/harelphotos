@@ -306,6 +306,39 @@ def test_malformed_album_toml_is_recorded_not_raised(tree):
     assert row["title"] is None            # degraded to defaults, still scanned
 
 
+def test_subdirectory_scan_creates_its_ancestors(tree):
+    """Otherwise the root album does not exist and nothing is navigable."""
+    cfg, conn, _ = tree
+    scanner.scan(cfg, conn, subpath="2019/01")
+    paths = {r["path"] for r in conn.execute("SELECT path FROM dirs")}
+    assert "" in paths and "2019" in paths and "2019/01" in paths
+    # The ancestors are stamped seen, so the prune must not remove them.
+    scanner.scan(cfg, conn, subpath="2019/01")
+    paths = {r["path"] for r in conn.execute("SELECT path FROM dirs")}
+    assert "" in paths and "2019" in paths
+
+
+def test_subdirectory_scan_inherits_ancestor_restrictions(tmp_path):
+    """Security: a restriction on an unscanned parent must still apply.
+
+    Reading the chain from the database alone would leave it empty when the
+    parent was never scanned, and serve a private subtree to everyone.
+    """
+    photos = tmp_path / "pictures"
+    fixtures.make_jpeg(photos / "private" / "inner" / "x.jpg")
+    (photos / "private" / ".album.toml").write_text('allow = ["nyh"]\n', encoding="utf-8")
+    cfg = fixtures.make_config(tmp_path, photos)
+    conn = fixtures.fresh_index(cfg)
+
+    scanner.scan(cfg, conn, subpath="private/inner")
+    chain = acl.loads(
+        conn.execute("SELECT acl_chain FROM dirs WHERE path = 'private/inner'").fetchone()[0]
+    )
+    assert acl.can_view(chain, "nyh", {})
+    assert not acl.can_view(chain, "stranger", {})
+    conn.close()
+
+
 def test_scanning_a_subdirectory_only(tree):
     cfg, conn, _ = tree
     stats = scanner.scan(cfg, conn, subpath="2019/01")
