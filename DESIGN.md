@@ -148,7 +148,7 @@ Projected for a 300 GB collection (~80,000 photos at ~4 MB):
 ### 2.3 Why four tiers rather than two
 
 Two tiers each for the grid and the lightbox, delivered by plain `srcset`
-(§11.1), which is exactly how Google Photos behaves — it requests a different
+(§10.3), which is exactly how Google Photos behaves — it requests a different
 `=w…` size per device pixel ratio. The extra tiers cost disk but buy the two
 things the PLAN cares most about:
 
@@ -274,11 +274,12 @@ $DERIVED_ROOT/                     e.g. /var/lib/harelphotos/derived   (cache, r
 ├── 1280/2019/summer/IMG_1234.jpg.avif    lightbox, phones
 ├── 2048/2019/summer/IMG_1234.jpg.avif    lightbox, desktops
 ├── webp/2048/…                           fallback for Safari 14–16.3 etc. } made on
-└── jpeg/2048/…                           fallback for anything older      } demand (§9.4)
+├── jpeg/2048/…                           fallback for anything older      } demand (§9.4)
+└── public/landing-{640,1280}.avif        landing-page hero, served without a login (§11.5)
 
 $STATE/                            e.g. /var/lib/harelphotos/
-├── index.sqlite                   rebuildable index
-└── index.sqlite-wal, -shm
+├── index.sqlite                   rebuildable index (+ -wal, -shm)
+└── geonames.sqlite                place-name dataset; re-downloadable (§9.5)
 
 $CONFIG/                           e.g. /etc/harelphotos/
 ├── config.toml
@@ -315,6 +316,8 @@ users_file   = "/etc/harelphotos/users.toml"
 secret_key_file = "/etc/harelphotos/secret_key"
 
 base_url   = "https://photos.harel.org.il"   # needed for OAuth redirect URI
+sendfile_header = "auto"                     # "auto" | "X-Sendfile" | "none"  (§10.4)
+log_file        = "/var/lib/harelphotos/harelphotos.log"   # unset = stderr (§13.7)
 
 [ui]
 site_title      = "The Har'El Family Photo Album"   # browser title
@@ -336,6 +339,7 @@ view  = [1280, 2048]          # lightbox
 
 [encode]
 format         = "avif"
+fallback       = "auto"       # "auto" = Accept negotiation (§9.4); "none" = AVIF for all
 speed          = 6            # 0 slowest/smallest … 10 fastest/largest
 subsampling    = "4:2:0"
 recipe_version = 1            # bump to force a full re-encode
@@ -651,6 +655,22 @@ abort the run; `harelphotos check` lists them.
 - A separate `harelphotos gc --deep` walks the whole derived tree looking for
   files with no matching DB row (catches derivatives orphaned by a crash).
 
+### Only one scan at a time
+
+`scan`, `geocode` and `gc` take an exclusive lock — an `flock()` on
+`$STATE/scan.lock` — held for the whole run, and refuse to start (with a clear
+message naming the holder's PID and start time) if another holds it. Without
+this, an impatient second `harelphotos scan` in another terminal, or a cron job
+firing while you are running one by hand, gives two processes writing the same
+derived files and the same SQLite rows. SQLite's own locking would prevent
+corruption but not duplicated work, half-applied scan generations, or the
+deletion pass in phase 4 removing files the other process just wrote.
+
+`--force-unlock` exists for the case where a machine was hard-reset mid-scan.
+The web application never takes this lock: it only reads, WAL mode lets it read
+while a scan writes, and the whole point of the design is that a scan does not
+take the site down.
+
 ### Expected timings
 
 | Scenario | Time |
@@ -707,9 +727,18 @@ precisely the trap that produced 28 KB thumbnails under vips (§3.3), so the tes
 suite asserts that derivatives contain no metadata.
 
 Never upscale: a tier larger than the source is simply skipped, and the DB
-records which tiers actually exist so `srcset` only advertises real files. If
-encoding a tier would produce something *larger* than the original file, record
-"use the original" and skip it.
+records which tiers actually exist so `srcset` only advertises real files.
+
+A photo smaller than the smallest tier therefore has **no derivatives at all**,
+which the page must still be able to display. `/orig/…` cannot serve that need —
+it sets `Content-Disposition: attachment`, so pointing an `<img>` at it would
+offer a download instead of showing the picture. So the top tier degrades to an
+*inline* original: the same bytes, served with the image's real content type and
+no `Content-Disposition`, from `/i/orig/<path>`. It shares the ACL check and the
+caching rules of the other image routes, and `/orig/…` stays the
+deliberate-download route. Worth getting right early — small scanned images are
+exactly the case, and it is the sort of thing that surfaces as a mysteriously
+undisplayable photo months later.
 
 ### 9.2 Size ladder
 
@@ -799,12 +828,42 @@ resizing, Next.js/Vercel all support it).
 
 #### Why the adoption argument doesn't decide this
 
-Because we are not betting on it. Every browser sends an `Accept` header saying
-which image formats it understands, and the server simply gives each one what it
-asked for. A site that picks a single format for everyone has to bet on
-adoption; we don't.
+**AVIF *is* our default** — it is the only format we pre-generate, and on modern
+family hardware it is the only one that will ever be served. The fallback below
+is not a hedge that costs something; it is a safety net that costs nothing when
+unused.
 
-Concretely, one negotiated ladder, best first:
+The mechanism is ordinary HTTP content negotiation, which is worth spelling out
+because it's easy to have never noticed. Whenever a browser fetches an `<img>`,
+it *already* tells the server which image formats it can decode, in the `Accept`
+request header. It has always done this; AVIF was simply added to the list as
+browsers gained support. Verified against MDN's documentation, the default a
+browser sends for an image subresource looks like:
+
+```
+Accept: image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5
+```
+
+Nothing needs enabling and no JavaScript is involved — the header arrives on
+every image request. Reading it is one line:
+
+```python
+avif_ok = "image/avif" in request.headers.get("Accept", "")
+```
+
+This is the same mechanism CDNs use to serve AVIF or WebP from a single URL.
+
+**Why not simply serve AVIF to everyone and skip it?** That is very nearly what
+happens — but "everyone has modern hardware" is a statement about today's
+devices, and the failure mode if it's ever wrong is bad out of proportion to the
+five lines saved: a relative sees an empty grey page, with no error message and
+no obvious way to tell you what went wrong. They just stop using the site. The
+cases are real: an iPad stuck on iOS 15, a new family member with an old phone,
+a work laptop with a locked-down browser. Against that, when everyone *is*
+modern, the fallback code never runs and not a single WebP or JPEG file is
+created.
+
+So: one negotiated ladder, best first:
 
 1. `Accept` contains `image/avif` → serve the pre-generated AVIF. This is
    every current browser, and will be ~all of your traffic.
@@ -824,9 +883,17 @@ member is on an old iPad.
 
 #### If you'd rather not
 
-This is one config line: set `[encode] format = "webp"` and WebP becomes the
-primary pre-generated format, with JPEG as the only fallback. You pay the 8 GB
-and gain the reassurance of a format everyone has shipped for a decade. The
+Two escape hatches, both one line.
+
+To drop the negotiation entirely and serve AVIF unconditionally, set
+`[encode] fallback = "none"`. The `/i/…` routes then always return AVIF and the
+`Vary: Accept` requirement below disappears with it. Simplest possible
+behaviour; the cost is that a device without AVIF gets broken images rather than
+slower ones.
+
+To change the format everyone gets, set `[encode] format = "webp"`: WebP becomes
+the primary pre-generated format, with JPEG as the only fallback. You pay the
+8 GB and gain the reassurance of a format everyone has shipped for a decade. The
 pipeline, the tier ladder, the `srcset` markup and the negotiation logic are all
 format-agnostic, so nothing else changes — and `recipe_version` (§7) means
 switching later just triggers a rescan rather than a rebuild of anything by
@@ -838,8 +905,6 @@ a reversible decision either way, which is the main thing.
 
 (Decode speed is the other fair objection to AVIF, and it gets its own
 measurements in §9.6.)
-
----
 
 ### 9.5 Place names from coordinates
 
@@ -1075,14 +1140,14 @@ cameras record nothing, and your "ancient" directory is precisely that case;
 coordinates cannot help there at any accuracy. The same `location` key covers
 it:
 
-   ```toml
-   location = "Naxos, Greece"     # applies to this album and its subdirectories
-   ```
+```toml
+location = "Naxos, Greece"     # applies to this album and its subdirectories
+```
 
-   Precedence: a confident landmark match, then the photo's own resolved city,
-   then the album `location`, then raw coordinates. The album location is
-   inherited down the tree, and is what makes the info panel useful for the
-   pre-GPS half of the collection.
+Precedence: a confident landmark match, then the photo's own resolved city, then
+the album `location`, then raw coordinates. The album location is inherited down
+the tree, and is what makes the info panel useful for the pre-GPS half of the
+collection.
 
 ### 9.6 Decode cost on the client
 
@@ -1291,6 +1356,17 @@ cheap 304. Image URLs carry `?v=<deriv_key hash>` and get
 `Cache-Control: private, max-age=31536000, immutable` — the browser fetches each
 thumbnail exactly once, ever, and a re-encoded photo gets a new URL. This is
 what makes the "very speedy UI" of the PLAN actually feel instant on a revisit.
+
+**`Vary: Accept` is mandatory on every image response** whenever
+`[encode] fallback` is not `"none"`. One URL —
+`/i/256/…/IMG_1234.jpg` — deliberately returns AVIF, WebP or JPEG depending on
+the request's `Accept` header (§9.4). Combined with a year-long `immutable`
+cache lifetime, omitting `Vary` means any cache that saw one format can hand it
+to a client that cannot read it, and the failure is both silent and extremely
+long-lived. `private` keeps shared proxies out of it, but the browser's own
+cache is enough to cause this on a device whose `Accept` changes after a browser
+upgrade. This is a one-line header and a nasty bug if forgotten, so it gets an
+explicit test.
 
 ### 10.4 Serving image bytes
 
@@ -1533,6 +1609,7 @@ direct links and sharing.
   which is exactly why the phone gets its own 1280 tier (§2.3).
 - Progressive display: show the already-cached thumbnail, upscaled and blurred,
   under the view image until it decodes.
+
 #### The two actions on a photo
 
 **1. Download the original.** A clearly-labelled button (and the `d` key) on
@@ -1795,7 +1872,7 @@ shape of the process rather than an exact click path:
 4. Copy the client ID and secret into `config.toml`.
 
 **Register two redirect URIs**: the production
-`https://host/auth/google/callback`, and
+`https://photos.harel.org.il/auth/google/callback`, and
 `http://localhost:5000/auth/google/callback` for the home machine — Google
 permits plain HTTP specifically for loopback addresses (§13.5).
 
@@ -1956,8 +2033,9 @@ depends on and which fails silently if misconfigured).
 ```
 /opt/harelphotos/src         the checkout
 /opt/harelphotos/venv        the virtualenv
-/etc/harelphotos/            config.toml, users.toml, secret_key
-/var/lib/harelphotos/        index.sqlite, derived/
+/etc/harelphotos/            config.toml, users.toml, secret_key, newsign2.jpg
+/var/lib/harelphotos/        index.sqlite, geonames.sqlite, derived/
+/run/harelphotos/            gunicorn.sock (systemd RuntimeDirectory)
 /srv/photos/                 the originals
 ```
 
@@ -2263,7 +2341,29 @@ The dev server is single-threaded by default; pass `--threads 4` when testing
 a large album, or the browser's parallel image fetches will queue behind each
 other and give a misleading impression of how the grid performs.
 
-### 13.6 Backups
+### 13.6 Logging
+
+Not glamorous, but the difference between "the site is broken" and knowing why.
+Python's stdlib `logging`, one configuration, two destinations:
+
+- **The web app** logs to `log_file` from `config.toml`, or to stderr when unset
+  — under systemd, stderr goes to the journal, so `journalctl -u harelphotos`
+  works with no configuration at all. That's the recommended setup on the
+  server; `log_file` exists for the case where you'd rather have a plain file.
+- **The CLI** logs to stderr at `WARNING`, `-v` for `INFO`, `-q` for errors
+  only. Progress output (§15) goes to stdout and is separate from logging, so
+  `harelphotos scan >/dev/null` still shows you the problems.
+
+What must always be logged, because each is otherwise invisible: `.album.toml`
+parse errors (§5.3), per-photo derive failures (§8 phase 3), authentication
+failures with the source IP (§12.1), and any request that 500s. Apache keeps its
+own access log; there's no reason to duplicate it in the app.
+
+Deliberately *not* logged: photo paths on successful requests. A log of who
+viewed which family photos when is a privacy liability that serves no purpose
+here, and it is the kind of thing that accumulates silently for years.
+
+### 13.7 Backups
 
 Back up: `$PHOTO_ROOT` (the photos and their `.album.toml` files) and
 `$CONFIG` (`users.toml`, `secret_key`). Explicitly **do not** back up
@@ -2279,9 +2379,9 @@ bulk encoding happens at home. Concretely:
 
 ```
  1. Upload new photos to the server              (however you do it today)
- 2. server → home   rsync -a --delete originals  (mtimes must be preserved: -a does)
- 3. home            harelphotos scan             (~1.5 h first time, ~seconds later)
- 4. home → server   rsync -a --delete derived/   (~6 GB first time, small deltas after)
+ 2. server → home   rsync -a --delete originals  (mtimes preserved: -a does)
+ 3. home            harelphotos scan             (~1.8 h first time, ~seconds later)
+ 4. home → server   rsync -a --delete derived/   (~17 GB first time, small deltas after)
  5. home → server   copy index.sqlite            (VACUUM INTO for a consistent snapshot)
  6. server          systemctl reload harelphotos
 ```
@@ -2293,10 +2393,14 @@ Two correctness requirements this imposes, both already satisfied by the design:
 
 - **Relative paths everywhere in the DB**, so `index.sqlite` is portable between
   machines (§7).
-- **`deriv_key` depends only on `(size, mtime_ns, encode settings)`** — all
-  preserved by `rsync -a` — so the server agrees with the home machine about
-  what is up to date, and a `harelphotos scan` run *on the server* after a sync
-  finds nothing to do rather than re-encoding 80,000 photos.
+- **`deriv_key` is derived from `content_sig`, not from `mtime_ns`** (§7). This
+  is what makes the sync robust: the signature is computed from the file's own
+  bytes, which `rsync` reproduces exactly, so the server agrees with the home
+  machine about what is up to date and a `harelphotos scan` run *on the server*
+  after a sync finds nothing to do rather than re-encoding 80,000 photos. Had
+  the key depended on mtime, any timestamp drift between the two machines — a
+  filesystem with coarser timestamp granularity, an rsync without `-a`, a
+  restore from backup — would have triggered exactly that mass re-encode.
 
 If the home machine ever lacks a full copy of the photos, `harelphotos scan` on
 the server still works — it's just slower (and `--nice`, `--jobs 1`, `--limit`
@@ -2391,6 +2495,16 @@ Not exhaustive TDD, but enough that a rescan can't silently eat data:
   differently; GPS renders when present and the whole row disappears under
   `show_gps = false`; a photo with no GPS inherits its album's `location`, and
   its own coordinates win when it has them.
+- **Content-negotiation tests** (§9.4) — a request whose `Accept` includes
+  `image/avif` gets AVIF; one with only `image/webp` gets WebP; one with
+  neither gets JPEG; and **every image response carries `Vary: Accept`**, which
+  is the silent-and-long-lived bug of §10.3. Also: `fallback = "none"` returns
+  AVIF regardless of `Accept`.
+- **Scan locking test** (§8) — a second `scan` while one holds the lock exits
+  with a clear message rather than running concurrently.
+- **Tiny-image test** — a photo smaller than the smallest tier gets no
+  derivatives and still renders, via the inline-original route, without
+  `Content-Disposition` (§9.1).
 - **Derivative tests** — orientation applied correctly (all 8 EXIF values),
   no upscaling, no EXIF in output, `deriv_key` invalidation on each config
   change, atomic-write behaviour.
