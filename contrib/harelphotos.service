@@ -22,15 +22,28 @@ Group=nyh
 Environment=HARELPHOTOS_CONFIG=/etc/harelphotos/config.toml
 WorkingDirectory=/home/nyh/harelphotos
 
-# --workers: this machine is CPU-weak and the workers do almost no CPU work
-# (Apache sends the image bytes via X-Sendfile), so a small number is right.
-# 3 is a reasonable start for 2 cores; raise it only if requests queue.
+# --threads is the setting that matters here, not --workers.
+#
+# An album page is one HTML request followed by hundreds of image requests, and
+# a browser issues many of them at once. With synchronous workers only
+# `--workers` requests are served at a time and the rest queue: measured on a
+# 381-photo album with 3 workers and 12 parallel requests, 48 of 60 images
+# returned in 0.44s and the other 12 hung until the 120s timeout killed their
+# worker. That is the "some photos never load, then appear a minute later"
+# symptom exactly.
+#
+# Threads suit this workload precisely. With X-Sendfile the Python side of an
+# image request is an access check and a header -- microseconds, then Apache
+# sends the bytes -- so a thread spends its time waiting, not computing, and
+# the GIL is barely contended. 3 x 8 = 24 concurrent requests.
 #
 # --timeout 120: the first request for a WebP or JPEG fallback transcodes on
 # demand, and on a slow machine a large image can take a while. Every request
 # after it is a static file.
 ExecStart=/home/nyh/harelphotos/.venv/bin/gunicorn \
     --workers 3 \
+    --threads 8 \
+    --worker-class gthread \
     --timeout 120 \
     --bind 127.0.0.1:8099 \
     --access-logfile - \

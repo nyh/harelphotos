@@ -151,6 +151,53 @@
     });
   }
 
+  // Keep the browser's request queue short, so what you are looking at is not
+  // stuck behind what you have already scrolled past.
+  //
+  // `loading="lazy"` starts images well before they are needed, and once a
+  // request is queued it stays queued -- scroll through a 400-photo album and
+  // hundreds of requests for photos now far off-screen sit ahead of the ones
+  // filling the screen. Abandoning those frees the slots immediately.
+  //
+  // Only ever abandons an image that has NOT finished loading: a completed one
+  // keeps its srcset, so nothing is fetched twice.
+  function limitLoading(grid) {
+    if (!("IntersectionObserver" in window)) return;   // native lazy only
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        var img = e.target.firstElementChild;
+        if (!img || img.tagName !== "IMG") return;     // a pending placeholder
+        if (e.isIntersecting) {
+          if (img.dataset.srcset) {
+            img.setAttribute("srcset", img.dataset.srcset);
+            delete img.dataset.srcset;
+          }
+          if (img.dataset.src) {
+            img.setAttribute("src", img.dataset.src);
+            delete img.dataset.src;
+          }
+          if ("fetchPriority" in img) img.fetchPriority = "high";
+        } else if (!img.complete) {
+          // Park the URLs rather than dropping them, and clear the attributes,
+          // which is what actually cancels an in-flight request.
+          if (img.getAttribute("srcset")) {
+            img.dataset.srcset = img.getAttribute("srcset");
+            img.removeAttribute("srcset");
+          }
+          if (img.getAttribute("src")) {
+            img.dataset.src = img.getAttribute("src");
+            img.removeAttribute("src");
+          }
+        }
+      });
+    // Two viewports of slack: far enough that scrolling normally never waits,
+    // near enough that the queue stays short.
+    }, { rootMargin: "200% 0px" });
+    Array.prototype.forEach.call(grid.querySelectorAll(".tile"), function (t) {
+      io.observe(t);
+    });
+  }
+
   function initGrid() {
     var grid = document.getElementById("grid");
     if (!grid) return;
@@ -169,6 +216,7 @@
     }
     lastWidth = grid.clientWidth;
     layoutGrid(grid);
+    limitLoading(grid);
     rememberScroll(grid);
     window.addEventListener("resize", relayout, { passive: true });
   }

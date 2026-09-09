@@ -300,6 +300,11 @@ short window, the top bar shrinks to about a third of its height rather than
 floating over the photo: covering part of the picture to make the rest slightly
 bigger is the wrong trade on a page whose entire purpose is looking at it.
 
+In a large album the browser stops fetching photos you have scrolled far past.
+Requests already queued for them are abandoned, so the ones filling the screen
+are not stuck behind hundreds of others; anything that had finished loading is
+kept and never fetched twice.
+
 While you are looking at a photo, the ones on either side of it are fetched in
 the background, so paging with the arrow keys does not wait for the network.
 The browser picks the size for those the same way it does for the visible

@@ -460,9 +460,31 @@ Where things go wrong:
 | login always returns to the login page | `base_url` is not exactly what the browser asked for, so the cookie is dropped |
 | everyone throttled at once | `behind_proxy` is not `true` |
 | grey placeholder tiles | those photos have no images generated yet; finish the scan |
+| photos on a big album never load, then appear a minute later | too few gunicorn threads — see below |
 | self-signed certificate warning | the TLS vhost is inert — see the end of §4 |
 | `Failed to connect to bus` from `systemd-run --user` | an ssh login has no user D-Bus session; use `tmux`, see §2 |
 | thumbnails re-download on every page load | an old build: fixed by not re-sending the session cookie each response |
+
+### When a large album loads only some of its photos
+
+An album page is one HTML request followed by hundreds of image requests, many
+issued at once. With synchronous gunicorn workers only `--workers` of them are
+served at a time and the rest queue; anything still waiting after `--timeout`
+has its worker killed, so it fails outright and only succeeds on a later scroll.
+Measured on a 381-photo album with 3 workers: 48 of 60 images returned in
+0.44s, and the other 12 hung until the 120s timeout.
+
+`--threads 8` in the unit file is the fix, and the current
+`contrib/harelphotos.service` has it. If you deployed before that, re-copy it:
+
+```sh
+sudo cp contrib/harelphotos.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl restart harelphotos
+```
+
+Threads rather than more workers because with X-Sendfile the Python side of an
+image request is an access check and a header -- microseconds, then Apache
+sends the bytes -- so a thread spends its time waiting rather than computing.
 
 A note for the next time you install this: almost everything that went wrong
 the first time was a permission or a name typed in two places that had to
