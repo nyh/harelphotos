@@ -1,0 +1,74 @@
+I want you to create a plan that you can later follow and implement, for a new
+programming project:
+
+I have a personal collection of photos, roughly 300 GB of mostly JPEG photos,
+stored on an Internet connected server running Linux. The photos are organized
+in a standard hierarchical directory structure, the top level is mostly by year
+but doesn't have to (e.g., I'll have an "ancient" subdirectory), and lower levels
+are often individual months, sometimes topical directories, and sometimes a hierarchy
+of several layers.
+
+I want to run a Web site similar to the UI of Google Photos on this server: I want my
+family members to have individual accounts that I give them and be able to log in,
+and then see these photos (unauthorized people will not be able to see anything).
+The normal ways to browse should be a very speedy UI of thumbnails of the photos in
+a directory, and be able to go into a subdirectory or back to parent directory, as
+well as the ability to a single-photo view view and see larger photos - and finally
+the ability to download individual original-sized photos.
+
+The UI should be nicely viewable on any modern computer running Firefox or Chrome,
+as well as a browser on phone, and be convenient, pretty and responsive.
+
+The server is weak in CPU, so it should prepare things in advance: If we want to
+show small thumbnails or screen-size images we should prepare them in advance,
+and also compress them efficiently to use up little disk and bandwidth, and then
+viewing the thumbnails et al. should be very responsive. We could also create
+static HTML for a lot of the content (of course, the authentication part will need
+to be dynamic). Although I do have enough space for the 300 GB of photos, I don't
+have huge amounts of space to spare, so the implementation should also be careful
+about disk space use (the smaller photos are fine, even the large versions should
+be an order of magnitude smaller than the originals).
+
+The server is running Linux and the implementation needs to use only free software,
+and if possible things that will not require very large or complex installations.
+If I had to choose a programming language I like most, I prefer Python, but I'm
+open to be convinced to choose other languages.
+
+You can use existing libraries, databases, etc., but again I would prefer to
+not be too complex, prefer libraries that typical Linux installations already have
+or can easily get, and things I will be able to understand later.
+
+Some more ideas I had:
+
+* When I upload new photos and new subdirectories to the photo directory, I want
+  to be able to run a program which will rescan the photos, figure out what changed
+  (added or deleted) and create/delete the thumbnails, files, databases, or whatever
+  needs to be changed. This process should be relatively efficient - I won't do it
+  often but I also don't want it to take many hours for 300 GB of photos.
+
+* Each subdirectory (including the top-level subirectory) will have a representative
+  photo. Initially it will be chosen randomly (perhaps just the first photo), but
+  I want to be able to choose a different one.
+
+* To choosing the representative photo of a directory, or other types of configuration
+  or metadata, I don't want to write this information into a database - I want to be
+  able to write it ordinary files inside the directory, in some configuration format.
+  For example, I want to be able to set the "thumbnail" (the representative photo
+  for the directory), the "title" of the directory, etc.
+
+* I will run the same software both on my home Linux machine and on the (weak) server,
+  which reiterates the fact I want it to be relatively easy to install the prerequisite
+  packages. I'm a Linux expert - I won't have problems installing things - but I don't
+  want to install a bazillion things.
+
+* I want to have an option to support Google accounts. For example, I'll say that
+  "somebody@gmail.com" can use the site, and anyone that Google claims authenticated
+  as somebody@gmail.com will be able to see it.
+
+* I want to be able to have a URLs that points to the top album but also URLs that
+  point to individual subdirectories.
+
+* I want to be able to have an option (again, configurable in the configuration
+  file stored in each subdirectory) to allow only specific authenticated users to
+  look into a certain directory (and its subdirectories).
+  

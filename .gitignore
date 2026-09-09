@@ -1,0 +1,17 @@
+# RCS working files — history lives in git from here on
+*,v
+RCS/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Local instance data (never belongs in the repo)
+config.toml
+users.toml
+secret_key
+derived/
+index.sqlite*
