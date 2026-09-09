@@ -7,6 +7,7 @@ is one test; the rest are the ways a token can be genuine but not ours.
 import base64
 import json
 import time
+from dataclasses import replace
 
 import pytest
 
@@ -171,3 +172,111 @@ def test_disabled_unless_fully_configured(tmp_path):
     assert google_auth.enabled(cfg)
     object.__setattr__(cfg.google, "client_secret", "")
     assert not google_auth.enabled(cfg)
+
+
+# ------------------------------------------------------------ the routes
+#
+# The module tests above cover the claim checking. These cover the wiring:
+# that the feature is genuinely reachable when switched on, genuinely absent
+# when not, and that Google authenticating someone is not by itself enough to
+# get in.
+
+@pytest.fixture
+def google_app(tmp_path):
+    from harelphotos import config as config_mod, scanner
+    from harelphotos.web import create_app
+    from tests import fixtures
+
+    photos = fixtures.make_tree(tmp_path / "pictures")
+    cfg = fixtures.make_config(tmp_path, photos)
+    conn = fixtures.fresh_index(cfg)
+    scanner.scan(cfg, conn)
+    conn.close()
+    fixtures.add_user(cfg, "nyh", "nyh")
+
+    object.__setattr__(cfg, "base_url", "https://photos.example.org")
+    object.__setattr__(cfg, "google", config_mod.Google(
+        enabled=True, client_id=CLIENT_ID, client_secret="shh"))
+    app = create_app(cfg, require_login=True)
+    app.config.update(TESTING=True)
+    return app, cfg
+
+
+def test_the_login_page_offers_google_only_when_enabled(google_app, tmp_path):
+    from harelphotos.web import create_app
+    from tests import fixtures
+
+    app, cfg = google_app
+    body = app.test_client().get("/login").get_data(as_text=True)
+    assert "Sign in with Google" in body
+    assert "/auth/google" in body
+
+    # And with it off, the button and the routes are both gone -- an
+    # unconfigured OAuth client must not be advertised.
+    object.__setattr__(cfg, "google", type(cfg.google)(enabled=False))
+    off = create_app(cfg, require_login=True)
+    off.config.update(TESTING=True)
+    c = off.test_client()
+    assert "Sign in with Google" not in c.get("/login").get_data(as_text=True)
+    assert c.get("/auth/google").status_code == 404
+    assert c.get("/auth/google/callback").status_code == 404
+
+
+def test_starting_sign_in_redirects_to_google_with_the_right_parameters(google_app):
+    app, cfg = google_app
+    r = app.test_client().get("/auth/google?next=/a/2019/01/")
+    assert r.status_code == 302
+    loc = r.headers["Location"]
+    assert loc.startswith("https://accounts.google.com/o/oauth2/v2/auth?")
+    assert "client_id=" + CLIENT_ID.replace(".", "%2E") in loc or CLIENT_ID in loc
+    assert "scope=openid+email" in loc
+    assert "response_type=code" in loc
+    # The redirect_uri must be the https one Google has registered, never the
+    # test client's own host.
+    assert "photos.example.org%2Fauth%2Fgoogle%2Fcallback" in loc
+
+
+def test_a_verified_google_user_with_no_account_is_refused(google_app, monkeypatch):
+    """The point of the whole design: Google authenticates, users.toml
+    authorises. Someone with a perfectly good Google account and no invitation
+    must not get in."""
+    from harelphotos import google_auth as ga
+
+    app, cfg = google_app
+    client = app.test_client()
+    client.get("/auth/google")          # establishes the state in the session
+
+    monkeypatch.setattr(ga, "complete",
+                        lambda *a, **k: (ga.Identity("stranger@gmail.com", "9"), ""))
+    r = client.get("/auth/google/callback?code=x&state=y")
+    assert r.status_code == 403
+    assert "not been invited" in r.get_data(as_text=True)
+    assert client.get("/a/").status_code == 302     # still logged out
+
+
+def test_a_google_address_on_an_account_signs_in(google_app, monkeypatch):
+    from harelphotos import google_auth as ga
+    from harelphotos import users as users_mod
+
+    app, cfg = google_app
+    # Attach a Google address to the existing local account.
+    us = users_mod.load(cfg.users_file)
+    table = dict(us.by_token)
+    table["nyh"] = replace(table["nyh"], google="nyh@gmail.com")
+    users_mod.save(cfg.users_file, users_mod.Users(by_token=table))
+
+    client = app.test_client()
+    client.get("/auth/google")
+    monkeypatch.setattr(ga, "complete",
+                        lambda *a, **k: (ga.Identity("nyh@gmail.com", "9"), "/a/2019/01/"))
+    r = client.get("/auth/google/callback?code=x&state=y")
+    assert r.status_code == 302
+    assert r.headers["Location"] == "/a/2019/01/"
+    assert client.get("/a/").status_code == 200     # really logged in
+
+
+def test_a_cancelled_sign_in_is_not_an_error_page(google_app):
+    app, _ = google_app
+    r = app.test_client().get("/auth/google/callback?error=access_denied")
+    assert r.status_code == 400
+    assert "cancelled" in r.get_data(as_text=True).lower()
