@@ -225,6 +225,10 @@ harelphotos serve
 
 Then open <http://127.0.0.1:5000/>.
 
+If it says *Address already in use*, something else holds port 5000. Find it
+with `ss -ltnp | grep :5000`, or just pick another port with
+`--port 5001`.
+
 **`serve` never scans.** It only reads what is already in the index, so run
 `harelphotos scan` first — and again whenever you add photos. If some photos
 have no images generated yet, `serve` says so on startup rather than leaving

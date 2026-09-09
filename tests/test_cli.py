@@ -127,3 +127,24 @@ def test_missing_config_is_a_clean_error(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(config_mod, "CONFIG_SEARCH", ())
     assert cli.main(["user", "list"]) == 1
     assert "no config.toml found" in capsys.readouterr().err
+
+
+def test_serve_refuses_an_empty_index(project, capsys):
+    assert cli.main(["serve"]) == 1
+    assert "run 'harelphotos scan' first" in capsys.readouterr().err
+
+
+def test_the_no_listen_guard_is_real(project, tmp_path):
+    """conftest's guard is load-bearing, not decorative.
+
+    A test that starts a server blocks forever and orphans a process holding
+    the port — which is exactly what happened once, to port 5000.
+    """
+    import socket
+
+    import pytest
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        with pytest.raises(AssertionError, match="must not start a server"):
+            s.listen(1)
