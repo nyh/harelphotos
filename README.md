@@ -32,7 +32,7 @@ Chosen from measurements rather than taste — the numbers behind each are in
 
 | | |
 |---|---|
-| Derivative format | **AVIF**, four tiers (256/512 px grid, 1280/2048 px lightbox) delivered by `srcset` |
+| Derivative format | **AVIF**, four tiers (256/512 px grid, 1280/2048 px lightbox) delivered by `srcset`; WebP/JPEG served to older browsers by content negotiation. Measured 48% smaller than WebP at matched SSIM |
 | Derived tree size | **~17 GB for ~80,000 photos** — 5.6% of the originals |
 | Bulk encode | **~22 core-hours** (~1.8 h on 12 cores), run on a fast machine and rsynced to the server |
 | Change detection | mtime decides whether to *look*; a content signature decides whether to *work*, so re-dating files doesn't trigger a mass re-encode |

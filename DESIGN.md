@@ -13,7 +13,7 @@ From the original PLAN plus follow-up answers:
 |---|---|
 | Front-end web server | **Apache httpd** (reverse proxy / static handoff) |
 | Media types in v1 | **JPEG only.** Video/HEIC/RAW/PNG deliberately out of scope, but the code must not make them impossible to add |
-| Derivative image format | **AVIF**, with a JPEG fallback path for non-AVIF clients |
+| Derivative image format | **AVIF**, with WebP→JPEG fallback by `Accept` negotiation (§9.4) |
 | Bulk encoding | Runs on the **fast home machine**; only the small derived tree is shipped to the weak server |
 | Login methods | **Local accounts + Google Sign-In**, both in v1 |
 | Per-directory config format | **TOML** — `.album.toml` |
@@ -274,7 +274,8 @@ $DERIVED_ROOT/                     e.g. /var/lib/harelphotos/derived   (cache, r
 ├── 512/2019/summer/IMG_1234.jpg.avif     grid tile, DPR ≥ 1.5
 ├── 1280/2019/summer/IMG_1234.jpg.avif    lightbox, phones
 ├── 2048/2019/summer/IMG_1234.jpg.avif    lightbox, desktops
-└── jpeg/2048/…                           lazily-made JPEG fallbacks (§9.4)
+├── webp/2048/…                           fallback for Safari 14–16.3 etc. } made on
+└── jpeg/2048/…                           fallback for anything older      } demand (§9.4)
 
 $STATE/                            e.g. /var/lib/harelphotos/
 ├── index.sqlite                   rebuildable index
@@ -741,19 +742,94 @@ and it makes the grid look intentional while images stream in. (Considered
 blurhash; a solid colour behind `loading="lazy"` images is 95% as good for none
 of the dependency.)
 
-### 9.4 JPEG fallback
+### 9.4 Why AVIF, and what non-AVIF browsers get
 
-AVIF is supported by Firefox 93+, Chrome 85+, Safari 16.4+ — i.e. everything
-the PLAN targets. So generating a full parallel JPEG tree would double the
-derived size to serve almost nobody. Instead:
+AVIF is much less common on the web than WebP, and that's a fair reason to
+question it. Two separate questions hide inside "is AVIF a good choice?" — what
+it costs, and who can read it.
 
-- The app inspects the request's `Accept` header. If it contains `image/avif`,
-  serve the AVIF (the normal case).
-- Otherwise, transcode AVIF→JPEG **on demand** and cache the result under
-  `$DERIVED_ROOT/jpeg/<tier>/…`. First hit for such a client is slow; after that it is
-  static. A rate limit caps the damage from a crawler.
-- `harelphotos scan --jpeg-fallback` pre-generates the whole JPEG tree for
-  anyone who'd rather spend the disk.
+#### What it costs: measured against WebP and JPEG
+
+Same six photos, same four tiers. To compare fairly, each tier was encoded to
+AVIF at our chosen quality, then WebP was searched at **1-point quality
+increments** for the lowest setting whose SSIM (against the same reference
+image) met or beat AVIF's. So WebP here is at *equal or slightly better*
+measured quality, not merely at a similar-sounding quality number:
+
+| tier | AVIF | SSIM | WebP (matched) | SSIM | WebP vs AVIF | JPEG q82 |
+|---:|---:|---:|---:|---:|---:|---:|
+| 2048 | 127.0 KB | 0.9469 | 192.7 KB (q60) | 0.9519 | **+52%** | 434.7 KB |
+| 1280 | 59.5 KB | 0.9391 | 87.5 KB (q52) | 0.9466 | **+47%** | 196.9 KB |
+| 512 | 12.8 KB | 0.9358 | 17.0 KB (q48) | 0.9418 | **+33%** | 38.4 KB |
+| 256 | 5.2 KB | 0.9500 | 5.8 KB (q52) | 0.9506 | **+11%** | 11.8 KB |
+| **per photo** | **205 KB** | | **303 KB** | | **+48%** | 682 KB |
+| **80k photos** | **16.8 GB** | | **24.8 GB** | | **+8 GB** | 55.9 GB |
+
+So the choice is worth about **8 GB of disk** and ~48% of the bandwidth on every
+photo viewed, on a server where the PLAN says space is tight and CPU is weak.
+The advantage grows with image size, which is exactly backwards from what you'd
+want if you were hoping to dismiss it: it's largest on the lightbox images that
+dominate bandwidth, and smallest on the 256 px thumbnails where it barely
+matters.
+
+(Caveat on method: SSIM is a decent relative metric, not a perceptual verdict,
+and it treats codecs somewhat differently. Treat "+48%" as solid to within a few
+points, not to the decimal.)
+
+#### Who can read it
+
+- **Chrome 85+** (Aug 2020), **Firefox 93+** (Oct 2021), **Safari 16.4+**
+  (Mar 2023), and the Android and iOS browsers of those vintages.
+- The real gap is **iOS before 16.4** — which in practice means iPhones and
+  iPads that cannot upgrade past iOS 15, i.e. 2015–2016 hardware such as the
+  iPhone 6s/7 and older iPads. For a *family* site this is not a hypothetical:
+  it is exactly the device an older relative still uses.
+
+On adoption: WebP is far more widely deployed than AVIF, and Google — which
+created WebP — uses it heavily across its products. I can't verify from here
+what Google Photos serves to a given browser, and I'd rather say that than
+guess; if it matters to you, open a photo there and check the response's
+`Content-Type`. AVIF adoption is real but narrower (Netflix, Cloudflare's image
+resizing, Next.js/Vercel all support it).
+
+#### Why the adoption argument doesn't decide this
+
+Because we are not betting on it. Every browser sends an `Accept` header saying
+which image formats it understands, and the server simply gives each one what it
+asked for. A site that picks a single format for everyone has to bet on
+adoption; we don't.
+
+Concretely, one negotiated ladder, best first:
+
+1. `Accept` contains `image/avif` → serve the pre-generated AVIF. This is
+   every current browser, and will be ~all of your traffic.
+2. Else `image/webp` → serve WebP. This covers Safari 14–16.3 and older
+   Chrome/Firefox — the band that lacks AVIF but is far from ancient.
+3. Else → JPEG. Universal, and by then we're talking about genuinely old
+   software.
+
+Tiers 2 and 3 are **transcoded on demand from the AVIF and cached** under
+`$DERIVED_ROOT/{webp,jpeg}/<tier>/…`, so they cost nothing until some device
+actually asks. The first such request is slow; every one after it is a static
+file. A rate limit caps the damage from a crawler.
+
+`harelphotos scan --fallback webp` pre-generates the whole WebP tree if you'd
+rather spend the disk than have anyone wait — worth doing if you know a family
+member is on an old iPad.
+
+#### If you'd rather not
+
+This is one config line: set `[encode] format = "webp"` and WebP becomes the
+primary pre-generated format, with JPEG as the only fallback. You pay the 8 GB
+and gain the reassurance of a format everyone has shipped for a decade. The
+pipeline, the tier ladder, the `srcset` markup and the negotiation logic are all
+format-agnostic, so nothing else changes — and `recipe_version` (§7) means
+switching later just triggers a rescan rather than a rebuild of anything by
+hand.
+
+My recommendation stays AVIF, on the grounds that the fallback makes the
+downside a non-event while the upside is 8 GB and half the bandwidth. But it's
+a reversible decision either way, which is the main thing.
 
 ---
 
@@ -1804,7 +1880,7 @@ requirement.
 harelphotos init                     create config, state dirs, secret key,
                                      and default privacy/terms text (§12.2)
 harelphotos scan [--full] [--jobs N] [--nice N] [--limit N] [--dir PATH]
-                 [--dry-run] [--jpeg-fallback]
+                 [--dry-run] [--fallback webp|jpeg]
 harelphotos check                    config errors, missing/failed derivatives,
                                      orphans, broken cover references, ACL summary
 harelphotos gc [--deep]              remove orphaned derivatives
