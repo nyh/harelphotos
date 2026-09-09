@@ -380,6 +380,24 @@ def cmd_serve(args: argparse.Namespace) -> int:
     if not cfg.index_db.exists():
         print("no index yet — run 'harelphotos scan' first", file=sys.stderr)
         return 1
+    conn = db.open_index(cfg.index_db, read_only=True)
+    total = conn.execute("SELECT count(*) AS n FROM photos").fetchone()["n"]
+    ready = conn.execute(
+        "SELECT count(*) AS n FROM photos WHERE deriv_key IS NOT NULL"
+    ).fetchone()["n"]
+    conn.close()
+    if total == 0:
+        print("the index is empty — run 'harelphotos scan' first", file=sys.stderr)
+        return 1
+    if ready < total:
+        # Otherwise the pages render with every thumbnail broken and no clue why.
+        print(
+            f"NOTE: {total - ready:,} of {total:,} photos have no images generated yet, "
+            f"so they will not display.\n"
+            f"      Run 'harelphotos scan' to generate them.",
+            file=sys.stderr,
+        )
+
     from .web import create_app
 
     app = create_app(cfg)

@@ -21,6 +21,15 @@ from PIL import Image, ImageCms, ImageFilter, ImageOps
 
 from .config import Config
 
+# Bumped whenever a change in THIS FILE changes the images produced, so that
+# an upgrade regenerates them. Distinct from config's `recipe_version`, which
+# is the owner's own lever: this one is ours, and they should not have to know
+# that the pipeline changed in order to benefit from it.
+#
+#   2  the smallest tier covering an over-sized original now holds the
+#      original's own size, instead of that tier being skipped entirely
+PIPELINE_VERSION = 2
+
 # Sharpening after a downscale. Downscaled photos always look soft; this is
 # what makes the grid crisp rather than mushy. Gentler on the small tiers,
 # where over-sharpening reads as noise and costs bytes.
@@ -94,6 +103,7 @@ def deriv_key(content_sig: bytes | None, cfg: Config) -> str:
     recipe = "|".join(
         [
             e.format,
+            str(PIPELINE_VERSION),
             str(e.recipe_version),
             str(e.speed),
             e.subsampling,

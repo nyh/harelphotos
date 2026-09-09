@@ -219,6 +219,15 @@ harelphotos serve
 
 Then open <http://127.0.0.1:5000/>.
 
+**`serve` never scans.** It only reads what is already in the index, so run
+`harelphotos scan` first — and again whenever you add photos. If some photos
+have no images generated yet, `serve` says so on startup rather than leaving
+you with a page full of broken thumbnails and no explanation.
+
+After upgrading the software, run `scan` once: if the way images are produced
+has changed, it regenerates them by itself, without your having to know that
+anything changed.
+
 **There is no authentication yet.** Binding anywhere other than localhost hands
 your whole collection to anyone on the network; the command warns you if you
 do. Logging in arrives in M5, and the server deployment (Apache, TLS) in M8 —

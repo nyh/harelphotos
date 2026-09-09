@@ -145,6 +145,24 @@ def test_deriv_key_changes_with_every_setting_that_matters(tmp_path):
     assert derive.deriv_key(b"sig", other) != base
 
 
+def test_pipeline_version_invalidates_derivatives(tmp_path):
+    """Changing how images are produced must regenerate them.
+
+    Without this the owner would have to know that the code changed and bump
+    `recipe_version` by hand, which nobody would ever do.
+    """
+    photos = tmp_path / "pictures"
+    photos.mkdir()
+    cfg = fixtures.make_config(tmp_path, photos)
+    base = derive.deriv_key(b"sig", cfg)
+    original = derive.PIPELINE_VERSION
+    try:
+        derive.PIPELINE_VERSION = original + 1
+        assert derive.deriv_key(b"sig", cfg) != base
+    finally:
+        derive.PIPELINE_VERSION = original
+
+
 def test_deriv_key_ignores_mtime(tmp_path):
     """The whole point: touching a file must not invalidate its derivatives."""
     photos = tmp_path / "pictures"
