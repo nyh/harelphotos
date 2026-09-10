@@ -80,9 +80,11 @@ harelphotos geocode
 
 The first downloads the place-name data — a small file of towns worldwide, and
 a much larger one, several hundred megabytes, of airports, parks, museums and
-monuments. The second turns each photograph's coordinates into a name like
-"Náxos, Greece", or the airport you were standing in. Both are offline
-afterwards, and no coordinates are ever sent anywhere.
+monuments. The second turns each photograph's coordinates into a name: "Náxos,
+Greece" for one taken in the town, "Ben Gurion Airport, Israel" or "Logan
+International Airport, Massachusetts, United States" for one taken in a
+terminal on the way there. Both are offline afterwards, and no coordinates are
+ever sent anywhere.
 
 ## Keeping it up to date
 
