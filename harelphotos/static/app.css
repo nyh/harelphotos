@@ -343,14 +343,29 @@ h2.section:first-child { margin-block-start: 0.25rem; }
  * sideways is still a phone: 600px-wide rules miss it entirely, which is why
  * turning the phone used to help the cards but never the text.
  *
- * A percentage, not `18px`. 112.5% of the default 16px root is 18px, and 112.5%
- * of the 20px root chosen by someone who asked their browser for larger text is
- * 22.5px -- where a flat `18px` would have quietly overruled them and made the
- * text SMALLER than they had asked for. Same reason `body` takes `1rem` rather
- * than a pixel count.
+ * 125% is not a guess. The smallest relative size anywhere in this file is
+ * 0.8rem (`h2.section`, `.card-sub`), and the rule being applied is that on a
+ * phone nothing may fall below 16px -- the browser's own default body size,
+ * and the floor below which text stops looking like an application and starts
+ * looking like a shrunken web page. 16 / 0.8 = 20px = 125%, and every other
+ * size in the stylesheet follows from there:
+ *
+ *     0.8rem  -> 16px   the smallest thing on the page, at the floor
+ *     0.85rem -> 17px   header meta, user menu, the info panel's labels
+ *     1rem    -> 20px   body text and album titles
+ *     1.05rem -> 21px   breadcrumbs
+ *
+ * If a size smaller than 0.8rem is ever added, this scale stops guaranteeing
+ * the floor and wants revisiting.
+ *
+ * A percentage, not `20px`. 125% of the default 16px root is 20px, and 125% of
+ * the larger root chosen by someone who asked their browser for bigger text
+ * grows with it -- where a flat pixel size would have quietly overruled them
+ * and handed them something smaller than they had asked for. Same reason
+ * `body` takes `1rem` rather than a pixel count.
  */
 @media (pointer: coarse) {
-  :root { font-size: 112.5%; }
+  :root { font-size: 125%; }
   body { font-size: 1rem; }
 }
 
