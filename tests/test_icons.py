@@ -138,6 +138,22 @@ def test_served_as_png_because_of_nosniff(site):
         assert r.headers["Content-Type"] == "image/png"
 
 
+def test_public_assets_are_not_cached_for_ever(site):
+    """These are fixed names whose contents change with the configuration.
+
+    A photo derivative may honestly be called immutable, because its URL
+    contains a fingerprint of the pixels. `icon-192.png` and `landing-640.avif`
+    do not: they are the same URL before and after the config is edited. They
+    were sent with `max-age=31536000, immutable` anyway, and browsers believed
+    it -- a phone that had installed the site went on showing the icon it
+    downloaded the first time, and would have for a year.
+    """
+    pa.build_icons(site)
+    cc = _client(site).get("/public/icon-192.png").headers["Cache-Control"]
+    assert "immutable" not in cc
+    assert "31536000" not in cc
+
+
 def test_the_manifest_lists_only_installable_sizes(site):
     """A 32px favicon has no business on a home screen."""
     pa.build_icons(site)

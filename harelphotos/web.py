@@ -369,7 +369,23 @@ def _register_routes(app: Flask, cfg: Config) -> None:
             ".jpeg": "image/jpeg",
             ".png": "image/png",
         }.get(Path(name).suffix, "application/octet-stream")
-        return images.send(cfg, path, mime, vary_accept=False)
+        # NOT immutable, unlike every other image this application sends.
+        #
+        # A derivative may be called immutable because its URL contains a
+        # fingerprint of the pixels: change the photograph and the URL changes
+        # with it. These are fixed names -- `icon-192.png`, `landing-640.avif`
+        # -- whose contents change whenever the configuration does, so
+        # `max-age=31536000, immutable` was a promise we could not keep. It
+        # was kept anyway, by browsers: a phone that had installed the site
+        # kept showing the icon it downloaded first, and would have gone on
+        # doing so for a year.
+        resp = images.send(cfg, path, mime, vary_accept=False, immutable=False)
+        # An hour, and stated explicitly: with `immutable` off, the X-Sendfile
+        # path returns a bare response carrying no caching hint at all, and
+        # these files are fetched on every page. `public` because they are the
+        # only images served before anyone has signed in.
+        resp.headers["Cache-Control"] = "public, max-age=3600"
+        return resp
 
     @app.route("/a/")
     @app.route("/a/<path:dirpath>/")
