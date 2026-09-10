@@ -43,9 +43,11 @@ def cmd_init(args: argparse.Namespace) -> int:
     if args.landmarks:
         cfg = _load_config(args)
         dest = cfg.state_dir / "geonames.sqlite"
-        print("Landmarks name airports, parks, monuments and the like, on top\n"
-              "of the town. This downloads GeoNames' worldwide dump -- about\n"
-              "421 MB -- and keeps roughly a tenth of it.\n")
+        print("Landmarks name airports, parks, monuments, shopping centres and\n"
+              "the like, on top of the town. This downloads GeoNames' worldwide\n"
+              "dump -- about 421 MB, cached so a rebuild does not fetch it\n"
+              "again -- and keeps the sixth of it that is a landmark: roughly\n"
+              "2 million rows, about 260 MB once indexed.\n")
         n = geonames.build_landmarks(dest, progress=lambda m: print(f"  {m}"))
         print(f"kept {n:,} landmarks in {dest} "
               f"({dest.stat().st_size / 1e6:.0f} MB)")

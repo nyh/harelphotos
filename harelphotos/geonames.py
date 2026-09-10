@@ -300,8 +300,14 @@ def build_landmarks(db_path: Path, cache_dir: Path | None = None, progress=None)
     """Add the landmark table to an existing geonames.sqlite.
 
     Streams the 421 MB worldwide dump a line at a time and keeps only the
-    curated feature codes -- about a tenth of 13.5 M rows. Streaming rather
-    than reading it in: the machine this runs on has a gigabyte of memory.
+    curated feature codes. Measured against the real per-country dumps that is
+    16% of rows in the United States and 25% in Israel -- roughly 2 M rows
+    worldwide and about 260 MB once indexed. (The design predicted a tenth,
+    before dams, masts and shopping centres were added; dams alone are 57,000
+    rows in the United States.)
+
+    Streaming rather than reading it in: the machine this runs on has a
+    gigabyte of memory.
     """
     cache_dir = cache_dir or db_path.parent / "geonames-cache"
     if not db_path.exists():

@@ -337,8 +337,10 @@ in progress this stops and says so rather than waiting.
 ### `harelphotos init --landmarks`
 
 Optional, and a much larger download than `--geonames`: about 421 MB of
-GeoNames' worldwide dump, of which roughly a tenth is kept. It names airports,
-parks, monuments, museums, mountains and the like, on top of the town.
+GeoNames' worldwide dump, of which the sixth that is a landmark is kept —
+roughly 2 million rows, about 260 MB once indexed. It names airports, parks,
+monuments, museums, mountains, shopping centres and the like, on top of the
+town. The download is cached, so rebuilding does not fetch it again.
 
 ```sh
 harelphotos init --landmarks
