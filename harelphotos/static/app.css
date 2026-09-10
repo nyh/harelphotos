@@ -364,7 +364,13 @@ h2.section:first-child { margin-block-start: 0.25rem; }
  * and handed them something smaller than they had asked for. Same reason
  * `body` takes `1rem` rather than a pixel count.
  */
-@media (pointer: coarse) {
+/* Either condition, because each catches a device the other misses: a tablet
+   with a wide window is touch but not narrow, and a desktop window dragged
+   narrow is not touch but wants the larger type for the same reason. Neither
+   can rescue a phone that has been told to request the desktop site, since
+   that lays the page out at 980px and scales the result down -- no media query
+   sees anything but a wide screen, and the whole page arrives shrunk. */
+@media (pointer: coarse), (max-width: 600px) {
   :root { font-size: 125%; }
   body { font-size: 1rem; }
 }
