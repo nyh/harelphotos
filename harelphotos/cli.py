@@ -56,8 +56,8 @@ def cmd_init(args: argparse.Namespace) -> int:
         if cached:
             print(f"\nThe download is cached in {geonames.cache_path(dest)}\n"
                   f"({cached / 1e6:.0f} MB), so rebuilding the table does not\n"
-                  f"fetch it again. Reclaim it with 'harelphotos gc --downloads'\n"
-                  f"once you have settled on which landmarks you want.")
+                  f"fetch it again. 'harelphotos gc' reclaims it, so pass\n"
+                  f"--keep-downloads while you are still changing your mind.")
         print("Run 'harelphotos geocode --force' to apply them to photos\n"
               "that already have a place name.")
         print("Data from GeoNames (https://www.geonames.org/), CC BY 4.0.")
@@ -568,27 +568,10 @@ def cmd_sync(args: argparse.Namespace) -> int:
 
 def cmd_gc(args: argparse.Namespace) -> int:
     cfg = _load_config(args)
-    if args.downloads:
-        # The place-name dumps. Not part of the derived tree, and not
-        # rebuildable from anything local -- removing them means the next
-        # `init --landmarks` downloads 421 MB again.
-        path = geonames.cache_path(cfg.state_dir / "geonames.sqlite")
-        size = geonames.cache_size(cfg.state_dir / "geonames.sqlite")
-        if not size:
-            print("no cached downloads")
-        elif args.dry_run:
-            print(f"would remove {path} ({size / 1e6:.0f} MB)")
-        else:
-            import shutil as _shutil
-
-            _shutil.rmtree(path, ignore_errors=True)
-            print(f"removed {path} ({size / 1e6:.0f} MB reclaimed)")
-            print("The place names already resolved are unaffected; only a\n"
-                  "future 'init --geonames/--landmarks' has to download again.")
-        return 0
     conn = db.open_index(cfg.index_db, read_only=True)
     r = maintenance.collect(cfg, conn, deep=args.deep, dry_run=args.dry_run)
     what = "would remove" if args.dry_run else "removed"
+
     if r.stale_tiers:
         print(f"{what} tier directories no longer configured: {', '.join(r.stale_tiers)}")
     if r.orphan_files:
@@ -603,6 +586,25 @@ def cmd_gc(args: argparse.Namespace) -> int:
         print("nothing to collect")
     else:
         print(f"{r.bytes_freed / 1e6:.1f} MB {'reclaimable' if args.dry_run else 'freed'}")
+    # The place-name dumps, by default. They are 430 MB and the biggest thing
+    # in the state directory, and reclaiming space is what this command is for
+    # -- nobody remembers a separate flag for the one item that matters. The
+    # cost of being wrong is a re-download, so --keep-downloads exists for
+    # while you are still changing which landmarks you collect.
+    if not args.keep_downloads:
+        gpath = cfg.state_dir / "geonames.sqlite"
+        size = geonames.cache_size(gpath)
+        if size:
+            path = geonames.cache_path(gpath)
+            if args.dry_run:
+                print(f"would remove {path} ({size / 1e6:.0f} MB of cached downloads)")
+            else:
+                import shutil as _shutil
+
+                _shutil.rmtree(path, ignore_errors=True)
+                print(f"removed {size / 1e6:.0f} MB of cached GeoNames downloads")
+                print("  (resolved place names are unaffected; a later "
+                      "'init --landmarks' re-downloads)")
     if not args.deep:
         print("(use --deep to also look for files with no matching photo)")
     conn.close()
@@ -857,8 +859,9 @@ def build_parser() -> argparse.ArgumentParser:
     pgc = sub.add_parser("gc", help="remove derivatives with no matching photo")
     pgc.add_argument("--deep", action="store_true", help="walk the whole derived tree")
     pgc.add_argument("--dry-run", action="store_true", help="report, delete nothing")
-    pgc.add_argument("--downloads", action="store_true",
-                     help="remove the cached GeoNames downloads (~430 MB)")
+    pgc.add_argument("--keep-downloads", action="store_true",
+                     help="do not remove the cached GeoNames dumps (~430 MB), "
+                          "which a rebuild would otherwise re-download")
     pgc.set_defaults(func=cmd_gc)
 
     pst = sub.add_parser("stats", help="counts and derived-tree size")

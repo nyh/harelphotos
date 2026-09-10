@@ -194,3 +194,43 @@ def test_check_env_works_with_no_config_at_all(tmp_path, monkeypatch, capsys):
     assert "Pillow AVIF support" in out.out
     assert "none yet" in out.out          # says what is missing, does not abort
     assert "harelphotos init" in out.err
+
+
+def test_gc_reclaims_the_download_cache_by_default(project, capsys):
+    """It is 430 MB and the biggest thing in the state directory, and nobody
+    remembers a separate flag for the one item that matters."""
+    from harelphotos import config as config_mod, geonames
+
+    cfg = config_mod.load()
+    cache = geonames.cache_path(cfg.state_dir / "geonames.sqlite")
+    cache.mkdir(parents=True, exist_ok=True)
+    (cache / "allCountries.zip").write_bytes(b"x" * 4096)
+
+    assert cli.main(["gc"]) == 0
+    assert "cached GeoNames downloads" in capsys.readouterr().out
+    assert not cache.exists()
+
+
+def test_gc_keeps_the_cache_when_asked(project, capsys):
+    from harelphotos import config as config_mod, geonames
+
+    cfg = config_mod.load()
+    cache = geonames.cache_path(cfg.state_dir / "geonames.sqlite")
+    cache.mkdir(parents=True, exist_ok=True)
+    (cache / "allCountries.zip").write_bytes(b"x" * 4096)
+
+    assert cli.main(["gc", "--keep-downloads"]) == 0
+    assert cache.exists()
+
+
+def test_gc_dry_run_removes_nothing(project, capsys):
+    from harelphotos import config as config_mod, geonames
+
+    cfg = config_mod.load()
+    cache = geonames.cache_path(cfg.state_dir / "geonames.sqlite")
+    cache.mkdir(parents=True, exist_ok=True)
+    (cache / "allCountries.zip").write_bytes(b"x" * 4096)
+
+    assert cli.main(["gc", "--dry-run"]) == 0
+    assert "would remove" in capsys.readouterr().out
+    assert cache.exists()
