@@ -5,7 +5,8 @@
 #   systemctl status harelphotos
 #   journalctl -u harelphotos -f
 #
-# Edit User=, the two paths, and --workers. See INSTALL.md.
+# Edit User= and the two paths. --workers 2 suits a machine with about a
+# gigabyte; see INSTALL.md for what workers and threads actually cost.
 
 [Unit]
 Description=harelphotos
@@ -35,13 +36,21 @@ WorkingDirectory=/home/nyh/harelphotos
 # Threads suit this workload precisely. With X-Sendfile the Python side of an
 # image request is an access check and a header -- microseconds, then Apache
 # sends the bytes -- so a thread spends its time waiting, not computing, and
-# the GIL is barely contended. 3 x 8 = 24 concurrent requests.
+# the GIL is barely contended. 2 x 8 = 16 concurrent requests.
+#
+# --workers is the memory knob, not --threads. Measured with warmed processes,
+# counting PSS: 24 threads cost about a megabyte more than one, because they
+# share a single interpreter and one copy of Flask and Pillow. A worker is a
+# whole separate Python, at roughly 29 MB. Two workers is ~82 MB, which suits a
+# machine with a gigabyte; raise it if there is memory to spare, and go to one
+# if there is not. The second worker buys resilience -- one dying does not take
+# the site down -- rather than throughput, which is Apache's job here.
 #
 # --timeout 120: the first request for a WebP or JPEG fallback transcodes on
 # demand, and on a slow machine a large image can take a while. Every request
 # after it is a static file.
 ExecStart=/home/nyh/harelphotos/.venv/bin/gunicorn \
-    --workers 3 \
+    --workers 2 \
     --threads 8 \
     --worker-class gthread \
     --timeout 120 \

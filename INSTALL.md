@@ -475,7 +475,7 @@ Measured on a 381-photo album with 3 workers: 48 of 60 images returned in
 0.44s, and the other 12 hung until the 120s timeout.
 
 `--threads 8` in the unit file is the fix, and the current
-`contrib/harelphotos.service` has it. If you deployed before that, re-copy it:
+`contrib/harelphotos.service` has it (with `--workers 2`). If you deployed before that, re-copy it:
 
 ```sh
 sudo cp contrib/harelphotos.service /etc/systemd/system/
@@ -504,8 +504,9 @@ interpreter and one copy of Flask and Pillow, and a thread stack only occupies
 what it touches. A *worker* is a whole separate Python, at roughly 29 MB each.
 
 So on a machine with a gigabyte, reduce `--workers` and leave `--threads`
-alone. `--workers 2 --threads 12` serves the same 24 concurrent requests as
-`3 x 8` for 30 MB less. More than one worker is worth having for resilience --
+alone. The shipped unit uses `--workers 2 --threads 8` for that reason: 16
+concurrent requests for about 82 MB. Raise the workers if there is memory to
+spare and drop to one if there is not. More than one worker is worth having for resilience --
 a worker that dies does not take the site down -- rather than for throughput,
 which is Apache's job here.
 
