@@ -281,11 +281,17 @@ below.
 | **d** | download the original file |
 | **0** | zoom back out |
 | **double-click**, **Ctrl+wheel** | zoom in and out, around the pointer |
-| **swipe left / right** | previous and next photo |
+| **swipe left / right** | previous and next photo — the photo follows your thumb |
 | **swipe down** | back to the album |
 | **pinch** | zoom, around the point between your fingers |
 | **drag** | pan, while zoomed in |
 | **double-tap** | zoom in, and again to zoom back out |
+
+A sideways swipe moves the photograph with your thumb rather than waiting for
+you to let go, so you can see the gesture working and change your mind: drag
+back, or not far enough, and it settles where it was. At the first or last
+photograph of an album it drags heavily and springs back, which is how the end
+announces itself without a message.
 
 Zoom happens immediately, on the picture already on the screen, and never
 waits for anything to be fetched. What is fetched is a sharper copy of it, in

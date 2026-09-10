@@ -436,6 +436,24 @@
     var pointers = {};        // active pointers by id
     var pinch = null;         // {dist, cx, cy, scale, tx, ty} at gesture start
     var panning = false, panActive = false, lastPointerType = "";
+
+    /* Dragging a photograph sideways to page.
+     *
+     * Not decoration. The swipe used to do nothing whatever until the finger
+     * lifted, and then the photograph was simply replaced -- so there was no
+     * moment where anything said "this gesture is working, and this is what it
+     * will do". Moving the picture with the thumb says both, before the reader
+     * has committed to anything, and lets them change their mind by dragging
+     * back. Every gallery on a phone does this.
+     *
+     * `swipeX` is kept apart from `tx`, which belongs to panning a zoomed
+     * photograph, so the two never have to reason about each other: paging is
+     * for a photograph at rest and panning for one magnified, and each writes
+     * its own number. */
+    var swipeX = 0, swiping = false;
+    var SWIPE_START = 12;      // before this, it might still be a tap
+    var SWIPE_COMMIT = 60;     // past this, lifting off pages
+    var EDGE_RESISTANCE = 0.3; // drag towards a photograph that is not there
     var startX = 0, startY = 0, movedX = 0, movedY = 0;
     var lastTap = 0, lastTapX = 0, lastTapY = 0;
 
@@ -489,8 +507,9 @@
     function apply(animate) {
       clamp();
       img.style.transition = animate ? "transform 0.18s ease-out" : "";
-      img.style.transform = scale === 1 && !tx && !ty
-        ? "" : "translate(" + tx + "px," + ty + "px) scale(" + scale + ")";
+      var x = tx + swipeX;
+      img.style.transform = scale === 1 && !x && !ty
+        ? "" : "translate(" + x + "px," + ty + "px) scale(" + scale + ")";
       stage.classList.toggle("zoomed", zoomed());
       if (zoomed()) upgrade();
     }
@@ -618,8 +637,11 @@
       var two = twoPointers();
       if (two) {
         // A second finger: stop whatever the first was doing and start a
-        // pinch from wherever the picture currently sits.
+        // pinch from wherever the picture currently sits. A half-finished
+        // page-swipe is put back first, so that a pinch begun during one does
+        // not zoom a photograph that is sitting an inch off-centre.
         panning = false;
+        if (swiping) { swiping = false; swipeX = 0; }
         var c = center(two[0], two[1]);
         pinch = { dist: spread(two[0], two[1]) || 1, cx: c.x, cy: c.y,
                   scale: scale, tx: tx, ty: ty };
@@ -630,6 +652,8 @@
       startY = movedY = e.clientY;
       panning = true;
       panActive = false;
+      swiping = false;
+      swipeX = 0;
       try { stage.setPointerCapture(e.pointerId); } catch (err) {}
     }, { passive: true });
 
@@ -664,6 +688,26 @@
         return;
       }
       if (!panning) return;
+
+      // A photograph at rest: a sideways drag is paging, and the picture
+      // follows the thumb so that the gesture is visibly doing something.
+      if (!zoomed() && e.pointerType !== "mouse") {
+        var sdx = e.clientX - startX, sdy = e.clientY - startY;
+        if (!swiping) {
+          // Committed to sideways, and far enough not to be a tap. Downward
+          // is the album gesture and is left alone.
+          if (Math.abs(sdx) < SWIPE_START || Math.abs(sdx) <= Math.abs(sdy)) return;
+          swiping = true;
+        }
+        // Dragging towards a photograph that does not exist still moves, but
+        // grudgingly: the picture pulling back against the thumb is how the
+        // end of an album announces itself without a message.
+        var wanted = sdx < 0 ? nav.next : nav.prev;
+        swipeX = wanted ? sdx : sdx * EDGE_RESISTANCE;
+        apply(false);
+        return;
+      }
+
       if (zoomed()) {
         // Nothing moves until the finger has clearly committed to a drag.
         if (!panActive) {
@@ -693,6 +737,10 @@
 
     stage.addEventListener("pointercancel", function (e) {
       panning = false;
+      // Whatever took the gesture away -- a phone call, a notification, the
+      // browser deciding it wants it -- the photograph must not be left
+      // stranded halfway off the screen.
+      if (swiping) { swiping = false; swipeX = 0; apply(true); }
       endPointer(e);
     }, { passive: true });
 
@@ -732,11 +780,31 @@
       // Paging gestures belong to an un-zoomed photograph. Zoomed in, the
       // same movement is a pan, and stealing it would make the photo jump to
       // the next one whenever somebody looked at its right-hand edge.
-      if (zoomed()) return;
+      if (zoomed()) { swiping = false; return; }
       if (e.pointerType === "mouse") return;
-      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
-        go(dx < 0 ? nav.next : nav.prev);
-      } else if (dy > 90 && Math.abs(dy) > Math.abs(dx)) {
+
+      if (swiping) {
+        swiping = false;
+        var target = dx < 0 ? nav.next : nav.prev;
+        if (Math.abs(dx) > SWIPE_COMMIT && target) {
+          // Send the photograph the rest of the way out, and start the
+          // navigation in the same breath rather than after it. The browser
+          // keeps showing this document until the next one is ready to paint,
+          // so the animation plays during the load instead of delaying it --
+          // free where it is quick, and useful feedback where it is not.
+          swipeX = dx < 0 ? -stage.clientWidth : stage.clientWidth;
+          apply(true);
+          go(target);
+        } else {
+          // Not far enough, or nothing to go to. Back where it came from,
+          // which is also how the reader takes the gesture back.
+          swipeX = 0;
+          apply(true);
+        }
+        return;
+      }
+
+      if (dy > 90 && Math.abs(dy) > Math.abs(dx)) {
         backToAlbum();
       }
     }, { passive: true });
