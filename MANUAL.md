@@ -790,10 +790,18 @@ the setting back to the hand-written one.
 **Back this file up.** Everything else in the state directory is a cache that a
 rescan rebuilds — this is not, and nothing else records these choices.
 
-Covers apply immediately. Access rules and `hidden` are resolved into the index
-at scan time, because every request checks them, so the `acl` and `hide`
-commands rescan the subtree for you; edit the file by hand and you need
-`harelphotos scan --dir <that directory>` yourself.
+**Covers apply immediately. `allow` and `hidden` need a rescan.** They are
+resolved into the index at scan time, because every request checks them and
+re-reading `.album.toml` files on each page load would be waste. The `acl` and
+`hide` commands rescan the subtree for you and say so; if you edit the file by
+hand instead, run it yourself:
+
+```sh
+harelphotos scan --dir 2003/2003_eran
+```
+
+This is the one thing that catches people out about hand-editing: the entry
+looks right and nothing happens.
 
 ### `harelphotos hide` — keep a directory out of the way
 
@@ -816,6 +824,15 @@ matters.
 harelphotos cover 2019/wedding IMG_1234.jpg
 harelphotos cover 2019/wedding --clear      # back to choosing automatically
 ```
+
+The photo may be a bare file name, or a path relative to that album:
+
+```sh
+harelphotos cover 2003 2003a/IMG_0123.JPG
+```
+
+which is the only way to give a cover to a directory that holds nothing but
+subdirectories — it has no photo of its own to name.
 
 An admin can also do this while browsing: open a photo and press **Make cover**
 in the top bar. It takes effect on the next page — no scan. A pick naming a

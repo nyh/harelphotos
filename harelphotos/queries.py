@@ -242,7 +242,7 @@ class Index:
         dirsort = album_dirsort(self.conn, album, self.cfg)
         out = sort_albums(out, order, dirsort, self._natkeys(album))
         for a in out:
-            a.cover = self.cover_photo(a)
+            a.cover = self.cover_photo(a, viewer)
         return out
 
     def _explicit_order(self, album: Album) -> list[str]:
@@ -262,37 +262,70 @@ class Index:
             )
         }
 
-    def cover_photo(self, album: Album) -> Photo | None:
+    def cover_photo(self, album: Album, viewer: Viewer | None = None) -> Photo | None:
         """The album's cover: a pick made in the interface, else what the scan
-        resolved.
+        resolved -- and never a photo this viewer may not see.
 
-        The pick is honoured here, at request time, rather than being baked
-        into the index at scan time -- so choosing a cover takes effect on the
-        next page rather than on the next scan, which for a click in the
-        interface is the only tolerable behaviour. The alternative, having the
-        web process write `dirs.cover_photo`, would mean opening the index for
-        writing; it is deliberately read-only here, which is what stopped a
-        running scan from breaking logins.
+        Resolved at request time rather than baked into the index at scan time,
+        so choosing a cover takes effect on the next page rather than the next
+        scan. Having the web process write `dirs.cover_photo` instead would
+        mean opening the index for writing; it is read-only here on purpose,
+        which is what stopped a running scan from breaking logins.
         """
+        # No viewer means a command-line caller, which has already decided it
+        # is entitled to look; the web always passes one.
+        if viewer is None:
+            viewer = Viewer(token=None, name="", is_admin=True)
+
         picked = overrides.get(self.cfg, album.path).cover
         if picked and not picked.startswith("auto"):
-            r = self.conn.execute(
-                f"SELECT {PHOTO_COLUMNS} FROM photos p JOIN dirs d ON d.id = p.dir_id "
-                f"WHERE d.id = ? AND p.name = ? AND p.hidden = 0",
-                (album.id, picked),
-            ).fetchone()
-            if r is not None:
-                return _photo_from_row(r)
-            # A pick naming a photo that is gone falls through to the scanned
-            # cover rather than leaving the album blank.
+            # A bare name means a photo of this album; a path reaches into a
+            # descendant, which is the only way to give a cover to a directory
+            # that holds nothing but subdirectories.
+            rel = f"{album.path}/{picked}" if album.path else picked
+            found = self.photo(rel, viewer)
+            if found is not None:
+                return found
+            # A pick naming a photo that is gone, or that this viewer may not
+            # see, falls through rather than leaving the album blank.
 
         r = self.conn.execute(
-            f"SELECT {PHOTO_COLUMNS} FROM dirs a "
+            f"SELECT {PHOTO_COLUMNS}, d.acl_chain, d.hidden AS dir_hidden FROM dirs a "
             f"JOIN photos p ON p.id = a.cover_photo "
             f"JOIN dirs d ON d.id = p.dir_id WHERE a.id = ?",
             (album.id,),
         ).fetchone()
-        return _photo_from_row(r) if r else None
+        if r is not None and not r["dir_hidden"] and self._may_view(r["acl_chain"], viewer):
+            return _photo_from_row(r)
+
+        # The scanned cover is one this viewer may not see. It was still being
+        # put in the page: the image itself came back 404, but the file name
+        # and the existence of a restricted album leaked into the HTML and the
+        # card rendered blank. Find one they may see instead.
+        return self._first_visible_photo(album, viewer)
+
+    # How far to look for a cover the viewer may see. An album whose first
+    # hundred photos are all restricted gets no card image, which is a great
+    # deal better than reading the whole tree on every page.
+    COVER_SEARCH_LIMIT = 100
+
+    def _first_visible_photo(self, album: Album, viewer: Viewer | None) -> Photo | None:
+        prefix = f"{album.path}/" if album.path else ""
+        rows = self.conn.execute(
+            f"SELECT {PHOTO_COLUMNS}, d.acl_chain FROM photos p "
+            f"JOIN dirs d ON d.id = p.dir_id "
+            f"WHERE (d.path = ? OR d.path LIKE ?) AND p.hidden = 0 AND d.hidden = 0 "
+            # A photo whose image has been generated first -- one that has not
+            # shows as a placeholder. Preferred rather than required: during a
+            # long first scan almost nothing is derived yet, and an album with
+            # a placeholder cover is better than one with no card image at all.
+            f"ORDER BY (p.deriv_key IS NULL), d.path, p.name LIMIT ?",
+            (album.path, f"{prefix}%", self.COVER_SEARCH_LIMIT),
+        ).fetchall()
+        for r in rows:
+            if self._may_view(r["acl_chain"], viewer):
+                return _photo_from_row(r)
+        return None
 
     def breadcrumbs(self, album: Album, viewer: Viewer) -> list[Album]:
         """Ancestors from the root down to (not including) this album."""

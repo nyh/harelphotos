@@ -42,9 +42,9 @@ def admin():
     return queries.Viewer(token="boss", name="Boss", is_admin=True)
 
 
-def rescan(cfg, subpath=""):
+def rescan(cfg, subpath="", headers_only=True):
     conn = db.open_index(cfg.index_db)
-    scanner.scan(cfg, conn, subpath=subpath, headers_only=True)
+    scanner.scan(cfg, conn, subpath=subpath, headers_only=headers_only)
     conn.close()
 
 
@@ -187,15 +187,26 @@ def test_a_cover_post_without_a_csrf_token_is_refused(project):
     assert overrides.get(project, "trip").cover is None
 
 
-def test_a_cover_must_name_a_photo_of_that_album(project):
-    """Otherwise a pick could name a path, or somebody else's photo."""
+def test_a_cover_must_resolve_to_a_real_photo_under_that_album(project):
+    """A bare name or a path beneath the album; anything else is refused.
+
+    A path is deliberately allowed -- it is the only way to give a cover to a
+    directory of nothing but subdirectories -- but it has to resolve, or the
+    album sits silently on its automatic cover with no hint why.
+    """
     c = client_as(project, "boss")
     token = re.search(r'name="csrf" value="([^"]+)"',
                       c.get("/p/trip/a.jpg").get_data(as_text=True)).group(1)
-    for bad in ("../secret.jpg", "junk/deep/x.jpg", "nope.jpg"):
+    for bad in ("../secret.jpg", "nope.jpg", "junk/nope.jpg", ""):
         r = c.post("/cover", data={"album": "trip", "photo": bad, "csrf": token})
         assert r.status_code == 404, bad
     assert overrides.get(project, "trip").cover is None
+
+    # ... and a path that does resolve is accepted.
+    r = c.post("/cover", data={"album": "trip", "photo": "junk/deep/x.jpg",
+                               "csrf": token})
+    assert r.status_code == 302
+    assert overrides.get(project, "trip").cover == "junk/deep/x.jpg"
 
 
 # -------------------------------------------------------------- hiding
@@ -234,3 +245,70 @@ def test_unhiding_brings_it_back(project):
     conn, ix = index_for(project)
     assert ix.album("trip/junk", admin()) is not None
     conn.close()
+
+
+# ------------------------------------------- covers and who is looking
+
+def test_a_cover_is_never_a_photo_the_viewer_may_not_see(project, tmp_path):
+    """A restricted subdirectory's photo was being offered as its parent's
+    cover to everyone. The image itself came back 404, so no photo content
+    escaped -- but the file name and the existence of a restricted album leaked
+    into the HTML, and the card rendered blank."""
+    from harelphotos import aclcmd
+
+    photos = project.photo_root
+    fixtures.make_jpeg(photos / "y2003" / "aaa_private" / "SECRET.jpg", size=(600, 400))
+    fixtures.make_jpeg(photos / "y2003" / "zzz_public" / "PUBLIC.jpg", size=(600, 400))
+    rescan(project, headers_only=False)
+    aclcmd.write_allow(project, "y2003/aaa_private", ["boss"])
+    rescan(project, "y2003/aaa_private")
+
+    conn, ix = index_for(project)
+    parent = ix.album("y2003", admin())
+    # The admin, who may see it, still gets the alphabetically-first cover.
+    assert ix.cover_photo(parent, admin()).url_relpath.startswith("y2003/aaa_private/")
+    # Anyone else gets one they may actually see.
+    sis = queries.Viewer(token="sis", name="Sis", is_admin=False)
+    got = ix.cover_photo(ix.album("y2003", sis), sis)
+    assert got is not None, "left with no cover at all"
+    assert "aaa_private" not in got.url_relpath
+    conn.close()
+
+
+def test_the_restricted_name_does_not_appear_in_the_page(project):
+    from harelphotos import aclcmd
+
+    photos = project.photo_root
+    fixtures.make_jpeg(photos / "y2003" / "aaa_private" / "SECRET.jpg", size=(600, 400))
+    fixtures.make_jpeg(photos / "y2003" / "zzz_public" / "PUBLIC.jpg", size=(600, 400))
+    rescan(project, headers_only=False)
+    aclcmd.write_allow(project, "y2003/aaa_private", ["boss"])
+    rescan(project, "y2003/aaa_private")
+
+    body = client_as(project, "sis").get("/a/").get_data(as_text=True)
+    assert "SECRET.jpg" not in body
+    assert "aaa_private" not in body
+
+
+def test_a_cover_may_be_a_path_into_a_subdirectory(project):
+    """The only way to give a cover to a directory of nothing but
+    subdirectories: it has no photo of its own to name."""
+    conn, ix = index_for(project)
+    assert ix.album("trip/junk", admin()) is not None
+    conn.close()
+
+    overrides.set_for(project, "trip/junk", cover="deep/x.jpg")
+    conn, ix = index_for(project)
+    got = ix.cover_photo(ix.album("trip/junk", admin()), admin())
+    assert got is not None and got.url_relpath == "trip/junk/deep/x.jpg"
+    conn.close()
+
+
+def test_a_cover_path_cannot_escape_the_album(project):
+    c = client_as(project, "boss")
+    token = re.search(r'name="csrf" value="([^"]+)"',
+                      c.get("/p/trip/a.jpg").get_data(as_text=True)).group(1)
+    for bad in ("../trip/a.jpg", "..", "junk/../../trip/a.jpg"):
+        r = c.post("/cover", data={"album": "trip/junk", "photo": bad, "csrf": token})
+        assert r.status_code == 404, bad
+    assert overrides.get(project, "trip/junk").cover is None

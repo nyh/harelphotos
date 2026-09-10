@@ -301,11 +301,13 @@ def _register_routes(app: Flask, cfg: Config) -> None:
         if alb is None:
             abort(404)
         if not clear:
-            # A bare file name of a photo in *this* album. A path was accepted
-            # once: "junk/deep/x.jpg" named a real photo, so it passed, and then
-            # matched nothing when the cover was looked up by name -- an album
-            # stuck silently on its automatic cover with no hint why.
-            if not name or "/" in name or name in (".", ".."):
+            # A file name, or a path relative to this album -- the latter is
+            # the only way to give a cover to a directory that holds nothing
+            # but subdirectories. Resolved against the index and against this
+            # viewer, so a pick can only name a photo that exists and that they
+            # are allowed to see.
+            name = name.strip("/")
+            if not name or ".." in name.split("/"):
                 abort(404)
             if g.index.photo(f"{relpath}/{name}" if relpath else name,
                              g.viewer) is None:

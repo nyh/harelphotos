@@ -458,21 +458,29 @@ def cmd_cover(args: argparse.Namespace) -> int:
         print(f"cleared the cover pick for /{relpath}")
     elif args.photo:
         # Checked against the index rather than the filesystem: a name that is
-        # not an indexed photo of this album would leave the album showing
-        # nothing, and the mistake would only surface as a blank card.
+        # not an indexed photo would leave the album showing nothing, and the
+        # mistake would only surface as a blank card.
+        #
+        # A path is allowed as well as a bare name, and for a directory holding
+        # nothing but subdirectories it is the only possibility -- there is no
+        # photo of its own to name.
+        pick = args.photo.strip("/")
+        if ".." in pick.split("/"):
+            print("error: the photo must be inside this album", file=sys.stderr)
+            return 1
         conn = db.open_index(cfg.index_db, read_only=True)
-        row = conn.execute(
-            "SELECT p.name FROM photos p JOIN dirs d ON d.id = p.dir_id "
-            "WHERE d.path = ? AND p.name = ? AND p.hidden = 0",
-            (relpath, args.photo),
-        ).fetchone()
+        index = queries.Index(conn, cfg)
+        full = f"{relpath}/{pick}" if relpath else pick
+        found = index.photo(full, queries.Viewer(token=None, name="", is_admin=True))
         conn.close()
-        if row is None:
-            print(f"error: {args.photo!r} is not a photo in /{relpath}",
+        if found is None:
+            print(f"error: {pick!r} is not a photo under /{relpath}\n"
+                  f"  give a file name, or a path relative to this album such as\n"
+                  f"  '2003a/IMG_0123.JPG' for a photo in a subdirectory",
                   file=sys.stderr)
             return 1
-        overrides.set_for(cfg, relpath, cover=args.photo)
-        print(f"cover for /{relpath} is now {args.photo}")
+        overrides.set_for(cfg, relpath, cover=pick)
+        print(f"cover for /{relpath} is now {pick}")
 
     conn = db.open_index(cfg.index_db, read_only=True)
     index = queries.Index(conn, cfg)
