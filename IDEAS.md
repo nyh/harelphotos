@@ -33,7 +33,7 @@ There is none. Now that photos carry a place name, a date and camera details,
 the useful queries are cheap to answer from the index: everything from Boston,
 everything in August 2024, everything from a particular camera. A single search
 box over `place`, `taken` and directory titles would be a few hundred lines and
-would change how a 98,000-photo collection feels.
+would change how a collection of a hundred thousand photographs feels.
 
 Full-text search over place names via SQLite FTS5 is built into the standard
 library's SQLite; no new dependency.
@@ -146,22 +146,43 @@ report, not a delete button — the deleting should stay manual.
 
 ### 13. Zoom on a photo
 
-Pinch and double-tap to zoom, drag to pan. The obvious thing to want from a
-photo viewer on a phone, and currently absent: the image is fitted and that is
-that.
+Pinch and double-tap to zoom, drag to pan, on a single photograph. The obvious
+thing to want from a photo viewer on a phone, and currently absent: the image is
+fitted to the screen and that is that.
 
-### 14. A keyboard help overlay
+Not the same as the item below, which is about how many photographs fit on a
+screen rather than how much of one you can see.
+
+### 14. A thumbnail size control, like Picasa's
+
+Picasa's desktop window had a slider that ran from a great many tiny thumbnails
+to a few large ones, and it was the thing that made a big collection feel
+navigable: wide for skimming a year, narrow for actually looking at a trip.
+Google Photos and macOS Photos both have a version of it. Nothing here does —
+the grid is one size and that is that.
+
+The machinery is already in place, which is what makes this attractive. The
+justified layout is driven by a single target row height (`var target = width <
+600 ? 130 : 180` in `app.js`); a control that sets that number and re-runs the
+layout is most of the work, and `+`/`-` should do it too. The size wants
+remembering per browser, and the right file is chosen automatically afterwards,
+because the layout already tells each image how wide it will actually be.
+
+Desktop only, most likely. On a phone the width decides the answer and there is
+little to choose.
+
+### 15. A keyboard help overlay
 
 `i`, `d`, arrows, Escape — none of them are discoverable. `?` showing a small
 panel would fix that, and would be twenty lines.
 
-### 15. Multiple downloads
+### 16. Multiple downloads
 
 Selecting several photographs and getting a zip. Wanted the first time somebody
 says "can you send me the ones from the wedding". Streams from the derived tree
 or the originals; needs a cap so nobody asks for 98,000 of them.
 
-### 16. Dark mode by choice, not only by system
+### 17. Dark mode by choice, not only by system
 
 It follows `prefers-color-scheme` today. A toggle would need a control, a
 preference stored per browser, and a decision about where the control lives —
