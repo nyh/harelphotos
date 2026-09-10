@@ -330,10 +330,32 @@ Three things it should be built with:
   `exposure`, `photo_date`, `day_date` and `maplink` all have to exist a second
   time in JavaScript and stay in step with the Python. About 730 bytes of
   finished text per photograph.
-- **Windowed.** Fifty photographs' metadata around the current one is 36 KB and
-  buys fifty moves with no request at all; a 5000-photo album entire would be
-  3.6 MB. Fetch the next window in the background, exactly as the images
-  already are.
+- **Windowed, and the first window inlined.** Fifty photographs' metadata around
+  the current one is 36 KB and buys fifty moves with no request at all; a
+  5000-photo album entire would be 3.6 MB. The first window costs nothing extra
+  at all if it is written into the photo page that is being loaded anyway --
+  which it already does for its own photo, in `nav-data`. Later windows fetch
+  in the background, exactly as the images already do. So paging really does
+  cost what the image costs, for as long as anyone pages in one sitting.
+
+Considered and rejected: **embedding the metadata in the derived images
+themselves**, so that no separate fetch exists at all. AVIF is a HEIF container
+and has boxes for EXIF and XMP, so it can be written. Two problems, and the
+second decides it.
+
+JavaScript cannot read those from an `<img>`, which hands back decoded pixels
+and not file bytes -- it would mean fetching the image a second time (a cache
+hit, at least) and parsing ISOBMFF box structure by hand, in a project with one
+script and no build step.
+
+And it couples metadata to pixels, which is precisely what this codebase is
+built not to do. `place` arrives from `geocode`, a separate pass run after the
+scan; prev and next depend on the album's sort order rather than on the
+photograph; `is_cover` lives in the overrides file and is changed by a button in
+the browser. None of them are properties of the file. `deriv_key` is
+deliberately built from the content signature and the encode recipe and nothing
+else, so that "a metadata tidy-up" never becomes a re-encode -- embedding would
+make a re-encode of the whole collection the price of a better landmark rule.
 
 What it really costs is two renderers for one view, which have to agree.
 Formatting server-side shrinks that a great deal but does not remove it, and it
