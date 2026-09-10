@@ -247,9 +247,14 @@ page load is a round trip the reader watches.
 `<link rel="prefetch">`, or the speculation-rules API, on the two neighbour
 URLs. The cost is real and worth measuring first: the server renders two extra
 pages for every photograph anyone looks at, on a machine chosen for being
-small. Widening the image prefetch from one neighbour to two belongs here too —
-swiping quickly outruns a one-deep window, which is precisely when the wait is
-noticed.
+small, and at most one of the two is ever used. Widening the image prefetch
+from one neighbour to two belongs here too — swiping quickly outruns a one-deep
+window, which is precisely when the wait is noticed.
+
+This and item 21 solve the same problem and only one of them is needed. This
+one is a few lines and speculative; that one is an afternoon and exact. Doing
+this first is still sensible: it is cheap enough to try, and if it turns out to
+be enough, item 21 never has to be argued about.
 
 ### 20. Stop the thumbnails appearing one at a time
 
@@ -316,17 +321,26 @@ need a source. That source is a small JSON document, and everything below about
 "the JSON" means that and nothing more.
 
 **What it costs, measured.** The worry was server load and traffic. Neither is
-the objection:
+the objection -- but the comparison has to be against item 19 and not against
+today, because prefetching the HTML would also take the waiting to zero. Both
+get there; what differs is the price.
 
-    per photograph paged to      today            client-side
-    round trips                  1  (~330 ms)     0
-    bytes                        3.3 KB of HTML   ~0.7 KB of JSON, amortised
-    server render                1.5 ms           ~1/50 of that
+    per photograph paged to    today       with 19 (prefetch HTML)   this
+    round trip in the way      1 (~330ms)  0                         0
+    bytes fetched              3.3 KB      6.6 KB (both neighbors)   ~0.7 KB
+    server renders             1           2                         ~1/50
+    of which wasted            none        half -- one neighbor      none
 
 A photo page renders in a millisecond and a half, so server load was never the
-problem. The JSON does not *add* to the traffic either -- it replaces the HTML
-that a page load would have brought, at about a fifth the size. The whole prize
-is the round trip, which is also the only part anybody can feel.
+problem in absolute terms. The difference is that prefetching HTML is
+*speculative*: two pages are rendered and fetched for every photograph looked
+at, and at most one is ever used. A window of metadata is fetched once and
+answers the next fifty moves in either direction, so nothing is wasted and
+nothing is guessed.
+
+That is the honest case for this over item 19. Not that it removes a round trip
+-- item 19 does that for far less work -- but that it removes the same round
+trip without asking a small server to render two pages nobody may look at.
 
 **How it should be built.** Three things:
 
