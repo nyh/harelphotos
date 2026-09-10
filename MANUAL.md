@@ -298,6 +298,15 @@ screen when it is ready, so the picture sharpens a moment after the gesture
 rather than stalling during it. The original is skipped for a file over 24 MB,
 and skipped entirely if your browser is in data-saver mode.
 
+How far in you can go depends on the photograph, not on a fixed number. The
+point worth measuring from is one pixel of the original per physical screen
+pixel — past that there is no more detail in the file, only larger pixels — and
+you are allowed three times beyond it, because reading a sign or peering at a
+face is a real reason to zoom and it does not stop being useful when the pixels
+show. In practice a 12-megapixel photograph reaches 1:1 at about 3.4× and stops
+at about 10×; a small scan stops at 3×, and nothing goes past 12×, by which
+point a thumb's width of panning crosses the whole picture.
+
 While a photo is zoomed, sideways and downward swipes stop paging and become
 panning, and the on-screen arrows get out of the way — otherwise examining the
 right-hand edge of a photograph would keep sending you to the next one. Zoom

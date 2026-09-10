@@ -395,7 +395,30 @@
     var img = document.getElementById("main");
     if (!stage || !window.PointerEvent) return;
 
-    var MAX_SCALE = 6;
+    /* How far in a zoom may go.
+     *
+     * The number that means something is one pixel of the original per
+     * *physical* screen pixel: past that there is no more detail in the file,
+     * only larger pixels. For a 4000px photograph on a 390pt phone at three
+     * device pixels per point that lands near 3.4x, and on a desktop showing
+     * it 1200px wide, near 3.3x -- so a single fixed limit is generous for a
+     * big photograph and mean to a huge one.
+     *
+     * Overshoot past that is wanted, and three times it is the figure chosen.
+     * Every photo application allows a good deal -- "make this small thing big
+     * enough to read" does not stop being useful at the pixel grid, and nobody
+     * clamps at 1:1. What ends up limiting the reader is not blur but
+     * navigation: panning moves the picture in proportion to the zoom, so past
+     * about ten times a thumb's width throws you across the photograph and you
+     * lose track of where you were looking. Hence the absolute ceiling, which
+     * only bites on very large files.
+     *
+     * The floor is for the other end: a small scan would otherwise refuse to
+     * enlarge at all, when peering at a face in one is exactly the reason to
+     * zoom. */
+    var OVERZOOM = 3;
+    var MIN_MAX_SCALE = 3;
+    var MAX_SCALE = 12;
     var DOUBLE_TAP_SCALE = 2.5;
     // Two rungs, because they cost wildly different amounts. `sizes` will have
     // fetched something screen-sized -- often 1280 or less on a phone -- so the
@@ -412,7 +435,7 @@
     var scale = 1, tx = 0, ty = 0;
     var pointers = {};        // active pointers by id
     var pinch = null;         // {dist, cx, cy, scale, tx, ty} at gesture start
-    var panning = false, panActive = false;
+    var panning = false, panActive = false, lastPointerType = "";
     var startX = 0, startY = 0, movedX = 0, movedY = 0;
     var lastTap = 0, lastTapX = 0, lastTapY = 0;
 
@@ -547,8 +570,18 @@
      * Taking the base as an argument is what makes a pinch a pure function of
      * where it started and how far apart the fingers are now. Nothing
      * accumulates from frame to frame, so there is no drift to build up. */
+    /* The limit for this photograph on this screen, from its real size. */
+    function maxScale() {
+      var box = pictureBox();
+      var dpr = window.devicePixelRatio || 1;
+      if (!nav.fullW || !box.w) return MAX_SCALE;
+      var oneToOne = nav.fullW / (box.w * dpr);
+      return Math.max(MIN_MAX_SCALE,
+                      Math.min(MAX_SCALE, oneToOne * OVERZOOM));
+    }
+
     function zoomFrom(base, next, cx, cy) {
-      next = Math.min(MAX_SCALE, Math.max(1, next));
+      next = Math.min(maxScale(), Math.max(1, next));
       var c = untransformedCenter();
       // The anchor, in the picture's own coordinates, measured from the
       // center. Here the translation *is* subtracted, because `c` is the
@@ -580,6 +613,7 @@
     }
 
     stage.addEventListener("pointerdown", function (e) {
+      lastPointerType = e.pointerType;
       pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
       var two = twoPointers();
       if (two) {
@@ -716,7 +750,17 @@
       apply(false);
     }, { passive: false });
 
+    // A mouse only, and this guard is the whole reason double-tap on a phone
+    // hardly ever worked.
+    //
+    // Chrome for Android synthesizes `dblclick` from a double tap, so both this
+    // and the tap detection above were firing for the same two taps: the taps
+    // zoomed in, and the synthetic dblclick arrived immediately afterwards,
+    // found `zoomed()` true, and zoomed straight back out. The gesture worked
+    // only when the timing happened to let one of them through alone -- which
+    // is exactly "I can only do it rarely".
     stage.addEventListener("dblclick", function (e) {
+      if (lastPointerType !== "mouse") return;
       e.preventDefault();
       if (zoomed()) reset(true);
       else { zoomTo(DOUBLE_TAP_SCALE, e.clientX, e.clientY); apply(true); }

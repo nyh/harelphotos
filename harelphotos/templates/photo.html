@@ -116,7 +116,11 @@
     copy that was generated -- on a phone `sizes` will have chosen something
     smaller, so it is a few hundred kilobytes that sharpens the picture
     straight away. `full` is the original, the only thing sharper still and
-    costing megabytes, so it is a last step and not a first one. -#}
+    costing megabytes, so it is a last step and not a first one.
+
+    `fullW` and `fullH` are the original's real pixel dimensions, which decide
+    how far zooming is worth going: past one image pixel per screen pixel there
+    is no more detail to find, only larger pixels. -#}
 {{ {"prev": prev.page_url if prev else none,
     "next": next.page_url if next else none,
     "album": album_url,
@@ -124,6 +128,8 @@
     "large": (photo|img_src(photo.tiers|max)) if photo.tiers else none,
     "full": "/orig/" ~ photo.url_relpath,
     "fullBytes": photo.size or 0,
+    "fullW": photo.width or 0,
+    "fullH": photo.height or 0,
     "sizes": photo|view_sizes,
     "prefetch": [ (prev|srcset(all_tiers)) if prev and prev.tiers else none,
                   (next|srcset(all_tiers)) if next and next.tiers else none ]}|tojson }}
