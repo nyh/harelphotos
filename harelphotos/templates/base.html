@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <title>{% block title %}{{ cfg.ui.site_title }}{% endblock %}</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+<link rel="stylesheet" href="{{ asset('app.css') }}">
 {#- Installable to a phone's home screen, which is the only way to get the
     browser's URL bar off the screen for good. Opened from the icon the site
     runs standalone, with no address bar in either orientation. -#}
@@ -31,6 +31,6 @@
 </head>
 <body{% block bodyclass %}{% endblock %}>
 {% block body %}{% endblock %}
-<script src="{{ url_for('static', filename='app.js') }}" defer></script>
+<script src="{{ asset('app.js') }}" defer></script>
 </body>
 </html>

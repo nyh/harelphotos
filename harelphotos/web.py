@@ -16,6 +16,7 @@ server.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from datetime import datetime, timedelta
@@ -127,6 +128,38 @@ def create_app(cfg: Config, *, require_login: bool = True) -> Flask:
         resp.headers.setdefault("Referrer-Policy", "no-referrer")
         resp.headers.setdefault("X-Content-Type-Options", "nosniff")
         resp.headers.setdefault("X-Frame-Options", "DENY")
+        return resp
+
+    @app.after_request
+    def _static_cache(resp):
+        """The stylesheet and the script, cached properly.
+
+        Flask sends these with `Cache-Control: no-cache`, which despite the
+        name does cache them -- it just requires the browser to ask first. So
+        nothing is re-downloaded, but every page load spends a round trip
+        confirming it, before the script that lays out the grid can run. On a
+        phone over mobile data that is the slowest part of an otherwise static
+        page, paid again for every photograph paged to.
+
+        A URL carrying `?v=<hash of the file>` is a different matter: it can
+        only ever mean one version, so it can be frozen and fetched exactly
+        once. `asset()` writes those, and a new deployment changes the hash and
+        so the URL, which is what makes it safe to freeze -- the trap avoided
+        here is the one the icons fell into, where a fixed name was promised to
+        be immutable and then changed underneath a year-long cache entry.
+
+        A request without a tag is a hand-typed URL or an old bookmark; it gets
+        an hour and revalidation, never eternity.
+        """
+        if request.endpoint == "static":
+            resp.headers["Cache-Control"] = (
+                "public, max-age=31536000, immutable" if request.args.get("v")
+                else "public, max-age=3600")
+            # These files are the same for everyone, signed in or not. Without
+            # this a `Vary: Cookie` inherited from touching the session would
+            # put the cookie in the browser's cache key, which is what once
+            # made every thumbnail re-download on every page load.
+            resp.headers.pop("Vary", None)
         return resp
 
     # Prepare the landing image and home-screen icons here rather than in the
@@ -724,6 +757,26 @@ def _register_filters(app: Flask, cfg: Config) -> None:
     # Once, at start-up: nothing rewrites the public files while the
     # application is running, and every page puts this on its icon links.
     app.jinja_env.globals["asset_tag"] = public_assets.asset_tag(cfg)
+
+    # Content hashes for the stylesheet and the script, so their URLs change
+    # when they do and can therefore be frozen in a browser for a year.
+    # Hashed per file: editing the stylesheet must not make anybody fetch the
+    # script again. Read once at start-up, because neither file changes while
+    # the application is running -- a deployment restarts it.
+    static_tags: dict[str, str] = {}
+    for name in ("app.css", "app.js"):
+        try:
+            data = (Path(app.static_folder) / name).read_bytes()
+            static_tags[name] = hashlib.sha256(data).hexdigest()[:10]
+        except OSError as e:            # serve it unversioned rather than not at all
+            log.warning("cannot hash static/%s: %s", name, e)
+
+    def asset(filename: str) -> str:
+        url = url_for("static", filename=filename)
+        tag = static_tags.get(filename)
+        return f"{url}?v={tag}" if tag else url
+
+    app.jinja_env.globals["asset"] = asset
 
 
 def wsgi_app(config_path: str | Path | None = None) -> Flask:
