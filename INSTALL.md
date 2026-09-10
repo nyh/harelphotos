@@ -486,6 +486,39 @@ Threads rather than more workers because with X-Sendfile the Python side of an
 image request is an access check and a header -- microseconds, then Apache
 sends the bytes -- so a thread spends its time waiting rather than computing.
 
+### Tuning it for a small machine
+
+Threads are nearly free; workers are what cost memory. Measured with a warmed
+process, counting PSS so shared pages are not double-counted:
+
+| configuration | processes | memory |
+|---|---|---|
+| 1 worker, 1 thread | 2 | 51 MB |
+| 1 worker, 8 threads | 2 | 52 MB |
+| 1 worker, 24 threads | 2 | 52 MB |
+| 2 workers, 8 threads | 3 | 82 MB |
+| 3 workers, 8 threads | 4 | 111 MB |
+
+Twenty-four threads cost about a megabyte more than one: they share a single
+interpreter and one copy of Flask and Pillow, and a thread stack only occupies
+what it touches. A *worker* is a whole separate Python, at roughly 29 MB each.
+
+So on a machine with a gigabyte, reduce `--workers` and leave `--threads`
+alone. `--workers 2 --threads 12` serves the same 24 concurrent requests as
+`3 x 8` for 30 MB less. More than one worker is worth having for resilience --
+a worker that dies does not take the site down -- rather than for throughput,
+which is Apache's job here.
+
+The one path where threads do cost memory is the on-demand WebP/JPEG fallback,
+which decodes and re-encodes in Pillow: that is per concurrent transcode, not
+per thread. It only happens for a browser too old for AVIF, and only once per
+image before the result is cached.
+
+Apache's own threads (`ThreadsPerChild`, `MaxRequestWorkers` under
+`mpm_event_module`, in `/etc/httpd/conf.modules.d/00-mpm.conf`) are best left
+as they are; they are cheap, and that file is shared with every other site the
+server hosts.
+
 A note for the next time you install this: almost everything that went wrong
 the first time was a permission or a name typed in two places that had to
 agree — the state directory owned by root after a `sudo init`, the domain left
