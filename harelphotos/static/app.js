@@ -549,16 +549,24 @@
       pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
       var two = twoPointers();
       if (two && pinch) {
-        var c = centre(two[0], two[1]);
+        // Zoom only, about the point the fingers started from, and no pan.
+        //
+        // Following the current midpoint instead -- so the picture travels
+        // with the hand as well as growing under it, the way a sheet of paper
+        // would -- was tried and is wrong here. Two fingers never move by
+        // exactly the same amount, so every pinch also slid the photograph
+        // sideways by however much the midpoint had drifted, and it read as
+        // the picture wandering off on its own rather than as panning. Pan is
+        // its own gesture, with one finger, once the zoom is finished.
+        //
+        // The anchor is the *starting* midpoint rather than the current one
+        // for the same reason: a moving anchor reintroduces the drift in a
+        // subtler form.
         scale = pinch.scale;
         tx = pinch.tx;
         ty = pinch.ty;
         zoomTo(pinch.scale * (spread(two[0], two[1]) / pinch.dist),
                pinch.cx, pinch.cy);
-        // Following the midpoint means the picture moves with the hand as
-        // well as growing under it, which is what makes it feel like paper.
-        tx += c.x - pinch.cx;
-        ty += c.y - pinch.cy;
         apply(false);
         return;
       }
