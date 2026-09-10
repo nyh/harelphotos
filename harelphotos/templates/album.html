@@ -62,7 +62,10 @@
           <span class="card-title" title="{{ sub.title }}">{{ sub.title }}</span>
           <span class="card-sub">
             {{ "{:,}".format(sub.n_photos_rec) }} photo{{ '' if sub.n_photos_rec == 1 else 's' }}
-            {%- if sub|date_span %} · {{ sub|date_span }}{% endif -%}
+            {#- The album's own header still shows its dates; this is only the
+                card in a listing, where on a date-organised tree it repeats the
+                folder name and clutters the page (`[ui] dir_card_dates`). -#}
+            {%- if cfg.ui.dir_card_dates and sub|date_span %} · {{ sub|date_span }}{% endif -%}
           </span>
         </div>
       </a>

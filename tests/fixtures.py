@@ -16,10 +16,17 @@ from harelphotos import config as config_mod
 from harelphotos import db
 
 
+# Small on purpose. At 800x600 three tiers were encoded per photo and the suite
+# scans once per test; at 400x300 it is two, and smaller ones -- which took the
+# whole suite from 8m34s to 3m05s. Tests that care about the size of a photo
+# pass their own.
+DEFAULT_SIZE = (400, 300)
+
+
 def make_jpeg(
     path: Path,
     *,
-    size: tuple[int, int] = (800, 600),
+    size: tuple[int, int] = DEFAULT_SIZE,
     taken: str | None = None,
     orientation: int | None = None,
     colour: tuple[int, int, int] = (120, 90, 60),
@@ -54,8 +61,13 @@ def make_tree(root: Path) -> Path:
     root.mkdir(parents=True, exist_ok=True)
 
     # A year with month subdirectories, the shape the real collection uses.
-    make_jpeg(root / "2019" / "01" / "a.jpg", taken="2019:01:15 10:00:00")
-    make_jpeg(root / "2019" / "01" / "b.jpg", taken="2019:01:16 11:00:00")
+    # Big enough to have every tier: several tests check the srcset ladder,
+    # and a 400px photo legitimately has no 1280 tier. The rest of the tree
+    # stays small, which is what keeps the suite quick.
+    make_jpeg(root / "2019" / "01" / "a.jpg", taken="2019:01:15 10:00:00",
+              size=(800, 600))
+    make_jpeg(root / "2019" / "01" / "b.jpg", taken="2019:01:16 11:00:00",
+              size=(800, 600))
     make_jpeg(root / "2019" / "02" / "c.jpg", taken="2019:02:20 09:30:00")
     # No EXIF date at all: must fall back to mtime for sorting.
     make_jpeg(root / "2019" / "02" / "d.jpg")
@@ -111,6 +123,14 @@ def make_config(tmp_path: Path, photo_root: Path) -> config_mod.Config:
             "index_db": str(state / "index.sqlite"),
             "users_file": str(tmp_path / "users.toml"),
             "secret_key_file": str(tmp_path / "secret_key"),
+            # One process: the fixture trees hold a handful of tiny photos, so
+            # forking a worker per core cost more than the work.
+            "scan": {"jobs": 1},
+            # The fastest AVIF setting. Encoding was 1.6s of every 2.7s scan
+            # and the suite scans once per test; nothing here asserts anything
+            # about compression, only about which files exist and how large
+            # their pixels are.
+            "encode": {"speed": 10},
         },
         Path("test-config.toml"),
     )

@@ -829,3 +829,37 @@ def test_a_photo_links_back_to_its_own_page_of_the_album(scanned, tmp_path):
     nav = _json.loads(body.split('id="nav-data" type="application/json">')[1]
                       .split("</script>")[0])
     assert "?page=" not in nav["album"], nav["album"]
+
+
+def test_subdirectory_cards_can_omit_the_date_range(scanned):
+    """On a tree already organised by date the card repeats the folder name,
+    and less accurately: one photo with a wrong clock widens the range."""
+    from harelphotos.web import create_app
+
+    def body(show):
+        object.__setattr__(scanned.ui, "dir_card_dates", show)
+        app = create_app(scanned, require_login=False)
+        app.config.update(TESTING=True)
+        return app.test_client().get("/a/2019/").get_data(as_text=True)
+
+    with_dates = body(True)
+    without = body(False)
+
+    card_with = with_dates.split('class="card-sub"')[1][:200]
+    card_without = without.split('class="card-sub"')[1][:200]
+    assert "·" in card_with, "the fixture has no date range to hide"
+    assert "·" not in card_without
+    # The photo count stays either way.
+    assert "photo" in card_with and "photo" in card_without
+
+
+def test_the_albums_own_header_keeps_its_dates(scanned):
+    """Turning the cards off must not take the header with it."""
+    from harelphotos.web import create_app
+
+    object.__setattr__(scanned.ui, "dir_card_dates", False)
+    app = create_app(scanned, require_login=False)
+    app.config.update(TESTING=True)
+    head = app.test_client().get("/a/2019/01/").get_data(as_text=True)
+    head = head.split('class="meta"')[1][:200]
+    assert "·" in head, head

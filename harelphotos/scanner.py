@@ -56,6 +56,11 @@ PROGRESS_INTERVAL = 0.25
 # since `taken` is read from each file there. Hence a periodic refresh in that
 # phase only, and none at all during image generation, which changes nothing
 # the rollup looks at.
+# Below this many items, do the work in this process rather than starting a
+# pool: the fork, the interpreter startup in each child and the teardown
+# dominate, and a small `scan --dir` paid it twice.
+POOL_THRESHOLD = 24
+
 ROLLUP_INTERVAL = 8.0
 
 
@@ -598,7 +603,11 @@ class Scanner:
                 last_shown = now
                 progress(done, len(pending), now - started)
 
-        if jobs > 1 and len(pending) > 1:
+        # Forking a worker per core costs more than the work itself for a
+        # small directory -- measured at ~3s to start and stop two pools
+        # against a few milliseconds of actual reading. `scan --dir` on one
+        # album is a common thing to do, and it was paying that twice.
+        if jobs > 1 and len(pending) > POOL_THRESHOLD:
             with multiprocessing.Pool(jobs, initializer=_nice, initargs=(self.cfg.scan.nice,)) as p:
                 for res in p.imap_unordered(_phase2_worker, pending, chunksize=16):
                     apply(res)
@@ -698,7 +707,7 @@ class Scanner:
                 last_shown = now
                 progress(done, len(pending), now - started)
 
-        if jobs_n > 1 and len(pending) > 1:
+        if jobs_n > 1 and len(pending) > POOL_THRESHOLD:
             with multiprocessing.Pool(
                 jobs_n, initializer=_nice, initargs=(self.cfg.scan.nice,)
             ) as p:

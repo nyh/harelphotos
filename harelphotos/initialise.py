@@ -41,6 +41,7 @@ map_link        = "osm"                     # "osm" | "google" | "none"
 album_page_size = 5000
 dirsort         = "name"                    # "-name" = newest first
 dir_card_aspect = "4/3"                     # "native" = do not crop covers
+dir_card_dates  = true                      # dates under a subdirectory's card
 
 [sizes]
 thumb = [256, 512]                          # album grid

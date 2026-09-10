@@ -718,6 +718,12 @@ The three that only matter on a server:
   the access check has passed, instead of copying them through Python. Needs
   `mod_xsendfile` and a matching `XSendFilePath`.
 
+Under `[ui]`, **`dir_card_dates = false`** removes the date range printed under
+each subdirectory's card in a listing. Worth turning off on a tree already
+organised by date: the card then repeats what the folder name already says, and
+says it less accurately, because a single photo with a wrong camera clock
+widens the whole range. The album's own header keeps its dates either way.
+
 **`session_days`** is counted from when you log in, not from last use. The
 session cookie is deliberately not re-sent on every response: its value is part
 of the browser's cache key for images, so a cookie that changed each time threw

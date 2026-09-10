@@ -88,6 +88,11 @@ class Ui:
     album_page_size: int = 5000
     dirsort: str = "name"
     dir_card_aspect: str = "4/3"
+    # Whether a subdirectory's card shows the dates of the photos inside it.
+    # Off suits a tree already organised by date: the card then repeats what
+    # the folder name says, and says it less accurately, since a single photo
+    # with a wrong clock widens the range.
+    dir_card_dates: bool = True
 
 
 @dataclass(frozen=True)
@@ -282,6 +287,7 @@ def from_dict(raw: dict, src: Path) -> Config:
             u.get("dirsort"), ("name", "-name", "date", "-date"), "[ui] dirsort", src, "name"
         ),
         dir_card_aspect=str(u.get("dir_card_aspect", "4/3")),
+        dir_card_dates=bool(u.get("dir_card_dates", True)),
     )
 
     s = raw.get("scan") or {}

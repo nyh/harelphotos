@@ -101,7 +101,7 @@ def test_exif_dates_and_dimensions(tree):
     # back to mtime (DESIGN.md 5.3).
     row = conn.execute("SELECT * FROM photos WHERE name = 'd.jpg'").fetchone()
     assert row["taken"] is None
-    assert row["width"] == 800
+    assert row["width"] == fixtures.DEFAULT_SIZE[0]
 
 
 def test_rollup_counts_recursively(tree):
