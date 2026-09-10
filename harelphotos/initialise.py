@@ -36,9 +36,11 @@ heading         = "Photo Album"
 tagline         = "By invitation only. Please login to continue."
 # landing_image = "{config_dir}/landing.jpg"
 hero_width      = 640                       # width of the login page picture
-# app_icon      = "{config_dir}/icon.jpg"   # home-screen icon; defaults to
-                                            # landing_image. Any image; it is
-                                            # cropped to a square.
+# icon          = "{config_dir}/icon.png"   # browser tab, phone home screen,
+                                            # and beside the front page's
+                                            # heading. Square, 512x512 or so;
+                                            # smaller is scaled up. Defaults
+                                            # to landing_image, cropped.
 show_gps        = true
 map_link        = "osm"                     # "osm" | "google" | "none"
 album_page_size = 5000

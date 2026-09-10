@@ -69,11 +69,13 @@ def test_site_name_heads_the_front_page_only(client):
     the name in the breadcrumb and the window title instead, and the
     single-photo page exists to show one photograph as large as it will go.
     """
-    heading = f'<h1 class="masthead">{client.harelphotos_cfg.ui.heading}</h1>'
-    assert heading in client.get("/a/").get_data(as_text=True)
-    assert "masthead" not in client.get("/a/2019/01/").get_data(as_text=True)
-    assert "masthead" not in client.get("/p/2019/01/a.jpg").get_data(
-        as_text=True)
+    front = client.get("/a/").get_data(as_text=True)
+    assert '<h1 class="masthead">' in front
+    assert client.harelphotos_cfg.ui.heading in front
+    assert '<h1 class="masthead">' not in client.get(
+        "/a/2019/01/").get_data(as_text=True)
+    assert '<h1 class="masthead">' not in client.get(
+        "/p/2019/01/a.jpg").get_data(as_text=True)
 
 
 def test_front_page_heading_is_heading_not_site_title(scanned):
@@ -94,7 +96,9 @@ def test_front_page_heading_is_heading_not_site_title(scanned):
     app.config.update(TESTING=True)
     with app.test_client() as c:
         body = c.get("/a/").get_data(as_text=True)
-    assert '<h1 class="masthead">The Family Photo Album</h1>' in body
+    masthead = body.split('<h1 class="masthead">')[1].split("</h1>")[0]
+    assert "The Family Photo Album" in masthead
+    assert "fam-pics" not in masthead
     assert "fam-pics</title>" in body            # site_title still names the tab
 
 

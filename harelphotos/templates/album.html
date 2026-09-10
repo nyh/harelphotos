@@ -27,7 +27,16 @@
       the window title carry the name the rest of the time, and the
       single-photo view gets nothing -- it exists to show one photograph as
       large as it will go. -#}
-  {% if not album.path %}<h1 class="masthead">{{ cfg.ui.heading }}</h1>{% endif %}
+  {% if not album.path %}
+  <h1 class="masthead">
+    {#- The icon beside the heading, as the old album had it. `alt` is empty on
+        purpose: the heading right next to it already says what this is, so a
+        screen reader announcing the name twice would only be noise. -#}
+    {%- if app_icons %}<img class="masthead-icon" src="/public/icon-192.png"
+         width="192" height="192" alt="">{% endif %}
+    {{- cfg.ui.heading }}
+  </h1>
+  {% endif %}
 
   {% if album.description %}<p class="blurb">{{ album.description }}</p>{% endif %}
 

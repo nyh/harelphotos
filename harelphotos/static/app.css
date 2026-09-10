@@ -115,6 +115,19 @@ main {
   font-size: 1.6rem;
   font-weight: 600;
   margin: 0 0 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+/* Sized in `em`, so it tracks the heading rather than being a fixed number of
+   pixels that happens to look right at one root size and wrong at the phone's
+   larger one. `flex: none` keeps a long heading from squeezing it. */
+.masthead-icon {
+  inline-size: 1.5em;
+  block-size: 1.5em;
+  object-fit: contain;
+  flex: none;
 }
 
 h2.section {

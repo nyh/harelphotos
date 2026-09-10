@@ -188,10 +188,6 @@ It follows `prefers-color-scheme` today. A toggle would need a control, a
 preference stored per browser, and a decision about where the control lives —
 which is why it was not done for someone who said they would not use it.
 
-### Nadav's ideas:
-* Nicer photo album header on album view (including homepage), we don't care about the space.
-
-
 ---
 
 ## Things I would not do

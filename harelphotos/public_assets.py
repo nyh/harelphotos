@@ -32,11 +32,31 @@ WIDTHS = (640, 1280)
 PUBLIC_DIR = "public"
 STEM = "landing"
 
-# Home-screen icons. 192 and 512 are what Android asks for; 180 is what iOS
-# uses for apple-touch-icon. PNG because that is what every platform accepts
-# for an installed app -- this is the one place AVIF is not the answer.
+# The album's icon, in the sizes the places that use it ask for: 192 and 512
+# for Android, 180 for iOS's apple-touch-icon, 32 for a desktop browser's tab
+# and the emblem beside the front page's heading. PNG because that is what
+# every platform accepts for an installed app -- this is the one place AVIF is
+# not the answer.
 ICON_STEM = "icon"
-ICON_SIZES = (180, 192, 512)
+ICON_SIZES = (32, 180, 192, 512)
+
+# iOS composites an apple-touch-icon onto black instead of honouring its alpha
+# channel, so a logo with transparent corners becomes a black tile with a
+# picture in the middle. That one size is flattened onto white; every other
+# keeps its transparency, which is what lets the favicon sit on a light or a
+# dark tab strip and the heading emblem on either colour scheme.
+OPAQUE_ICON_SIZES = frozenset({180})
+OPAQUE_ICON_BACKGROUND = (255, 255, 255)
+
+# The smallest icon worth listing in the web app manifest. Chrome wants at
+# least 192 before it will offer to install a site at all, so anything below
+# that is only there to be picked by mistake.
+MANIFEST_MIN_ICON = 180
+
+# What the icons on disk were made from. Without it `build_icons` skips every
+# size that already exists, so changing the configured icon would edit the
+# config, restart the server, and change nothing at all.
+ICON_STAMP = "icon.source"
 
 
 def public_dir(cfg: Config) -> Path:
@@ -101,37 +121,115 @@ def build(cfg: Config, force: bool = False) -> list[str]:
     return written
 
 
-def build_icons(cfg: Config, force: bool = False) -> list[str]:
-    """Square home-screen icons, cut from the landing image.
+def icon_source(cfg: Config) -> Path | None:
+    """The file the album's icon is made from.
 
-    Centre-cropped rather than letterboxed: an icon is displayed as a square
-    whatever we do, and padding it just makes the picture smaller. Without a
-    landing image there is no icon at all and the manifest omits them, which
-    browsers accept -- they fall back to a screenshot of the page.
+    `[ui] icon` is the name to use; `app_icon` is what it was called when it
+    only fed the installed app, and still works. Falling back to the landing
+    image means a site that configured a hero and nothing else still gets an
+    icon, which is better than a blank browser tab.
     """
-    src = cfg.ui.app_icon or cfg.ui.landing_image
+    return cfg.ui.icon or cfg.ui.app_icon or cfg.ui.landing_image
+
+
+def _icon_stamp(src: Path) -> str:
+    st = src.stat()
+    sizes = ",".join(str(s) for s in ICON_SIZES)
+    return f"{src.resolve()}\n{st.st_mtime_ns}\n{st.st_size}\n{sizes}\n"
+
+
+def _resize_square(im: Image.Image, size: int) -> Image.Image:
+    """Scale a square RGBA image.
+
+    LANCZOS both up and down. A 48px flat-colour logo blown up to 512 is soft,
+    but it is smooth, and the alternative -- NEAREST -- keeps the edges hard
+    and turns every curve into a staircase, which looks worse at every size
+    anyone actually sees. Android draws the 192 on a launcher; the 512 is for
+    a splash screen.
+
+    Resizing RGBA directly, and deliberately. A transparent pixel is
+    (0, 0, 0, 0) -- black -- and resampling averages that black into its
+    neighbours, so the textbook advice is to bleed colour outwards first, or
+    to premultiply. Measured on this icon, the raw colour channel does darken
+    at the edge, from (231, 76, 60) to (187, 54, 41). It makes no visible
+    difference: composited over white, the two methods differ by 2 units of
+    luminance out of 255, because the pixels whose colour was darkened are
+    exactly the ones with almost no alpha. Fifty lines of per-pixel Python
+    were written for this and thrown away; do not put them back without a
+    picture that looks wrong.
+
+    The one thing that really did matter is keeping the alpha channel at all.
+    This used to `convert("RGB")` first, which discards it and leaves the
+    stored colour behind -- and the stored colour under a transparent corner
+    is black, so a logo with rounded corners became an opaque black tile with
+    a picture in the middle.
+    """
+    return im.resize((size, size), Image.LANCZOS)
+
+
+def build_icons(cfg: Config, force: bool = False) -> list[str]:
+    """The album's icon in every size that gets asked for.
+
+    Centre-cropped rather than letterboxed if the source is not square: an
+    icon is displayed as a square whatever we do, and padding it just makes the
+    picture smaller. With no source configured there is no icon at all, the
+    manifest omits them and the pages omit the links, which browsers accept.
+    """
+    src = icon_source(cfg)
     if not src:
         return []
     if not src.is_file():
-        log.warning("[ui] icon source does not exist: %s", src)
+        log.warning("[ui] icon does not exist: %s", src)
         return []
     out = public_dir(cfg)
     out.mkdir(parents=True, exist_ok=True)
     written: list[str] = []
+
+    # Rebuild everything when the source changes, so editing the config is
+    # enough. The stamp covers the size list too: adding a size to ICON_SIZES
+    # has to reach a machine whose icons were built before it existed.
+    stamp = out / ICON_STAMP
     try:
-        with Image.open(src) as im:
-            im = ImageOps.exif_transpose(im).convert("RGB")
+        want = _icon_stamp(src)
+        if stamp.is_file() and stamp.read_text() == want:
+            pass
+        else:
+            force = True
+    except OSError:
+        force = True
+        want = None
+
+    try:
+        with Image.open(src) as opened:
+            im = ImageOps.exif_transpose(opened).convert("RGBA")
+            if im.width != im.height:
+                side = min(im.width, im.height)
+                im = ImageOps.fit(im, (side, side), Image.LANCZOS,
+                                  centering=(0.5, 0.4))
             for size in ICON_SIZES:
                 dest = out / f"{ICON_STEM}-{size}.png"
                 if dest.exists() and not force:
                     continue
-                square = ImageOps.fit(im, (size, size), Image.LANCZOS, centering=(0.5, 0.4))
+                square = _resize_square(im, size)
+                if size in OPAQUE_ICON_SIZES:
+                    flat = Image.new("RGB", square.size, OPAQUE_ICON_BACKGROUND)
+                    flat.paste(square, mask=square.split()[3])
+                    square = flat
                 tmp = dest.with_name(f"{dest.name}.{os.getpid()}.tmp")
                 square.save(tmp, "PNG", optimize=True)
                 tmp.replace(dest)
                 written.append(dest.name)
     except Exception as e:
-        log.warning("cannot prepare the home-screen icons from %s: %s", src, e)
+        log.warning("cannot prepare the icons from %s: %s", src, e)
+        return written
+
+    if written and want:
+        try:
+            tmp = stamp.with_name(f"{stamp.name}.{os.getpid()}.tmp")
+            tmp.write_text(want)
+            tmp.replace(stamp)
+        except OSError as e:                     # a rebuild every start, no worse
+            log.warning("cannot record the icon source: %s", e)
     return written
 
 
@@ -163,7 +261,10 @@ def manifest(cfg: Config) -> dict:
         "background_color": "#ffffff",
         "theme_color": "#ffffff",
     }
-    have = icons(cfg)
+    # The favicon size is deliberately not offered here. A manifest is a list
+    # of icons for installing the site, and a browser told about a 32px one is
+    # entitled to put it on a home screen.
+    have = [s for s in icons(cfg) if s >= MANIFEST_MIN_ICON]
     if have:
         # Omitted entirely when there is none: an empty list is a manifest
         # error, whereas an absent key just means the browser picks something.

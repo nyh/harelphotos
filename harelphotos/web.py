@@ -360,7 +360,15 @@ def _register_routes(app: Flask, cfg: Config) -> None:
         path = public_assets.asset_path(cfg, name)
         if path is None or not path.is_file():
             abort(404)
-        mime = "image/avif" if name.endswith(".avif") else "image/jpeg"
+        # From the extension, and not "AVIF or else JPEG": the icons are PNGs,
+        # and every response here carries `X-Content-Type-Options: nosniff`, so
+        # a PNG labelled image/jpeg is not merely untidy -- the browser is
+        # obliged to refuse to render it, and the icon silently never appears.
+        mime = {
+            ".avif": "image/avif",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+        }.get(Path(name).suffix, "application/octet-stream")
         return images.send(cfg, path, mime, vary_accept=False)
 
     @app.route("/a/")

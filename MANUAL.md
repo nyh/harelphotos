@@ -904,6 +904,49 @@ Both default to `"Photo Album"`, so a configuration that sets neither looks
 consistent and one that sets only `site_title` will show `"Photo Album"` as its
 heading — which is usually not what was meant.
 
+### `[ui] icon` — the picture the album is known by
+
+```toml
+[ui]
+icon = "/etc/harelphotos/camera.png"
+```
+
+One file, used in three places: the small icon in a desktop browser's tab, the
+icon of the installed application on a phone's home screen, and the emblem
+beside the heading on the album's front page.
+
+It is not used as-is. Those places want different sizes, and each wants a
+square file of exactly the right one, so four are generated into
+`$DERIVED_ROOT/public/` — `icon-32.png` for the tab, `icon-180.png` for iOS,
+`icon-192.png` for Android's launcher and the front page, and `icon-512.png`
+for a splash screen. Change the setting, or edit the file it points at, and
+they are all rebuilt on the next start; there is nothing to clear by hand.
+
+**What makes a good file:**
+
+- **Square.** A rectangle is centre-cropped, because an icon is displayed as a
+  square whatever we do. Crop it yourself if the middle is not the good part.
+- **At least 192×192, and 512×512 is better.** Anything smaller is scaled up,
+  and scaling up is scaling up: a 48×48 icon makes a passable browser tab and
+  a soft home-screen icon. Flat, simple artwork survives this far better than
+  a photograph or anything with fine detail or small text.
+- **PNG**, or anything else Pillow reads — JPEG, GIF, WebP. PNG is the right
+  answer for a logo because it is lossless and can be transparent.
+- **Transparency is welcome** and is kept, so the tab icon sits on a light or
+  a dark browser without a box around it. The one exception is the iOS
+  home-screen icon: iOS composites it onto **black** instead of honouring the
+  alpha channel, so that size alone is flattened onto white. If iPhones matter
+  to you and white is wrong, supply an already-opaque file with the background
+  you want.
+- **Simple, and recognisable at 32 pixels.** It ends up a few millimetres wide
+  in a tab strip. Detail that reads on a monitor disappears entirely.
+
+`[ui] app_icon` is the old name for this setting and still works. With neither
+set, the icon is cut from `[ui] landing_image` — the login page's picture —
+which is better than a blank tab but rarely as good as a real icon. With
+nothing set at all there is simply no icon: no links in the pages, no icons in
+the manifest, and browsers are entirely content with that.
+
 The front-page heading appears on the front page only. Deeper in the tree the
 breadcrumb already says where you are, and a heading naming the site above a
 listing of January 2019 reads as a letterhead rather than a title. The
@@ -943,11 +986,10 @@ The login page's picture is `[ui] landing_image`, drawn `[ui] hero_width`
 pixels wide (default 640) with a file twice that size generated alongside it
 for high-density screens. Lower `hero_width` if the picture dominates the page.
 
-The name under the icon is `[ui] site_title`. The icon itself is cut from
-`[ui] app_icon`, or from `[ui] landing_image` if that is not set; the image is
-centre-cropped to a square, so pick one that survives that. With neither set
-there is no icon and the phone falls back to a generic tile — everything else
-still works.
+The name under the icon is `[ui] site_title`. The icon itself comes from
+`[ui] icon` — see [the icon](#ui-icon--the-picture-the-album-is-known-by) for
+what makes a good file. With none set there is no icon and the phone falls back
+to a generic tile; everything else still works.
 
 Icons are written by `init` and by `serve`, into the `public/` directory of the
 derived tree. After changing the setting, run `harelphotos init` again (it is

@@ -79,9 +79,13 @@ class Ui:
     heading: str = "Photo Album"
     tagline: str = "By invitation only. Please login to continue."
     landing_image: Path | None = None
-    # The home-screen icon. Falls back to landing_image, which is usually the
-    # right picture anyway; set it separately when the hero photo does not
-    # survive being cropped to a small square.
+    # The album's icon: the browser tab, the installed app's home-screen icon,
+    # and the emblem beside the heading on the front page. `app_icon` is the
+    # old name for the same thing, kept working. With neither set it falls back
+    # to landing_image, which is usually the right picture anyway; set it
+    # separately when the hero photo does not survive being cropped to a small
+    # square. See MANUAL.md for what makes a good file.
+    icon: Path | None = None
     app_icon: Path | None = None
     # How wide the login page's picture is drawn, in CSS pixels. A file twice
     # this size is generated alongside it for high-density screens.
@@ -287,6 +291,7 @@ def from_dict(raw: dict, src: Path) -> Config:
         heading=str(u.get("heading", "Photo Album")),
         tagline=str(u.get("tagline", Ui.tagline)),
         landing_image=Path(landing).expanduser() if landing else None,
+        icon=(Path(str(u["icon"])).expanduser() if u.get("icon") else None),
         app_icon=(Path(str(u["app_icon"])).expanduser()
                   if u.get("app_icon") else None),
         hero_width=_positive_int(u.get("hero_width"), "[ui] hero_width", src, 640),
