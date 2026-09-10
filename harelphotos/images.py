@@ -18,7 +18,7 @@ import logging
 import mimetypes
 from pathlib import Path
 
-from flask import Response, request, send_file
+from flask import Response, abort, request, send_file
 
 from . import derive
 from .config import Config
@@ -92,6 +92,19 @@ def resolve(cfg: Config, tier: int, relpath: str) -> tuple[Path, str] | None:
     return (primary, cfg.encode.format) if primary.is_file() else None
 
 
+def _within_a_served_root(cfg: Config, path: Path) -> bool:
+    """Is this file one this software is ever allowed to send?
+
+    Belt and braces. Every route resolves a path by exact lookup in the index
+    before reaching here, so nothing outside the photo tree can be named in the
+    first place -- but Apache used to refuse anything outside XSendFilePath,
+    and that accidental second wall went when originals stopped being handed to
+    it. This is the deliberate replacement, so a future route that forgets the
+    index lookup fails closed rather than serving the filesystem.
+    """
+    return _under(path, cfg.photo_root) or _under(path, cfg.derived_root)
+
+
 def _under(path: Path, root: Path) -> bool:
     try:
         return path.resolve().is_relative_to(root.resolve())
@@ -102,6 +115,9 @@ def _under(path: Path, root: Path) -> bool:
 def send(cfg: Config, path: Path, mime: str, *, download_name: str | None = None,
          immutable: bool = True, vary_accept: bool = True) -> Response:
     """Send a file, handing off to the web server where possible."""
+    if not _within_a_served_root(cfg, path):
+        log.warning("refusing to send %s: outside the photo and derived trees", path)
+        abort(404)
     # X-Sendfile only for the generated tree.
     #
     # Apache will send a file the application names only if it sits under an

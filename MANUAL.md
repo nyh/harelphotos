@@ -1086,6 +1086,22 @@ it was actually on, not to the beginning.
 
 ---
 
+## What the server will serve
+
+A URL reaches a file only by **exact lookup in the index**: the directory and
+file name must match a row the scanner recorded. That is an allowlist by
+construction rather than a filter, which is why a file sitting in the photo
+tree but not indexed — `Picasa.ini`, an `.album.toml`, anything that is not a
+`.jpg` — is a 404 like any other. Path segments of `.` and `..` are refused
+before the lookup, and the access check runs after it.
+
+Behind that, nothing outside the photo tree and the derived tree can be sent at
+all, whatever a route asks for. Apache used to provide that wall by refusing
+files outside `XSendFilePath`; when originals stopped being handed to Apache
+that protection went with it, so it is now enforced in the application.
+
+---
+
 ## What is not indexed
 
 Only `.jpg` and `.jpeg` files (either case) are indexed. Everything else in the

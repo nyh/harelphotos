@@ -526,3 +526,67 @@ def test_a_changed_session_still_sends_the_cookie(client):
     assert out.status_code == 302
     assert "session=" in (out.headers.get("Set-Cookie") or "")
     assert client.get("/a/").status_code == 302      # really logged out
+
+
+# ------------------------------------------- serving files, and only the right ones
+
+def test_the_original_routes_cannot_be_talked_out_of_the_photo_tree(project):
+    """Asked when originals stopped being handed to Apache: does the server now
+    serve any file on disk?
+
+    No. A path reaches a file only by exact lookup in the index -- an allowlist
+    by construction, not a filter -- so anything the scanner did not record
+    cannot be named. `_clean_path` refuses "." and ".." segments before that,
+    and the ACL check runs after.
+    """
+    secret = project.photo_root.parent / "secret.txt"
+    secret.write_text("PRIVATE KEY MATERIAL\n", encoding="utf-8")
+    (project.photo_root / "Picasa.ini").write_text("[Picasa]\n", encoding="utf-8")
+
+    app = create_app(project, require_login=True)
+    app.config.update(TESTING=True)
+    c = app.test_client()
+    login(c)
+
+    for url in ("/orig/../secret.txt",
+                "/orig/2019/01/../../../secret.txt",
+                "/orig/%2e%2e/secret.txt",
+                "/orig/2019/01/%2e%2e/%2e%2e/%2e%2e/secret.txt",
+                "/orig/etc/passwd",
+                "/i/orig/../secret.txt",
+                # Inside the photo tree, but not photographs: only .jpg and
+                # .jpeg are indexed, so neither exists as far as this is
+                # concerned.
+                "/orig/Picasa.ini",
+                "/orig/2019/01/.album.toml"):
+        r = c.get(url, follow_redirects=True)
+        assert r.status_code == 404, f"{url} -> {r.status_code}"
+        assert b"PRIVATE" not in r.get_data(), url
+
+    assert c.get("/orig/2019/01/a.jpg").status_code == 200
+
+
+def test_sending_a_file_outside_the_served_trees_fails_closed(project):
+    """Defence in depth, added deliberately when an accidental one was lost.
+
+    Apache refuses anything outside XSendFilePath, which was a second wall
+    behind the index lookup until originals stopped being handed to it. This
+    is the replacement, so a future route that forgets the lookup fails closed.
+    """
+    from pathlib import Path
+
+    from harelphotos import images
+
+    secret = project.photo_root.parent / "secret2.txt"
+    secret.write_text("PRIVATE KEY MATERIAL\n", encoding="utf-8")
+
+    app = create_app(project, require_login=False)
+
+    @app.route("/careless/<path:p>")
+    def careless(p):                       # a mistake, as one would look
+        return images.send(project, Path("/") / p, "text/plain", vary_accept=False)
+
+    app.config.update(TESTING=True)
+    r = app.test_client().get("/careless" + str(secret))
+    assert r.status_code == 404
+    assert b"PRIVATE" not in r.get_data()
