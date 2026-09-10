@@ -312,3 +312,33 @@ def test_a_cover_path_cannot_escape_the_album(project):
         r = c.post("/cover", data={"album": "trip/junk", "photo": bad, "csrf": token})
         assert r.status_code == 404, bad
     assert overrides.get(project, "trip/junk").cover is None
+
+
+def test_the_button_offers_to_undo_on_the_photo_that_is_the_cover(project):
+    """Rather than a permanent "choose automatically" control on every album
+    page for something done once in a while."""
+    c = client_as(project, "boss")
+
+    body = c.get("/p/trip/c.jpg").get_data(as_text=True)
+    assert "Make cover" in body and "undo" not in body
+    token = re.search(r'name="csrf" value="([^"]+)"', body).group(1)
+    c.post("/cover", data={"album": "trip", "photo": "c.jpg", "csrf": token})
+
+    # Now that photo offers the undo ...
+    body = c.get("/p/trip/c.jpg").get_data(as_text=True)
+    assert "undo" in body and "Make cover" not in body
+    # ... and its neighbours still offer to take its place.
+    assert "Make cover" in c.get("/p/trip/a.jpg").get_data(as_text=True)
+
+    r = c.post("/cover", data={"album": "trip", "clear": "1", "csrf": token})
+    assert r.status_code == 302
+    assert overrides.get(project, "trip").cover is None
+
+
+def test_no_cover_control_appears_on_an_album_page(project):
+    """It was a footer on every album, which is a lot of furniture for a rare
+    action -- and it could not express a nested pick anyway."""
+    overrides.set_for(project, "trip", cover="c.jpg")
+    body = client_as(project, "boss").get("/a/trip/").get_data(as_text=True)
+    assert "automatically" not in body
+    assert "/cover" not in body

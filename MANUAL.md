@@ -842,9 +842,15 @@ which is the only way to give a cover to a directory that holds nothing but
 subdirectories — it has no photo of its own to name.
 
 An admin can also do this while browsing: open a photo and press **Make cover**
-in the top bar. It takes effect on the next page — no scan. A pick naming a
-photo that has since been deleted quietly falls back to the automatic choice
-rather than leaving a blank card.
+in the top bar. It takes effect on the next page — no scan. Return to that same
+photo and the button reads **Cover ✓ — undo**, which goes back to choosing
+automatically. A pick naming a photo that has since been deleted quietly falls
+back to the automatic choice rather than leaving a blank card.
+
+The button only ever sets the cover of the album the photo is *in*. To give a
+cover to a directory that holds nothing but subdirectories, use the command
+above with a path, or edit the overrides file — there is no way to express that
+from a single photo's page.
 
 Only admins see the button, and only admins may post to it —
 `harelphotos user add NAME --admin`, which works for a Google account too.

@@ -376,7 +376,6 @@ def _register_routes(app: Flask, cfg: Config) -> None:
             subalbums=subalbums,
             photos=photos[pager["start"]:pager["end"]],
             pager_data=pager,
-            cover_is_picked=bool(overrides.get(cfg, path).cover),
             crumbs=g.index.breadcrumbs(alb, g.viewer),
             cfg=cfg,
         )
@@ -407,6 +406,10 @@ def _register_routes(app: Flask, cfg: Config) -> None:
             photo=pho,
             album=alb,
             album_url=album_url,
+            # Whether this photo is the album's chosen cover, so the button
+            # can offer to undo instead of repeating what is already true.
+            is_cover=(alb is not None
+                      and overrides.get(cfg, alb.path).cover == pho.name),
             prev=prev_p,
             next=next_p,
             crumbs=g.index.breadcrumbs(alb, g.viewer) + [alb] if alb else [],

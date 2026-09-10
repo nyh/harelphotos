@@ -99,16 +99,6 @@
     <p class="blurb">This album is empty.</p>
   {% endif %}
 
-  {%- if viewer and viewer.is_admin and cover_is_picked %}
-  <form method="post" action="{{ url_for('set_cover') }}" class="coverclear">
-    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-    <input type="hidden" name="album" value="{{ album.path }}">
-    <input type="hidden" name="clear" value="1">
-    <input type="hidden" name="next" value="{{ album.url }}">
-    <button type="submit" class="linklike">Choose this album's cover automatically</button>
-  </form>
-  {%- endif %}
-
   {#- Repeated at the foot, which is where you are when you want it. -#}
   {{ pager(pager_data) }}
 </main>
