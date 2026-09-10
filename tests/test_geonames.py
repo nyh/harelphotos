@@ -96,3 +96,40 @@ def test_haversine_is_sane():
     d = geonames.haversine(32.0853, 34.7818, 31.7683, 35.2137)
     assert 50_000 < d < 60_000
     assert geonames.haversine(0, 0, 0, 0) == 0
+
+
+def test_geocode_reports_progress_on_every_row(tmp_path, monkeypatch):
+    """It ran silently. Reported per row so the caller can draw on a clock:
+    a count-based interval shows nothing on a small collection and appears to
+    stall on a slow one -- the same mistake the scanner already made once."""
+    import json as _json
+    import sqlite3 as _sqlite3
+
+    from harelphotos import db as db_mod, geocode as geocode_mod, scanner
+    from tests import fixtures
+
+    photos = tmp_path / "pictures"
+    for i in range(5):
+        fixtures.make_jpeg(photos / f"p{i}.jpg", gps=(37.1036, 25.3766))
+    cfg = fixtures.make_config(tmp_path, photos)
+    conn = fixtures.fresh_index(cfg)
+    scanner.scan(cfg, conn)
+
+    # A minimal dataset beside the index, where geocode expects it.
+    gpath = cfg.state_dir / "geonames.sqlite"
+    g = _sqlite3.connect(gpath)
+    g.executescript(geonames.SCHEMA)
+    g.execute("INSERT INTO places VALUES ('Náxos','GR','24',37.1036,25.3766,7000)")
+    g.execute("INSERT INTO countries VALUES ('GR','Greece')")
+    g.commit(); g.close()
+
+    seen = []
+    stats = geocode_mod.geocode(cfg, conn, progress=lambda d, t: seen.append((d, t)))
+    conn.close()
+
+    assert stats.resolved == 5
+    # One per row, not one per 500 -- plus a final call so the completed line
+    # is always drawn even when the last row did not fall on a tick.
+    assert [d for d, _ in seen] == [1, 2, 3, 4, 5, 5], seen
+    assert all(t == 5 for _, t in seen)
+    assert stats.elapsed >= 0

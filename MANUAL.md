@@ -314,6 +314,26 @@ image, from `srcset` — a phone does not pull the 1600px file just because it i
 next. The prefetch starts only after the photo you are actually looking at has
 loaded, so it never competes with it.
 
+### `harelphotos geocode [--force]`
+
+Turns GPS coordinates into place names, using the local dataset only — nothing
+leaves the machine. It prints a live line while it works:
+
+```
+  naming places: 1,971/1,971 · 2,911/s · ETA 0:00
+1,971 photos with GPS, 1,971 resolved (409 distinct locations), 0 unresolved in 0.6s
+```
+
+The rate climbs sharply as it goes: coordinates are rounded to about 100 m and
+memoised, so a trip's photos collapse into a handful of distinct lookups — 409
+for 1,971 photos above.
+
+`--force` re-resolves photos that already have a name, which is what you want
+after `init --landmarks` or after an upgrade that changed how names are built.
+
+It takes the same lock as `scan`, so the two will not run at once; if a scan is
+in progress this stops and says so rather than waiting.
+
 ### `harelphotos init --landmarks`
 
 Optional, and a much larger download than `--geonames`: about 421 MB of

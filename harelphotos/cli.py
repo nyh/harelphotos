@@ -11,6 +11,7 @@ import argparse
 import getpass
 import logging
 import sys
+import time
 from pathlib import Path
 
 from . import aclcmd
@@ -273,6 +274,26 @@ def _derive_progress(done: int, total: int, elapsed: float) -> None:
     _bar("generating images", done, total, elapsed)
 
 
+def _geocode_progress():
+    """A live line for `geocode`, drawn on a clock rather than a row count.
+
+    It ran silently before. Most of its work is looking up distinct
+    coordinates, so the rate climbs sharply once a trip's photos start
+    repeating locations -- which is worth watching rather than guessing at.
+    """
+    started = time.monotonic()
+    last = [0.0]
+
+    def report(done: int, total: int) -> None:
+        now = time.monotonic()
+        if done < total and now - last[0] < scanner.PROGRESS_INTERVAL:
+            return
+        last[0] = now
+        _bar("naming places", done, total, now - started)
+
+    return report
+
+
 def cmd_scan(args: argparse.Namespace) -> int:
     cfg = _load_config(args)
     if not cfg.photo_root.is_dir():
@@ -342,10 +363,16 @@ def cmd_geocode(args: argparse.Namespace) -> int:
     lock_path = cfg.state_dir / "scan.lock"
     try:
         with lock.ScanLock(lock_path):
-            stats = geocode_mod.geocode(cfg, conn, force=args.force)
+            stats = geocode_mod.geocode(
+                cfg, conn, force=args.force,
+                progress=None if args.quiet else _geocode_progress(),
+            )
     except geonames.GeonamesError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
+    if not args.quiet:
+        sys.stderr.write("\r\033[K")
+        sys.stderr.flush()
     print(stats.summary())
     conn.close()
     return 0

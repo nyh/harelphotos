@@ -8,6 +8,7 @@ re-read of 300 GB.
 from __future__ import annotations
 
 import json
+import time
 import logging
 import sqlite3
 from dataclasses import dataclass
@@ -24,13 +25,16 @@ class GeocodeStats:
     resolved: int = 0
     unresolved: int = 0
     distinct_lookups: int = 0
+    elapsed: float = 0.0
 
     def summary(self) -> str:
         if not self.considered:
             return "no photos with GPS coordinates to resolve"
         return (
             f"{self.considered:,} photos with GPS, {self.resolved:,} resolved "
-            f"({self.distinct_lookups:,} distinct locations), {self.unresolved:,} unresolved"
+            f"({self.distinct_lookups:,} distinct locations), "
+            f"{self.unresolved:,} unresolved"
+            + (f" in {self.elapsed:.1f}s" if self.elapsed else "")
         )
 
 
@@ -49,6 +53,7 @@ def geocode(
         return stats
 
     gc = Geocoder(cfg.state_dir / "geonames.sqlite")
+    started = time.monotonic()
     try:
         for n, row in enumerate(rows, 1):
             try:
@@ -72,12 +77,17 @@ def geocode(
             )
             if n % 500 == 0:
                 conn.commit()
-                if progress:
-                    progress(n, len(rows))
+            # Reported every row, not every five hundred: the caller decides
+            # how often to draw, on a clock rather than a count. A count-based
+            # interval shows nothing at all on a small collection and stalls
+            # visibly on a slow one.
+            if progress:
+                progress(n, len(rows))
         stats.distinct_lookups = len(gc._cache)
     finally:
         gc.close()
     conn.commit()
     if progress:
         progress(len(rows), len(rows))
+    stats.elapsed = time.monotonic() - started
     return stats
