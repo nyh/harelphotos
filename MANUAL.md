@@ -470,6 +470,13 @@ the file's timestamp, which for a scan is when it was scanned rather than when
 it was taken. `harelphotos check` reports what fraction of your photos have a
 real date.
 
+### Very wide photos in the grid
+
+A panorama is laid out at its true shape, so the row holding it comes out
+shorter than the others — that is what a justified layout does, and it is why
+the row is exactly as wide as the page rather than the panorama being cropped
+or squashed.
+
 ### If thumbnails look soft
 
 They should not, but if they do, in order of likelihood:

@@ -27,7 +27,13 @@
     // This is what keeps a 3000-photo album fast.
     var items = tiles.map(function (el) {
       var ar = parseFloat(el.dataset.ar);
-      return { el: el, ar: isFinite(ar) && ar > 0 ? ar : 1 };
+      if (!isFinite(ar) || ar <= 0) ar = 1;
+      // Bounded only against nonsense in the data, never for layout: the row
+      // arithmetic and the width it produces have to use the SAME number. They
+      // did not -- a row was measured with the aspect clamped to 3 and then
+      // rendered at the true one, so a 6:1 panorama made its row about twice
+      // the width of the page and everything spilled off the side.
+      return { el: el, ar: Math.min(20, Math.max(0.05, ar)) };
     });
 
     var width = grid.clientWidth;
@@ -43,9 +49,7 @@
     var row = [];
     var sum = 0;
     items.forEach(function (item) {
-      // Clamp when accumulating, or one 3:1 panorama drags its whole row down
-      // to a sliver.
-      var ar = Math.min(3.0, Math.max(0.4, item.ar));
+      var ar = item.ar;
       var withoutIt = row.length ? heightFor(row.length, sum) : Infinity;
       row.push(item);
       sum += ar;
@@ -230,6 +234,15 @@
     limitLoading(grid);
     rememberScroll(grid);
     window.addEventListener("resize", relayout, { passive: true });
+
+    // The window is not the only thing that changes the grid's width. Laying
+    // the rows out makes the page shorter, which can remove the vertical
+    // scrollbar, which widens the grid by about 15px -- and `resize` does not
+    // fire for that, so the rows stayed a scrollbar short of the edge. The
+    // guard inside relayout() stops this chasing its own tail.
+    if (window.ResizeObserver) {
+      new ResizeObserver(relayout).observe(grid);
+    }
   }
 
   /* ---------------------------------------------------- single photo view */
