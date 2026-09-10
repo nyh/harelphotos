@@ -299,7 +299,56 @@ in full because the instinct was right about the cause, and because the reason
 to skip it should be "the cheap fix worked", not a list of difficulties that
 turned out to be softer than they first looked.
 
-### 21. Serve the album page's first screenful without waiting for the index
+### 21. Page between photographs without loading a page
+
+Nadav's, and the one with the largest effect on how the viewer feels. Arrow or
+swipe swaps the image and the caption in place; nothing navigates; the address
+bar is kept honest with `history.replaceState`. Paging then costs what the
+image costs and nothing else.
+
+Measured, because the worry was about server load and traffic and neither turns
+out to be the objection:
+
+    per photograph paged to      today            client-side
+    round trips                  1  (~330 ms)     0
+    bytes                        3.3 KB of HTML   ~0.7 KB amortised
+    server render                1.5 ms           ~1/50 of that
+
+A photo page renders in a millisecond and a half, so server load was never the
+problem. The JSON does not *add* to the traffic either -- it replaces the HTML,
+at about a fifth the size. The whole prize is the round trip, which is also the
+only part anybody can feel.
+
+Three things it should be built with:
+
+- **As progressive enhancement.** The server-rendered page stays exactly as it
+  is: it is what a bookmark, a shared link and a browser without JavaScript
+  get. The swapping layers on top. That keeps the change additive and
+  reversible, which matters for the view everything else hangs off.
+- **With the metadata formatted server-side.** Send `"1/200 s · f/1.9 · ISO
+  44"`, not raw EXIF -- the string the template would have printed. Otherwise
+  `exposure`, `photo_date`, `day_date` and `maplink` all have to exist a second
+  time in JavaScript and stay in step with the Python. About 730 bytes of
+  finished text per photograph.
+- **Windowed.** Fifty photographs' metadata around the current one is 36 KB and
+  buys fifty moves with no request at all; a 5000-photo album entire would be
+  3.6 MB. Fetch the next window in the background, exactly as the images
+  already are.
+
+What it really costs is two renderers for one view, which have to agree.
+Formatting server-side shrinks that a great deal but does not remove it, and it
+is the largest departure this project would have made from "a page view is a
+few indexed SQLite reads and a template render". The admin cover button is a
+POST form with a CSRF token and wants thinking about separately.
+
+`api_album` already exists and returns name, URL and aspect for prefetching;
+this is the same idea with enough in it to draw the page.
+
+Composes with everything already built: the swipe that follows the thumb
+becomes a real carousel, prefetching becomes trivial, and the zoom resets
+naturally between photographs.
+
+### 22. Serve the album page's first screenful without waiting for the index
 
 Not investigated, and listed so it is not forgotten: a page of five thousand
 photographs does five thousand rows of work before the first byte, and only the
