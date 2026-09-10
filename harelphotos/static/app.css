@@ -372,7 +372,21 @@ h2.section:first-child { margin-block-start: 0.25rem; }
    sees anything but a wide screen, and the whole page arrives shrunk. */
 @media (pointer: coarse), (max-width: 600px) {
   :root { font-size: 125%; }
-  body { font-size: 1rem; }
+
+  /* 0.9rem, not 1rem: 20px body text was reported as a shade too large, and
+     the fix is to compress the scale rather than lower the root -- lowering
+     the root would take `h2.section` and `.card-sub` back under the 16px floor
+     with it, which is the half that is working. Bringing `body` down on its
+     own narrows the range to 16-21px:
+
+         0.8rem  -> 16px   card subtitles, section headings (the floor)
+         0.85rem -> 17px   header meta, user menu
+         0.9rem  -> 18px   body text and album titles
+         1.05rem -> 21px   breadcrumbs, which are the page title on a phone
+
+     A tighter spread than the desktop's, which is right: hierarchy earns its
+     keep across a 1200px window and mostly just wastes a 400px one. */
+  body { font-size: 0.9rem; }
 }
 
 @media (max-width: 600px) {
