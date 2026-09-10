@@ -217,6 +217,26 @@ cheapest item on this list by a wide margin and probably the largest single
 improvement, and it should be measured before anything else here is attempted,
 because it changes what the rest are worth.
 
+**HTTP/3 would be better still, and is not available to us.** It is a real
+standard, and phones support it well — Chrome on Android and Safari on iOS
+both. It would help more than HTTP/2 here for two reasons that are exactly this
+site's problems. QUIC folds the transport and crypto handshakes together, which
+is worth about the 120 ms that TLS costs on top of TCP in the measurements
+above; and its streams are independent, so a single lost packet does not stall
+every other one. HTTP/2 over TCP has that flaw, and fifty thumbnails all
+waiting on one retransmit is what a lossy mobile link does to an album page.
+
+The blocker is the web server. Apache 2.4 ships no HTTP/3 — `mod_http2` and
+nothing beyond it — and Rocky 9 ships Apache. nginx has had it since 1.25 and
+Caddy does it by default, so this means replacing or fronting the web server,
+against two deliberate choices: INSTALL.md assumes an Apache already serving
+other sites and takes care not to disturb it, and the X-Sendfile handoff is
+Apache's (`sendfile_header` is an enum of `auto`, `X-Sendfile`, `none`, and
+knows nothing of nginx's `X-Accel-Redirect`).
+
+Worth revisiting if Apache ever ships it, or if this site ever moves off a
+shared httpd for other reasons. Not worth moving *for*.
+
 ### 19. Prefetch the neighbouring *pages*, not only their images
 
 The next and previous photographs' images are already fetched ahead of time,
