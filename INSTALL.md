@@ -457,6 +457,7 @@ Where things go wrong:
 | `attempt to write a readonly database` | `sudo chown -R nyh:nyh /var/lib/harelphotos` — `init` ran as root |
 | 503 from Apache | `systemctl status harelphotos` — gunicorn is not up |
 | every image 404s but pages work | `sendfile_header`/`XSendFilePath` disagree, or Apache cannot read `/var/lib/harelphotos/derived` |
+| thumbnails fine, "Download original" 404s | an old build: originals were handed to Apache, which may only send files under `XSendFilePath` |
 | login always returns to the login page | `base_url` is not exactly what the browser asked for, so the cookie is dropped |
 | everyone throttled at once | `behind_proxy` is not `true` |
 | grey placeholder tiles | those photos have no images generated yet; finish the scan |

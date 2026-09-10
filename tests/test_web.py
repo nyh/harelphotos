@@ -863,3 +863,48 @@ def test_the_albums_own_header_keeps_its_dates(scanned):
     head = app.test_client().get("/a/2019/01/").get_data(as_text=True)
     head = head.split('class="meta"')[1][:200]
     assert "·" in head, head
+
+
+# --------------------------------------------------- originals and X-Sendfile
+
+def test_originals_are_not_handed_to_apache(scanned, tmp_path):
+    """Apache sends a file the application names only if it is under an
+    XSendFilePath, and that lists the derived tree alone -- the photo tree
+    cannot be added, because it lives in a home directory Apache cannot read.
+
+    Naming a file outside the list does not fail loudly: mod_xsendfile answers
+    404. So "Download original", and the full-size image shown for a photo
+    whose copies are not generated yet, were silently missing in production
+    while working in development, where nothing hands off to Apache at all.
+    """
+    from harelphotos.web import create_app
+
+    object.__setattr__(scanned, "sendfile_header", "X-Sendfile")
+    app = create_app(scanned, require_login=False)
+    app.config.update(TESTING=True)
+    c = app.test_client()
+
+    for url in ("/orig/2019/01/a.jpg", "/i/orig/2019/01/a.jpg"):
+        r = c.get(url)
+        assert r.status_code == 200, url
+        assert "X-Sendfile" not in r.headers, url
+        assert r.data, f"{url} served no bytes"
+
+
+def test_derived_images_are_still_handed_to_apache(scanned):
+    """The hand-off is the point of the setting; only originals are exempt."""
+    import re
+
+    from harelphotos.web import create_app
+
+    object.__setattr__(scanned, "sendfile_header", "X-Sendfile")
+    app = create_app(scanned, require_login=False)
+    app.config.update(TESTING=True)
+    c = app.test_client()
+
+    body = c.get("/a/2019/01/").get_data(as_text=True)
+    url = re.search(r'src="(/i/\d+/[^"]+)"', body).group(1)
+    r = c.get(url)
+    assert r.status_code == 200
+    assert "X-Sendfile" in r.headers
+    assert str(scanned.derived_root) in r.headers["X-Sendfile"]

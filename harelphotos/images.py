@@ -92,10 +92,29 @@ def resolve(cfg: Config, tier: int, relpath: str) -> tuple[Path, str] | None:
     return (primary, cfg.encode.format) if primary.is_file() else None
 
 
+def _under(path: Path, root: Path) -> bool:
+    try:
+        return path.resolve().is_relative_to(root.resolve())
+    except (OSError, ValueError):
+        return False
+
+
 def send(cfg: Config, path: Path, mime: str, *, download_name: str | None = None,
          immutable: bool = True, vary_accept: bool = True) -> Response:
     """Send a file, handing off to the web server where possible."""
-    if cfg.sendfile_header == "X-Sendfile":
+    # X-Sendfile only for the generated tree.
+    #
+    # Apache will send a file the application names only if it sits under an
+    # XSendFilePath, and that lists the derived directory alone -- the photo
+    # tree cannot be added, because it lives in a home directory Apache cannot
+    # read, which is the whole reason the generated images live elsewhere.
+    #
+    # Naming a file outside that list does not fail loudly: mod_xsendfile
+    # answers 404. So every original -- the "Download original" button, and the
+    # full-size image shown for a photo whose copies are not generated yet --
+    # was silently missing in production while working perfectly in
+    # development, where nothing hands off to Apache at all.
+    if cfg.sendfile_header == "X-Sendfile" and _under(path, cfg.derived_root):
         resp = Response(b"", mimetype=mime)
         resp.headers["X-Sendfile"] = str(path)
         resp.headers["Content-Length"] = str(path.stat().st_size)
