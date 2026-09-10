@@ -519,24 +519,51 @@
     }
 
     /* Zoom about a point, so the pixel under the fingers stays under them. */
-    function zoomTo(next, cx, cy) {
+    /* Where the middle of the photo's box is when nothing is transformed.
+     *
+     * Deliberately not `img.getBoundingClientRect()`, which reports the element
+     * as currently *painted*. That is a different thing from the state this
+     * code is holding in `scale`, `tx` and `ty`, and during a pinch the two are
+     * never the same: each move event resets those variables to the values the
+     * gesture started with, while the screen still shows the result of the
+     * previous frame. Anchoring against the painted position therefore used a
+     * frame-old reference that changed on every event, and the error came out
+     * as the photograph sliding continuously under the fingers -- worse the
+     * more events the gesture generated, which is exactly what moving one
+     * finger does.
+     *
+     * `offsetLeft` and friends ignore transforms, and the stage is never
+     * transformed, so this is a fixed reference that does not depend on what
+     * has been drawn. */
+    function untransformedCenter() {
+      var s = stage.getBoundingClientRect();
+      return { x: s.left + img.offsetLeft + img.offsetWidth / 2,
+               y: s.top + img.offsetTop + img.offsetHeight / 2 };
+    }
+
+    /* Zoom to `next` about the screen point (cx, cy), starting from an
+     * explicit state rather than from whatever is on screen.
+     *
+     * Taking the base as an argument is what makes a pinch a pure function of
+     * where it started and how far apart the fingers are now. Nothing
+     * accumulates from frame to frame, so there is no drift to build up. */
+    function zoomFrom(base, next, cx, cy) {
       next = Math.min(MAX_SCALE, Math.max(1, next));
-      var r = img.getBoundingClientRect();
-      // Where the anchor sits relative to the element's center, in the
-      // untransformed coordinate space.
-      //
-      // No `- tx` here, however much it looks as though there should be.
-      // getBoundingClientRect reports the element as *drawn*, so its center is
-      // already the untransformed center plus the translation. Subtracting the
-      // translation again counted it twice, and the anchor came out wrong by
-      // tx/scale -- which is why a photograph that had been panned slid
-      // sideways as it was zoomed, while one still centered did not.
-      var ox = (cx - (r.left + r.width / 2)) / scale;
-      var oy = (cy - (r.top + r.height / 2)) / scale;
-      tx += ox * (scale - next);
-      ty += oy * (scale - next);
+      var c = untransformedCenter();
+      // The anchor, in the picture's own coordinates, measured from the
+      // center. Here the translation *is* subtracted, because `c` is the
+      // untransformed center and `base.tx` is where the picture sits relative
+      // to it.
+      var ox = (cx - c.x - base.tx) / base.scale;
+      var oy = (cy - c.y - base.ty) / base.scale;
       scale = next;
+      tx = base.tx + ox * (base.scale - next);
+      ty = base.ty + oy * (base.scale - next);
       if (scale === 1) { tx = 0; ty = 0; }
+    }
+
+    function zoomTo(next, cx, cy) {
+      zoomFrom({ scale: scale, tx: tx, ty: ty }, next, cx, cy);
     }
 
     function reset(animate) { scale = 1; tx = 0; ty = 0; apply(animate); }
@@ -590,11 +617,15 @@
         // The anchor is the *starting* midpoint rather than the current one
         // for the same reason: a moving anchor reintroduces the drift in a
         // subtler form.
-        scale = pinch.scale;
-        tx = pinch.tx;
-        ty = pinch.ty;
-        zoomTo(pinch.scale * (spread(two[0], two[1]) / pinch.dist),
-               pinch.cx, pinch.cy);
+        //
+        // Computed from `pinch`, the state the gesture began in, and not from
+        // the state left by the previous move event. The whole pinch is
+        // therefore a pure function of one number -- how far apart the fingers
+        // are now, against how far apart they started -- so there is nothing
+        // for an error to accumulate in, and putting the fingers back where
+        // they began puts the photograph back exactly where it began.
+        zoomFrom(pinch, pinch.scale * (spread(two[0], two[1]) / pinch.dist),
+                 pinch.cx, pinch.cy);
         apply(false);
         return;
       }
