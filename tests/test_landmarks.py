@@ -137,3 +137,34 @@ def test_a_state_in_a_federal_country_is_kept(db):
     country alone would be uselessly vague."""
     got = name_at(db, 34.87, -111.76)
     assert got == "Sedona, Arizona, United States", got
+
+
+def test_a_bridge_does_not_reach_across_a_town(tmp_path):
+    """A photo taken indoors, 793 m from Echo Bridge, was labelled with the
+    bridge. That is a quarter of a mile of somebody's town in between.
+
+    The radius has to follow how physically big the thing is, not how famous:
+    a bridge you are either on or you are not, while an airport 1.8 km away is
+    still all around you.
+    """
+    path = tmp_path / "geonames.sqlite"
+    conn = sqlite3.connect(path)
+    conn.executescript(geonames.SCHEMA)
+    conn.executescript(geonames.LANDMARK_SCHEMA)
+    conn.execute("INSERT INTO places VALUES "
+                 "('Newton Upper Falls','US','MA',42.3119,-71.2262,9000)")
+    conn.execute("INSERT INTO landmarks VALUES "
+                 "('Echo Bridge','US','BDG',42.3167,-71.2333)")
+    conn.execute("INSERT INTO countries VALUES ('US','United States')")
+    conn.execute("INSERT INTO admin1 VALUES ('US.MA','Massachusetts')")
+    conn.commit(); conn.close()
+
+    got = name_at(path, 42.3119, -71.226175)
+    assert "Echo Bridge" not in got, got
+    assert got == "Newton Upper Falls, Massachusetts, United States", got
+
+
+def test_radii_follow_physical_size(db):
+    """The ordering that keeps the rest honest."""
+    r = geonames.LANDMARK_RADII_M
+    assert r["BDG"] < r["MUS"] < r["CSTL"] < r["ANS"] < r["MT"] < r["AIRP"] <= r["PRK"]

@@ -43,19 +43,29 @@ ALL_FILE = "allCountries.zip"          # 421 MB, 13.5 M rows; landmarks only
 # family photo "Saint Mary Church" -- and in that same airport test, a hotel
 # 2.7 km away and two stream channels were closer than anything meaningful.
 LANDMARK_RADII_M = {
-    # Travel. Where a holiday actually passes through, and large enough that
-    # being a kilometre from the middle still means being there.
-    "AIRP": 4000, "PRT": 3000, "RSTN": 600, "MAR": 1500,
-    # Built things: small, so you have to be at them.
-    "MNMT": 800, "MUS": 800, "CSTL": 800, "ANS": 800, "HSTS": 800,
-    "PAL": 800, "RUIN": 800, "PYR": 800, "TOWR": 800, "BDG": 800,
-    "OBS": 800, "ZOO": 1200, "THTR": 800, "AMTH": 800,
-    # Natural points.
-    "MT": 1500, "PK": 1500, "VLC": 2500, "FLLS": 1000, "CAPE": 1500,
+    # Travel. Large, and where a holiday actually passes through.
+    "AIRP": 4000, "PRT": 3000, "MAR": 1500, "RSTN": 400,
+
+    # Built things, by how big the thing physically is -- not by how famous.
+    # A bridge you are either on or not: 800 m put a photo taken indoors 793 m
+    # away at "Echo Bridge", which is a quarter of a mile of somebody's town
+    # between them. A dig or a battlefield really is that wide.
+    "BDG": 150,
+    "MNMT": 250, "MUS": 250, "TOWR": 250, "THTR": 250,
+    "OBS": 300, "AMTH": 300,
+    "FLLS": 400,
+    "CSTL": 500, "PAL": 500, "RUIN": 500,
+    "ZOO": 600, "PYR": 600,
+    "ANS": 800, "HSTS": 800,
+
+    # Natural points. The recorded point is the summit, and the mountain
+    # beneath it is much wider than that.
+    "PK": 1000, "MT": 1500, "CAPE": 1500, "VLC": 2500,
+
     # Areas you are plausibly inside.
+    "BCH": 1500, "LK": 3000, "LGN": 3000,
     "PRK": 5000, "AMUS": 5000, "RESN": 5000, "RESV": 5000, "ISL": 5000,
-    "LK": 3000, "LGN": 3000, "BCH": 1500, "GLCR": 5000, "FRST": 5000,
-    "CNYN": 5000, "DSRT": 5000, "PLAT": 5000,
+    "GLCR": 5000, "FRST": 5000, "CNYN": 5000, "DSRT": 5000, "PLAT": 5000,
 }
 LANDMARK_CODES = frozenset(LANDMARK_RADII_M)
 

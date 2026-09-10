@@ -325,9 +325,10 @@ harelphotos init --landmarks
 harelphotos geocode --force      # apply them to photos already geocoded
 ```
 
-A landmark is only claimed when you are genuinely at one, with a radius per
-kind of thing: a kilometre from a museum is not at the museum, but a kilometre
-from an airport is in the middle of one. Streams, churches, schools, hotels,
+A landmark is only claimed when you are genuinely at one, with a radius that
+follows how physically big the thing is rather than how famous it is. A bridge
+gets 150 m — you are on it or you are not — a museum 250 m, an archaeological
+site 800 m, a mountain 1.5 km, an airport 4 km, a national park 5 km. Streams, churches, schools, hotels,
 wells and road junctions are excluded outright — they are millions of rows that
 would label a family photo "Saint Mary Church".
 
