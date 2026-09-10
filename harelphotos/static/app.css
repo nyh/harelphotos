@@ -262,7 +262,13 @@ h2.section:first-child { margin-block-start: 0.25rem; }
   /* Without this the browser treats a sideways drag as a pan of its own,
      cancels the pointer sequence, and the swipe handler in app.js never sees
      a pointerup -- which is why swiping did nothing at all. The photo page
-     does not scroll, so there is no gesture worth leaving to the browser. */
+     does not scroll, so there is no gesture worth leaving to the browser.
+
+     It takes *every* touch gesture, though, pinch included, and an installed
+     application has no page zoom to fall back on either: for a while this line
+     was the reason zooming a photograph did nothing at all. app.js implements
+     pinch, drag and double-tap because of it. Do not remove one without the
+     other. */
   touch-action: none;
 }
 /* The photo fills the stage and `object-fit` letterboxes it inside.
@@ -288,8 +294,12 @@ h2.section:first-child { margin-block-start: 0.25rem; }
   object-fit: contain;
   /* Zoom is a transform on this element, applied from its center so that the
      arithmetic in app.js -- which measures the anchor point from the center --
-     and the rendering agree. `will-change` keeps the picture on its own layer,
-     so a pinch moves it without repainting the page under it. */
+     and the rendering agree. `center center` is already the initial value and
+     is written out anyway, because that agreement is load-bearing rather than
+     incidental: change it and every pinch anchors somewhere else.
+
+     `will-change` keeps the picture on its own layer, so a pinch moves it
+     without repainting the page underneath. */
   transform-origin: center center;
   will-change: transform;
 }
@@ -372,38 +382,29 @@ h2.section:first-child { margin-block-start: 0.25rem; }
  * text most needs to be bigger than the body, not smaller.
  *
  * Scaling the root moves every `rem` in the stylesheet together, so the
- * proportions that work on a desktop survive and only the size changes. The
- * query asks about the *pointer* rather than the width, because a phone held
- * sideways is still a phone: 600px-wide rules miss it entirely, which is why
- * turning the phone used to help the cards but never the text.
+ * proportions that work on a desktop survive and only the size changes.
+ *
+ * Either condition, because each catches a device the other misses. A phone
+ * held sideways is touch but not narrow, and width-only rules miss it entirely
+ * -- which is why turning the phone used to help the cards but never the text.
+ * A desktop window dragged narrow is the reverse, and wants the larger type for
+ * the same reason. Neither can rescue a phone told to request the desktop site:
+ * that lays the page out at 980px and scales the result down, so no media query
+ * sees anything but a wide screen and the page simply arrives shrunk.
  *
  * 125% is not a guess. The smallest relative size anywhere in this file is
  * 0.8rem (`h2.section`, `.card-sub`), and the rule being applied is that on a
  * phone nothing may fall below 16px -- the browser's own default body size,
  * and the floor below which text stops looking like an application and starts
- * looking like a shrunken web page. 16 / 0.8 = 20px = 125%, and every other
- * size in the stylesheet follows from there:
+ * looking like a shrunken web page. 16 / 0.8 = 20px = 125%. If a size smaller
+ * than 0.8rem is ever added, this scale stops guaranteeing the floor and wants
+ * revisiting.
  *
- *     0.8rem  -> 16px   the smallest thing on the page, at the floor
- *     0.85rem -> 17px   header meta, user menu, the info panel's labels
- *     1rem    -> 20px   body text and album titles
- *     1.05rem -> 21px   breadcrumbs
- *
- * If a size smaller than 0.8rem is ever added, this scale stops guaranteeing
- * the floor and wants revisiting.
- *
- * A percentage, not `20px`. 125% of the default 16px root is 20px, and 125% of
+ * A percentage, not `20px`: 125% of the default 16px root is 20px, and 125% of
  * the larger root chosen by someone who asked their browser for bigger text
- * grows with it -- where a flat pixel size would have quietly overruled them
- * and handed them something smaller than they had asked for. Same reason
- * `body` takes `1rem` rather than a pixel count.
+ * grows with it, where a flat pixel size would have quietly overruled them and
+ * handed them something smaller than they had asked for.
  */
-/* Either condition, because each catches a device the other misses: a tablet
-   with a wide window is touch but not narrow, and a desktop window dragged
-   narrow is not touch but wants the larger type for the same reason. Neither
-   can rescue a phone that has been told to request the desktop site, since
-   that lays the page out at 980px and scales the result down -- no media query
-   sees anything but a wide screen, and the whole page arrives shrunk. */
 @media (pointer: coarse), (max-width: 600px) {
   :root { font-size: 125%; }
 
