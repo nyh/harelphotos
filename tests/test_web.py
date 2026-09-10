@@ -58,6 +58,20 @@ def test_nested_album(client):
     assert "/p/2019/01/a.jpg" in body         # links to the photo page
 
 
+def test_site_name_heads_every_album_but_not_a_photo(client):
+    """The site is named as a heading on album pages, never in the viewer.
+
+    A listing headed only "2019" could be anybody's photographs. The
+    single-photo page is the exception: it exists to show one photograph as
+    large as it will go, and it still carries the name in the window title.
+    """
+    heading = f'<h1 class="masthead">{client.harelphotos_cfg.ui.site_title}</h1>'
+    assert heading in client.get("/a/").get_data(as_text=True)
+    assert heading in client.get("/a/2019/01/").get_data(as_text=True)
+    assert "masthead" not in client.get("/p/2019/01/a.jpg").get_data(
+        as_text=True)
+
+
 def test_breadcrumbs_are_present(client):
     body = client.get("/a/2019/01/").get_data(as_text=True)
     assert 'href="/a/"' in body

@@ -883,6 +883,20 @@ organised by date: the card then repeats what the folder name already says, and
 says it less accurately, because a single photo with a wrong camera clock
 widens the whole range. The album's own header keeps its dates either way.
 
+Under `[ui]`, **`site_title`** names the album. It is the window title on every
+page, the name beside the icon when the site is added to a phone's home screen,
+the heading on the login page, and the heading above the first row of cards on
+every album page:
+
+```toml
+[ui]
+site_title = "The Harel Family Photo Album"
+```
+
+The single-photo view is the one page without it, because that page exists to
+show one photograph as large as it will go. It still carries the name in the
+window title, and the breadcrumb above the photo leads back.
+
 **`session_days`** is counted from when you log in, not from last use. The
 session cookie is deliberately not re-sent on every response: its value is part
 of the browser's cache key for images, so a cookie that changed each time threw

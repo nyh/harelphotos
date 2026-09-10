@@ -107,6 +107,16 @@ main {
 
 .blurb { color: var(--dim); max-inline-size: 60ch; }
 
+/* The site's name as a heading on the top page. Sized to read as a title
+   without becoming a hero: 1.6rem is 25.6px on a desktop and 32px on a phone,
+   where the root is scaled -- the same 1.6rem the prose pages use for their
+   own h1, so the two do not disagree about how big a page heading is. */
+.masthead {
+  font-size: 1.6rem;
+  font-weight: 600;
+  margin: 0 0 1rem;
+}
+
 h2.section {
   font-size: 0.8rem;
   text-transform: uppercase;
