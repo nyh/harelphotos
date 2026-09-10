@@ -1,12 +1,12 @@
 # harelphotos
 
-A private, self-hosted photo gallery over a directory tree you already have.
+A private, self-hosted **web** gallery for a directory tree of photographs you
+already have.
 
-You point it at your photos and it builds an index and a set of resized copies
-somewhere else, then serves them as a fast, Google-Photos-shaped gallery you
-browse in an ordinary web browser. It runs comfortably on a small, slow
-machine, and a collection of a hundred thousand photographs is unremarkable
-for it.
+You point it at your photos and get a fast, Google-Photos-shaped web interface
+to them, in any browser. Behind that it keeps an index and a set of resized
+copies somewhere else entirely, runs comfortably on a small, slow machine, and
+finds a collection of a hundred thousand photographs unremarkable.
 
 ## Who it is for
 

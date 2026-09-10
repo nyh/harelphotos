@@ -1,7 +1,7 @@
 [project]
 name = "harelphotos"
 version = "0.1.0"
-description = "A self-hosted photo gallery over an ordinary directory tree of JPEGs"
+description = "A private, self-hosted web gallery for a directory tree of photographs you already have"
 license = "AGPL-3.0-or-later"
 license-files = ["LICENSE"]
 authors = [{ name = "Nadav Har'El" }]
