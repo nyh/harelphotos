@@ -52,7 +52,8 @@
                  sizes="(max-width: 600px) 45vw, 240px"
                  width="{{ sub.cover.size_at(512)[0] }}"
                  height="{{ sub.cover.size_at(512)[1] }}"
-                 loading="lazy" decoding="async"
+                 {# No `decoding="async"`: see the note on the grid image below. #}
+                 loading="lazy"
                  style="background: {{ sub.cover.colour }}" alt="">{% endif %}
           {% else %}
             <div class="card-blank" aria-hidden="true">🗀</div>
@@ -89,7 +90,17 @@
              {% if p.tiers %}srcset="{{ p|srcset(all_tiers) }}"
              sizes="{{ p|grid_sizes }}"{% endif %}
              width="{{ p.size_at(256)[0] }}" height="{{ p.size_at(256)[1] }}"
-             loading="lazy" decoding="async"
+             {# `decoding="async"` was here and is deliberately gone. On Chrome
+                for Android, after a pull-down-to-refresh, some already-fetched
+                images stayed blank until the card was touched or the phone
+                rotated -- at which point they appeared instantly, so the bytes
+                were decoded and in memory all along and only the paint was
+                missing. `async` grants exactly the licence to present an image
+                late, and the default `auto` leaves the choice to the browser
+                without promising it may skip a frame. It bought us nothing
+                measurable here: these images arrive long after first paint, so
+                there was never a decode blocking the main thread to avoid. #}
+             loading="lazy"
              style="background: {{ p.colour }}"
              alt="{{ p.title or p.name }}">
         {%- endif %}
