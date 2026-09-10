@@ -351,7 +351,14 @@ def _register_routes(app: Flask, cfg: Config) -> None:
         return app.response_class(
             json.dumps(public_assets.manifest(cfg), ensure_ascii=False, indent=1),
             mimetype="application/manifest+json",
-            headers={"Cache-Control": "public, max-age=3600"},
+            # A minute, not an hour. This document is a few hundred bytes and
+            # is read rarely, but everything a phone believes about the
+            # installed application is derived from it -- including which icon
+            # URLs to fetch. Cached for an hour it becomes the thing that
+            # holds a stale icon in place: the icons themselves were versioned
+            # so a changed one could reach a browser immediately, and it was
+            # this file, still naming the old URLs, that stopped it.
+            headers={"Cache-Control": "public, max-age=60"},
         )
 
     @app.route("/public/<name>")
