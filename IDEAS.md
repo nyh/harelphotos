@@ -248,22 +248,36 @@ The larger version — pack many thumbnails into one file and slice them out wit
 genuinely expensive. It buys one request instead of fifty and a grid that
 appears at once. It costs:
 
-- **Invalidation.** A pack is only valid for one set of photographs in one
-  order. Adding, deleting, hiding or reordering anything rebuilds it, and album
-  order depends on `.album.toml`, on `dirsort`, and on the overrides file.
-- **Lazy loading, which we would lose.** Today off-screen images are abandoned
-  mid-flight so the visible ones are not stuck behind them. A pack is
-  all-or-nothing, so a 5000-photo album would fetch every thumbnail in it
-  unless the packs are themselves chunked and lazily loaded — at which point
-  much of the simplicity is gone.
+Two objections raised against it here were wrong, and are recorded as wrong so
+that nobody re-derives them:
+
+- **Lazy loading is not lost.** Packs of about fifty make a 5000-photo album a
+  hundred packs; you fetch the one or two on screen and the rest as they are
+  scrolled to. That is the same model we already have, observing packs instead
+  of images — *fewer* things to watch, not more.
+- **Invalidation is only fatal if packs are cut by page position**, where
+  inserting one photograph at the front shifts every pack after it. Cut them by
+  *directory* and an album page's photographs are exactly one directory's own,
+  in sort order, so adding a photograph rebuilds that directory's packs and
+  nothing else. Comparable to what a rescan already does.
+
+What remains genuinely awkward:
+
+- **The geometry.** The grid is justified with true aspect ratios and never
+  crops, so a pack holds fifty rectangles of differing shapes. That needs a
+  packing pass at scan time, per-tile coordinates in the index, and
+  `object-view-box` or a `background-position` trick to slice them out. Stacked
+  at a common height it is simpler and wastes width on a panorama.
 - **Cache sharing.** A thumbnail fetched once is reused wherever it appears,
   including as a cover on a parent page. Packs break that.
 - **Two ladders.** `srcset` offers 256 and 512; packs would need both.
 
 So: worth doing only if 18 and the cheap version of 20 are done and the grid
-still arrives badly. Recorded because it is the right instinct — the fifty
-requests really are the problem — and the cheaper fix for the same problem was
-sitting in the vhost all along.
+still arrives badly — which it may well not, because the fifty requests really
+are the problem and HTTP/2 fixes them for one line of configuration. Recorded
+in full because the instinct was right about the cause, and because the reason
+to skip it should be "the cheap fix worked", not a list of difficulties that
+turned out to be softer than they first looked.
 
 ### 21. Serve the album page's first screenful without waiting for the index
 
