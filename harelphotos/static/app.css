@@ -303,6 +303,8 @@ h2.section:first-child { margin-block-start: 0.25rem; }
 .pager .off { color: var(--dim); opacity: 0.5; }
 .pager .where { color: var(--dim); }
 
+.coverclear { margin-block: 1rem; text-align: center; font-size: 0.85rem; }
+
 @media (max-width: 600px) {
   .grid .tile { block-size: 120px; flex-basis: calc(var(--ar, 1) * 120px); }
   .cards { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }

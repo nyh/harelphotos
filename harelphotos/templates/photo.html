@@ -31,6 +31,18 @@
               aria-controls="info" title="Photo information (i)">Info</button>
       <a class="button" href="/orig/{{ photo.url_relpath }}" download
          title="Download the original file (d)">Download original</a>
+      {%- if viewer and viewer.is_admin and album %}
+      {#- Admins only: this changes what everyone sees. A form rather than a
+          link, so no amount of prefetching or link-scanning can trigger it. -#}
+      <form method="post" action="{{ url_for('set_cover') }}" class="inline">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="album" value="{{ album.path }}">
+        <input type="hidden" name="photo" value="{{ photo.name }}">
+        <input type="hidden" name="next" value="{{ photo.page_url }}">
+        <button type="submit" class="button"
+                title="Show this photo on the album's card">Make cover</button>
+      </form>
+      {%- endif %}
       {{ chrome.user_menu(viewer) }}
     </div>
   </header>

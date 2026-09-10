@@ -756,6 +756,77 @@ idempotent and will not overwrite your config) or just restart the server.
 
 ---
 
+## Album settings the server writes: the overrides file
+
+Covers, access rules and hiding can all be written by hand in a `.album.toml`
+beside the photos, and that keeps working — it travels with the photos if you
+copy the tree. But the **photo tree is read-only to this software**: the
+systemd unit sets `ProtectHome=read-only`, and photos usually live under a home
+directory, so the server could not write there even if it wanted to.
+
+So anything set from the web interface, or by the `cover`, `acl` and `hide`
+commands, goes to a separate file:
+
+    <state_dir>/album-overrides.toml     e.g. /var/lib/harelphotos/album-overrides.toml
+
+(`overrides_file` in `config.toml` moves it.) It looks like this — keys are
+album paths relative to `photo_root`, and `"."` is the whole collection:
+
+```toml
+["2019/wedding"]
+cover = "IMG_1234.jpg"
+
+["2011/junk"]
+hidden = true
+
+["2019/private"]
+allow = ["nyh", "@family"]
+```
+
+An entry takes precedence over the same setting in that album's `.album.toml`;
+anything it does not mention still comes from there. Removing an entry hands
+the setting back to the hand-written one.
+
+**Back this file up.** Everything else in the state directory is a cache that a
+rescan rebuilds — this is not, and nothing else records these choices.
+
+Covers apply immediately. Access rules and `hidden` are resolved into the index
+at scan time, because every request checks them, so the `acl` and `hide`
+commands rescan the subtree for you; edit the file by hand and you need
+`harelphotos scan --dir <that directory>` yourself.
+
+### `harelphotos hide` — keep a directory out of the way
+
+```sh
+harelphotos hide 2011/junk           # and everything beneath it
+harelphotos hide 2011/junk --show    # undo
+```
+
+For a directory that is not worth showing but not worth deleting. It disappears
+from listings **and** stops being reachable by URL, along with everything under
+it. The files are untouched on disk.
+
+This is tidiness, not privacy: anyone with filesystem access still has the
+photos, and un-hiding is one command. Use `acl` for anything that actually
+matters.
+
+### `harelphotos cover` — which photo an album shows
+
+```sh
+harelphotos cover 2019/wedding IMG_1234.jpg
+harelphotos cover 2019/wedding --clear      # back to choosing automatically
+```
+
+An admin can also do this while browsing: open a photo and press **Make cover**
+in the top bar. It takes effect on the next page — no scan. A pick naming a
+photo that has since been deleted quietly falls back to the automatic choice
+rather than leaving a blank card.
+
+Only admins see the button, and only admins may post to it —
+`harelphotos user add NAME --admin`, which works for a Google account too.
+
+---
+
 ## `harelphotos acl` — who may see a directory
 
 Restrictions live in `.album.toml` files and you can edit them by hand. This
@@ -787,13 +858,14 @@ to fewer people than you meant, and nobody complains about photos they cannot
 see.
 
 Setting a restriction rescans that subtree before returning, because the web
-server reads the chain computed at scan time: a rule that is only in the file
-is not yet in force. Editing `.album.toml` by hand instead means running
-`harelphotos scan --dir <that directory>` yourself.
+server reads the chain computed at scan time: a rule that is only in a file is
+not yet in force. Editing by hand instead means running `harelphotos scan --dir
+<that directory>` yourself.
 
-Your hand-written files are safe to edit this way: comments, ordering and every
-other setting are preserved, and if the edit would have changed anything but
-`allow`/`allow_replace` the original is put back and the command refuses.
+It writes to the overrides file, never into the photo tree. A hand-written
+`allow` in a `.album.toml` keeps working and keeps travelling with the photos;
+an override simply takes precedence over it, and `--clear` removes the override
+so the hand-written one applies again.
 
 ---
 

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Sequence
 from urllib.parse import quote
 
-from . import acl
+from . import acl, overrides
 from .config import Config
 from .util import prettify_name
 
@@ -215,6 +215,12 @@ class Index:
         r = self.conn.execute("SELECT * FROM dirs WHERE path = ?", (path,)).fetchone()
         if r is None or not self._may_view(r["acl_chain"], viewer):
             return None
+        # Hidden means gone, not merely unlisted. It used to leave the album
+        # reachable by typing its URL, which makes a setting called "hidden" a
+        # trap. The flag is propagated down the tree at scan time, so this
+        # covers everything beneath a hidden directory too.
+        if r["hidden"]:
+            return None
         return _album_from_row(r)
 
     def subalbums(self, album: Album, viewer: Viewer) -> list[Album]:
@@ -257,6 +263,29 @@ class Index:
         }
 
     def cover_photo(self, album: Album) -> Photo | None:
+        """The album's cover: a pick made in the interface, else what the scan
+        resolved.
+
+        The pick is honoured here, at request time, rather than being baked
+        into the index at scan time -- so choosing a cover takes effect on the
+        next page rather than on the next scan, which for a click in the
+        interface is the only tolerable behaviour. The alternative, having the
+        web process write `dirs.cover_photo`, would mean opening the index for
+        writing; it is deliberately read-only here, which is what stopped a
+        running scan from breaking logins.
+        """
+        picked = overrides.get(self.cfg, album.path).cover
+        if picked and not picked.startswith("auto"):
+            r = self.conn.execute(
+                f"SELECT {PHOTO_COLUMNS} FROM photos p JOIN dirs d ON d.id = p.dir_id "
+                f"WHERE d.id = ? AND p.name = ? AND p.hidden = 0",
+                (album.id, picked),
+            ).fetchone()
+            if r is not None:
+                return _photo_from_row(r)
+            # A pick naming a photo that is gone falls through to the scanned
+            # cover rather than leaving the album blank.
+
         r = self.conn.execute(
             f"SELECT {PHOTO_COLUMNS} FROM dirs a "
             f"JOIN photos p ON p.id = a.cover_photo "
@@ -291,7 +320,8 @@ class Index:
         dir_path, _, name = relpath.rpartition("/")
         r = self.conn.execute(
             f"SELECT {PHOTO_COLUMNS}, d.acl_chain FROM photos p "
-            f"JOIN dirs d ON d.id = p.dir_id WHERE d.path = ? AND p.name = ?",
+            f"JOIN dirs d ON d.id = p.dir_id "
+            f"WHERE d.path = ? AND p.name = ? AND p.hidden = 0 AND d.hidden = 0",
             (dir_path, name),
         ).fetchone()
         if r is None or not self._may_view(r["acl_chain"], viewer):

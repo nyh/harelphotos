@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from pathlib import Path
 
-from . import acl, album, derive, exif
+from . import acl, album, derive, exif, overrides
 from .config import Config
 from .util import natkey
 
@@ -224,7 +224,19 @@ class Scanner:
         self._walk_started = 0.0
         self._walk_last_shown = 0.0
         self._last_rollup = 0.0
+        # Read once for the whole scan: settings written by the web interface
+        # or the cover/acl commands, which take precedence over the
+        # .album.toml beside the photos (DESIGN.md 5.3).
+        self.overrides = overrides.load(cfg)
         self.generation = self._next_generation()
+
+    def _album_config(self, abspath: Path, relpath: str):
+        """An album's settings: its own .album.toml, then anything overriding
+        it. Every setting can still be hand-written beside the photos; the
+        override layer only replaces the specific keys it names."""
+        conf = album.load(abspath)
+        over = self.overrides.get(overrides.key_for(relpath))
+        return overrides.apply(conf, over) if over else conf
 
     def _next_generation(self) -> int:
         """A strictly increasing counter, persisted in the index.
@@ -258,8 +270,8 @@ class Scanner:
         self._walk_progress = progress
         self._walk_started = time.monotonic()
         self._walk_last_shown = 0.0
-        parent_id, parent_chain = self._ensure_ancestors(subpath)
-        self._walk_dir(start, subpath, parent_id, parent_chain)
+        parent_id, parent_chain, parent_hidden = self._ensure_ancestors(subpath)
+        self._walk_dir(start, subpath, parent_id, parent_chain, parent_hidden)
         if progress:
             progress(self.stats.dirs_seen, self.stats.photos_seen,
                      time.monotonic() - self._walk_started, True)
@@ -275,7 +287,7 @@ class Scanner:
             self.stats.dirs_seen, self.stats.photos_seen, now - self._walk_started, False
         )
 
-    def _ensure_ancestors(self, subpath: str) -> tuple[int | None, acl.Chain]:
+    def _ensure_ancestors(self, subpath: str) -> tuple[int | None, acl.Chain, bool]:
         """Create rows for the directories above `subpath`, without recursing.
 
         Two things go wrong without this. The tree becomes unnavigable — the
@@ -287,16 +299,19 @@ class Scanner:
         than trusting whatever happens to be in the database.
         """
         chain: acl.Chain = ()
+        hidden = False
         parent_id: int | None = None
         parts = subpath.split("/") if subpath else []
         # Every ancestor including the root itself, but not `subpath`.
         for i in range(len(parts)):
             path = "/".join(parts[:i])
             abspath = self.cfg.photo_root / path if path else self.cfg.photo_root
-            cfg = album.load(abspath)
+            cfg = self._album_config(abspath, path)
             chain = acl.extend_chain(chain, cfg.allow, cfg.allow_replace)
+            hidden = hidden or cfg.hidden
             name = parts[i - 1] if i else ""
-            dir_id, added = self._upsert_dir(path, name, parent_id, cfg, chain, abspath)
+            dir_id, added = self._upsert_dir(path, name, parent_id, cfg, chain, abspath,
+                                             hidden=hidden)
             if added:
                 self.stats.dirs_added += 1
             # Stamp it as seen so the prune does not delete an ancestor we
@@ -305,18 +320,24 @@ class Scanner:
                 "UPDATE dirs SET seen = ? WHERE id = ?", (self.generation, dir_id)
             )
             parent_id = dir_id
-        return parent_id, chain
+        return parent_id, chain, hidden
 
     def _walk_dir(
-        self, abspath: Path, relpath: str, parent_id: int | None, parent_chain: acl.Chain
+        self, abspath: Path, relpath: str, parent_id: int | None,
+        parent_chain: acl.Chain, parent_hidden: bool = False,
     ) -> int:
-        cfg = album.load(abspath)
+        cfg = self._album_config(abspath, relpath)
         if cfg.errors:
             self.stats.config_errors.append(f"{relpath or '.'}/{album.ALBUM_FILE}: {cfg.error_text}")
 
         chain = acl.extend_chain(parent_chain, cfg.allow, cfg.allow_replace)
+        # Hiding a directory hides everything beneath it. Propagated down here,
+        # like the ACL chain, so a request can decide from one column rather
+        # than walking ancestors on every page load.
+        hidden = parent_hidden or cfg.hidden
         name = abspath.name if relpath else ""
-        dir_id, added = self._upsert_dir(relpath, name, parent_id, cfg, chain, abspath)
+        dir_id, added = self._upsert_dir(relpath, name, parent_id, cfg, chain, abspath,
+                                         hidden=hidden)
         self.stats.dirs_seen += 1
         if added:
             self.stats.dirs_added += 1
@@ -344,7 +365,7 @@ class Scanner:
             try:
                 if entry.is_dir(follow_symlinks=False):
                     child_rel = f"{relpath}/{entry_name}" if relpath else entry_name
-                    self._walk_dir(Path(entry.path), child_rel, dir_id, chain)
+                    self._walk_dir(Path(entry.path), child_rel, dir_id, chain, hidden)
                     n_subdirs += 1
                 elif entry.is_file(follow_symlinks=False) and is_photo(entry_name):
                     if self._upsert_photo(dir_id, entry):
@@ -369,6 +390,7 @@ class Scanner:
         cfg: album.AlbumConfig,
         chain: acl.Chain,
         abspath: Path,
+        hidden: bool | None = None,
     ) -> tuple[int, bool]:
         try:
             st = (abspath / album.ALBUM_FILE).stat()
@@ -395,7 +417,7 @@ class Scanner:
             "group_by": cfg.group_by,
             "cover_spec": cfg.cover,
             "location": cfg.location,
-            "hidden": int(cfg.hidden),
+            "hidden": int(hidden if hidden is not None else cfg.hidden),
             "acl_chain": acl.dumps(chain),
             "cfg_mtime": cfg_mtime,
             "cfg_size": cfg_size,

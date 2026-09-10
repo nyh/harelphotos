@@ -1,5 +1,6 @@
 """End-to-end CLI behaviour for the M1 commands."""
 
+import argparse
 from pathlib import Path
 
 import pytest
@@ -117,10 +118,18 @@ def test_config_show(project, capsys):
     assert "avif" in out
 
 
-def test_unimplemented_commands_say_which_milestone(project, capsys):
-    assert cli.main(["cover"]) == 2
-    err = capsys.readouterr().err
-    assert "not implemented" in err and "M9" in err
+def test_every_subcommand_is_implemented(project, capsys):
+    """There were stubs that printed "not implemented yet -- M9". There are
+    none left, and a new one should be a deliberate act rather than something
+    that quietly reappears."""
+    parser = cli.build_parser()
+    sub = [a for a in parser._actions if isinstance(a, argparse._SubParsersAction)][0]
+    for name, p in sub.choices.items():
+        assert "not implemented" not in (p.description or ""), name
+        assert "not implemented" not in (
+            sub._choices_actions and
+            next((c.help or "" for c in sub._choices_actions if c.dest == name), "")
+        ), name
 
 
 def test_missing_config_is_a_clean_error(tmp_path, monkeypatch, capsys):

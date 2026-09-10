@@ -96,68 +96,77 @@ def test_clearing_removes_the_restriction(project):
     assert aclcmd.chain_with_sources(project, "trip") == []
 
 
-# ------------------------------------------------- not damaging a hand-written file
+# ------------------------------------------- never writing to the photo tree
 
 HANDWRITTEN = '''\
 # Our big trip. Do not reorder these!
 title = "The Trip"
-dirsort = "-name"
-
-# Only the two of us, for now.
-allow = [
-  "nyh",
-]
+allow = ["nyh"]
 cover = "a.jpg"
 '''
 
 
-def test_editing_preserves_comments_and_other_settings(project):
-    from harelphotos import album
+def test_nothing_is_written_into_the_photo_tree(project):
+    """The photo tree is read-only to this software.
 
-    path = project.photo_root / "trip" / album.ALBUM_FILE
-    path.write_text(HANDWRITTEN, encoding="utf-8")
+    Not merely by convention: the systemd unit sets ProtectHome=read-only and
+    photos usually live under a home directory, so a write here would fail with
+    EROFS on a real server while working on a developer's machine.
+    """
+    before = {p: p.stat().st_mtime_ns
+              for p in project.photo_root.rglob("*") if p.is_file()}
 
     aclcmd.write_allow(project, "trip", ["nyh", "sis"])
-    after = path.read_text(encoding="utf-8")
 
-    assert "# Our big trip. Do not reorder these!" in after
-    assert 'title = "The Trip"' in after
-    assert 'dirsort = "-name"' in after
-    assert 'cover = "a.jpg"' in after
-    assert 'allow = ["nyh", "sis"]' in after
-    # The multi-line array it replaced is gone, not left behind alongside.
-    assert after.count("allow") == 1
+    after = {p: p.stat().st_mtime_ns
+             for p in project.photo_root.rglob("*") if p.is_file()}
+    assert after == before, "the photo tree was modified"
+    assert project.overrides_file.is_file()
 
 
-def test_a_file_that_is_not_valid_toml_is_left_alone(project):
-    from harelphotos import album
-
-    path = project.photo_root / "trip" / album.ALBUM_FILE
-    broken = 'title = "unclosed\n'
-    path.write_text(broken, encoding="utf-8")
-
-    with pytest.raises(aclcmd.AclError, match="not valid TOML"):
-        aclcmd.write_allow(project, "trip", ["nyh"])
-    assert path.read_text(encoding="utf-8") == broken
-
-
-def test_no_backup_file_is_left_behind(project):
+def test_a_hand_written_album_file_still_works_and_is_untouched(project):
+    """`.album.toml` remains the place to hand-write anything; the override
+    layer only takes precedence over the keys it names."""
     from harelphotos import album
 
     path = project.photo_root / "trip" / album.ALBUM_FILE
     path.write_text(HANDWRITTEN, encoding="utf-8")
+
+    # The hand-written restriction is honoured with no override present.
+    links = aclcmd.chain_with_sources(project, "trip")
+    assert [l.allow for l in links] == [("nyh",)]
+
+    # An override wins ...
+    aclcmd.write_allow(project, "trip", ["sis"])
+    links = aclcmd.chain_with_sources(project, "trip")
+    assert [l.allow for l in links] == [("sis",)]
+
+    # ... without the file on disk changing at all ...
+    assert path.read_text(encoding="utf-8") == HANDWRITTEN
+
+    # ... and clearing the override brings the hand-written one back.
+    aclcmd.write_allow(project, "trip", None)
+    links = aclcmd.chain_with_sources(project, "trip")
+    assert [l.allow for l in links] == [("nyh",)]
+
+
+def test_the_overrides_file_survives_other_entries(project):
     aclcmd.write_allow(project, "trip", ["nyh"])
-    leftovers = [p.name for p in path.parent.iterdir() if p.suffix in (".bak", ".tmp")]
-    assert leftovers == []
+    aclcmd.write_allow(project, "trip/private", ["sis"])
+    aclcmd.write_allow(project, "trip", ["nyh", "sis"])
+
+    from harelphotos import overrides
+
+    table = overrides.load(project)
+    assert table["trip"].allow == ("nyh", "sis")
+    assert table["trip/private"].allow == ("sis",)
 
 
-def test_writing_into_a_directory_with_no_album_file_creates_one(project):
-    from harelphotos import album
-
-    path = project.photo_root / "trip" / "private" / album.ALBUM_FILE
-    assert not path.exists()
-    aclcmd.write_allow(project, "trip/private", ["nyh"])
-    assert path.read_text(encoding="utf-8").strip() == 'allow = ["nyh"]'
+def test_a_damaged_overrides_file_is_ignored_not_fatal(project):
+    """Read on every request; a syntax error must not take the site down. The
+    restrictions that actually guard a request live in the index."""
+    project.overrides_file.write_text('["trip"\nallow = ', encoding="utf-8")
+    assert aclcmd.chain_with_sources(project, "trip") == []
 
 
 def test_a_missing_directory_is_an_error(project):

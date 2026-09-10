@@ -128,6 +128,12 @@ class Config:
     # changing it threw away every cached thumbnail (see web.py).
     session_days: int = 30
     log_file: Path | None = None
+    # Album settings the server itself writes: cover picks and access rules set
+    # from the web interface. In the state directory because the web process
+    # must be able to write it, and must NOT be able to write the directory
+    # holding users.toml and the signing key. The one file there that a rescan
+    # cannot rebuild -- back it up.
+    overrides_file: Path = Path()
     sizes: Sizes = field(default_factory=Sizes)
     encode: Encode = field(default_factory=Encode)
     ui: Ui = field(default_factory=Ui)
@@ -333,6 +339,11 @@ def from_dict(raw: dict, src: Path) -> Config:
             "auto",
         ),
         log_file=Path(log_file).expanduser() if log_file else None,
+        overrides_file=(
+            Path(str(raw["overrides_file"])).expanduser()
+            if raw.get("overrides_file")
+            else index_db.parent / "album-overrides.toml"
+        ),
         sizes=sizes,
         encode=encode,
         ui=ui,

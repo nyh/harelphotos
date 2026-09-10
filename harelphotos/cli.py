@@ -18,14 +18,10 @@ from . import check as check_mod
 from . import envcheck
 from . import config as config_mod
 from . import db, geocode as geocode_mod, geonames, initialise, lock
+from . import overrides, queries
 from . import maintenance, scanner, sync as sync_mod, users as users_mod
 
 log = logging.getLogger("harelphotos")
-
-NOT_YET = {
-    "cover": "M9",
-}
-
 
 def _setup_logging(verbosity: int) -> None:
     level = logging.WARNING
@@ -419,6 +415,76 @@ def _print_acl(cfg: config_mod.Config, relpath: str) -> int:
     return 0
 
 
+def cmd_hide(args: argparse.Namespace) -> int:
+    cfg = _load_config(args)
+    relpath = (args.dir or "").strip("/")
+    if not relpath:
+        print("error: refusing to hide the whole collection", file=sys.stderr)
+        return 1
+    d = cfg.photo_root / relpath
+    if not d.is_dir():
+        print(f"error: {d} is not a directory", file=sys.stderr)
+        return 1
+
+    overrides.set_for(cfg, relpath, hidden=None if args.show else True)
+    # Hiding is resolved at scan time, like the ACL chain, so that a request
+    # can decide from one column instead of walking ancestors. That means the
+    # change is not in force until the subtree has been walked again.
+    conn = db.open_index(cfg.index_db)
+    try:
+        scanner.scan(cfg, conn, subpath=relpath, headers_only=True)
+    finally:
+        conn.close()
+    if args.show:
+        print(f"/{relpath} is visible again")
+    else:
+        print(f"/{relpath} and everything beneath it is hidden:\n"
+              f"  not listed, and not reachable by URL either.\n"
+              f"  The photos are untouched on disk. This is tidiness, not\n"
+              f"  privacy -- use 'harelphotos acl' to control who may see something.")
+    return 0
+
+
+def cmd_cover(args: argparse.Namespace) -> int:
+    cfg = _load_config(args)
+    relpath = (args.dir or "").strip("/")
+    d = cfg.photo_root / relpath if relpath else cfg.photo_root
+    if not d.is_dir():
+        print(f"error: {d} is not a directory", file=sys.stderr)
+        return 1
+
+    if args.clear:
+        overrides.set_for(cfg, relpath, cover=None)
+        print(f"cleared the cover pick for /{relpath}")
+    elif args.photo:
+        # Checked against the index rather than the filesystem: a name that is
+        # not an indexed photo of this album would leave the album showing
+        # nothing, and the mistake would only surface as a blank card.
+        conn = db.open_index(cfg.index_db, read_only=True)
+        row = conn.execute(
+            "SELECT p.name FROM photos p JOIN dirs d ON d.id = p.dir_id "
+            "WHERE d.path = ? AND p.name = ? AND p.hidden = 0",
+            (relpath, args.photo),
+        ).fetchone()
+        conn.close()
+        if row is None:
+            print(f"error: {args.photo!r} is not a photo in /{relpath}",
+                  file=sys.stderr)
+            return 1
+        overrides.set_for(cfg, relpath, cover=args.photo)
+        print(f"cover for /{relpath} is now {args.photo}")
+
+    conn = db.open_index(cfg.index_db, read_only=True)
+    index = queries.Index(conn, cfg)
+    alb = index.album(relpath, queries.Viewer(token=None, name="", is_admin=True))
+    cover = index.cover_photo(alb) if alb else None
+    conn.close()
+    picked = overrides.get(cfg, relpath).cover
+    print(f"showing: {cover.name if cover else '(nothing)'}"
+          + ("  (picked)" if picked else "  (chosen automatically)"))
+    return 0
+
+
 def cmd_sync(args: argparse.Namespace) -> int:
     cfg = _load_config(args)
     dest = sync_mod.Destination.parse(args.dest)
@@ -669,6 +735,18 @@ def build_parser() -> argparse.ArgumentParser:
     pg.add_argument("--force", action="store_true", help="re-resolve photos that have a place")
     pg.set_defaults(func=cmd_geocode)
 
+    ph = sub.add_parser("hide", help="keep a directory out of the album listing")
+    ph.add_argument("dir", help="directory, relative to photo_root")
+    ph.add_argument("--show", action="store_true", help="undo it")
+    ph.set_defaults(func=cmd_hide)
+
+    pc = sub.add_parser("cover", help="choose the photo shown on an album's card")
+    pc.add_argument("dir", help="directory, relative to photo_root")
+    pc.add_argument("photo", nargs="?", help="file name of a photo in it")
+    pc.add_argument("--clear", action="store_true",
+                    help="go back to choosing one automatically")
+    pc.set_defaults(func=cmd_cover)
+
     pa = sub.add_parser(
         "acl", help="inspect or set who may see a directory"
     )
@@ -739,21 +817,7 @@ def build_parser() -> argparse.ArgumentParser:
     ur.add_argument("name")
     ur.set_defaults(func=cmd_user_revoke)
 
-    for name, milestone in sorted(NOT_YET.items()):
-        sp = sub.add_parser(name, help=f"(not implemented yet — {milestone})")
-        sp.add_argument("rest", nargs=argparse.REMAINDER)
-        sp.set_defaults(func=_unimplemented, _milestone=milestone, _name=name)
-
     return p
-
-
-def _unimplemented(args: argparse.Namespace) -> int:
-    print(
-        f"'harelphotos {args._name}' is not implemented yet — planned for "
-        f"{args._milestone}. See DESIGN.md 17.",
-        file=sys.stderr,
-    )
-    return 2
 
 
 def main(argv: list[str] | None = None) -> int:

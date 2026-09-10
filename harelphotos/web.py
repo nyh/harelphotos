@@ -24,7 +24,7 @@ from flask import (
 )
 from markupsafe import Markup, escape
 
-from . import auth, db, google_auth, images, public_assets
+from . import auth, db, google_auth, images, overrides, public_assets
 from . import users as users_mod
 from .config import Config
 from .queries import Album, Index, Photo, Viewer
@@ -282,6 +282,43 @@ def _register_routes(app: Flask, cfg: Config) -> None:
         log.info("login: %s via google from %s", user.token, request.remote_addr)
         return redirect(auth.safe_next(nxt) or "/a/")
 
+    @app.route("/cover", methods=("POST",))
+    def set_cover():
+        """Choose the photo shown on an album's card.
+
+        Admin only, and POST only with a CSRF token: this changes what everyone
+        sees, so it must not be something a link can do to you.
+        """
+        if not (g.viewer and g.viewer.is_admin):
+            abort(403)
+        if not auth.check_csrf():
+            abort(400)
+        relpath = _clean_path(request.form.get("album", ""))
+        name = request.form.get("photo", "")
+        clear = bool(request.form.get("clear"))
+
+        alb = g.index.album(relpath, g.viewer)
+        if alb is None:
+            abort(404)
+        if not clear:
+            # A bare file name of a photo in *this* album. A path was accepted
+            # once: "junk/deep/x.jpg" named a real photo, so it passed, and then
+            # matched nothing when the cover was looked up by name -- an album
+            # stuck silently on its automatic cover with no hint why.
+            if not name or "/" in name or name in (".", ".."):
+                abort(404)
+            if g.index.photo(f"{relpath}/{name}" if relpath else name,
+                             g.viewer) is None:
+                abort(404)
+        try:
+            overrides.set_for(cfg, relpath, cover=None if clear else name)
+        except overrides.OverrideError as e:
+            log.warning("cannot record a cover pick: %s", e)
+            abort(500)
+        log.info("cover for %s set to %s by %s",
+                 relpath or "/", "auto" if clear else name, g.viewer.token)
+        return redirect(auth.safe_next(request.form.get("next")) or alb.url)
+
     @app.route("/logout", methods=("POST",))
     def logout():
         """POST only, and CSRF-checked.
@@ -337,6 +374,7 @@ def _register_routes(app: Flask, cfg: Config) -> None:
             subalbums=subalbums,
             photos=photos[pager["start"]:pager["end"]],
             pager_data=pager,
+            cover_is_picked=bool(overrides.get(cfg, path).cover),
             crumbs=g.index.breadcrumbs(alb, g.viewer),
             cfg=cfg,
         )

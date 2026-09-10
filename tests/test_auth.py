@@ -88,6 +88,8 @@ def test_every_route_either_needs_a_session_or_is_on_the_list(app):
         "manifest": "/manifest.webmanifest",
         "static": "/static/app.css",
         "logout": None,          # POST-only; covered by its own tests
+        # POST-only, admin-only, CSRF-checked; covered by test_overrides.py.
+        "set_cover": None,
         # Public by necessity: signing in cannot require being signed in.
         # Both 404 when Google sign-in is disabled, which is the fixture here.
         "google_start": "/auth/google",

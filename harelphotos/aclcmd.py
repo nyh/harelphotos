@@ -1,10 +1,14 @@
 """``harelphotos acl`` — inspect and set who may see a directory (DESIGN.md 6).
 
-Restrictions live in ``.album.toml`` files, which you can perfectly well edit
-by hand. This exists because the interesting question is not "what does this
-file say" but "who can actually see this album, and why" — and that answer is
-assembled from every ``.album.toml`` between the root and here, plus the group
-definitions in the global config.
+Restrictions can be written by hand in a ``.album.toml`` beside the photos, and
+that keeps working. What this command *writes* goes to the overrides file in
+the state directory instead (see ``overrides.py``), because the photo tree is
+read-only to this software.
+
+It exists because the interesting question is not "what does this file say" but
+"who can actually see this album, and why" — and that answer is assembled from
+every ``.album.toml`` between the root and here, each one possibly overridden,
+plus the group definitions in the global config.
 
 Two mistakes it is built to catch, both of which fail *silently* and in the
 dangerous direction:
@@ -19,12 +23,10 @@ dangerous direction:
 
 from __future__ import annotations
 
-import shutil
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import acl, album, users as users_mod
+from . import acl, album, overrides, users as users_mod
 from .config import Config
 
 
@@ -44,16 +46,21 @@ class Link:
 def chain_with_sources(cfg: Config, relpath: str) -> list[Link]:
     """Walk from the root down, recording who restricted what.
 
-    Read from the ``.album.toml`` files rather than the stored chain, because
-    the point is to show what the configuration *says*, including edits made
-    since the last scan.
+    Read from the configuration -- the ``.album.toml`` files and the overrides
+    on top of them -- rather than from the stored chain, because the point is
+    to show what is configured *now*, including edits made since the last scan
+    that are not yet in force.
     """
     parts = [p for p in relpath.split("/") if p]
+    over = overrides.load(cfg)
     links: list[Link] = []
     here = ""
     for i in range(len(parts) + 1):
         d = cfg.photo_root / here if here else cfg.photo_root
         conf = album.load(d)
+        entry = over.get(overrides.key_for(here))
+        if entry:
+            conf = overrides.apply(conf, entry)
         if conf.allow_replace:
             links = []
         if conf.allow is not None:
@@ -94,34 +101,6 @@ def who_can_view(cfg: Config, links: list[Link]) -> tuple[set[str], set[str]]:
 
 # ----------------------------------------------------------------- writing
 
-def _quote(value: str) -> str:
-    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
-
-
-def _strip_key(text: str, key: str) -> str:
-    """Remove a top-level ``key = ...`` assignment, including a wrapped array.
-
-    Line-based rather than a TOML round-trip, so comments and formatting the
-    owner wrote by hand survive. `write_allow` verifies the result afterwards.
-    """
-    out: list[str] = []
-    lines = text.splitlines(keepends=True)
-    i = 0
-    while i < len(lines):
-        stripped = lines[i].lstrip()
-        if stripped.startswith(key) and stripped[len(key):].lstrip().startswith("="):
-            # Consume a multi-line array too.
-            depth = lines[i].count("[") - lines[i].count("]")
-            i += 1
-            while depth > 0 and i < len(lines):
-                depth += lines[i].count("[") - lines[i].count("]")
-                i += 1
-            continue
-        out.append(lines[i])
-        i += 1
-    return "".join(out)
-
-
 def write_allow(
     cfg: Config,
     relpath: str,
@@ -129,64 +108,29 @@ def write_allow(
     *,
     replace: bool = False,
 ) -> Path:
-    """Set or clear the restriction on one directory's ``.album.toml``.
+    """Set or clear the restriction on one directory.
 
-    Everything else in the file is preserved. Afterwards the file is re-parsed
-    and every other key compared with what it held before; if anything else
-    moved, the original is put back and this raises rather than leaving an
-    album's settings quietly mangled.
+    Written to the overrides file in the state directory, never to a
+    ``.album.toml`` in the photo tree: that tree is read-only to this software,
+    and on a real deployment the systemd unit makes it literally so.
+
+    A hand-written ``allow`` beside the photos keeps working and keeps
+    travelling with them; an entry here simply takes precedence over it. Which
+    is also how you undo one: `--clear` removes the override and whatever the
+    `.album.toml` says applies again.
     """
     d = cfg.photo_root / relpath if relpath else cfg.photo_root
     if not d.is_dir():
         raise AclError(f"{d} is not a directory")
-    path = d / album.ALBUM_FILE
-
-    before_text = path.read_text(encoding="utf-8") if path.is_file() else ""
     try:
-        before = tomllib.loads(before_text) if before_text else {}
-    except tomllib.TOMLDecodeError as e:
-        raise AclError(f"{path} is not valid TOML, so it will not be edited: {e}") from e
-
-    body = _strip_key(_strip_key(before_text, "allow"), "allow_replace")
-    if body and not body.endswith("\n"):
-        body += "\n"
-    if allow is not None:
-        if replace:
-            body += "allow_replace = true\n"
-        body += "allow = [" + ", ".join(_quote(a) for a in allow) + "]\n"
-
-    backup = path.with_suffix(path.suffix + ".bak") if path.is_file() else None
-    if backup is not None:
-        shutil.copy2(path, backup)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(body, encoding="utf-8")
-    tmp.replace(path)
-
-    try:
-        after = tomllib.loads(path.read_text(encoding="utf-8"))
-    except tomllib.TOMLDecodeError as e:
-        _restore(path, backup, before_text)
-        raise AclError(f"editing {path} produced invalid TOML ({e}); it was left alone") from e
-
-    keys = (set(before) | set(after)) - {"allow", "allow_replace"}
-    changed = [k for k in sorted(keys) if before.get(k) != after.get(k)]
-    if changed:
-        _restore(path, backup, before_text)
-        raise AclError(
-            f"editing {path} would have changed {', '.join(changed)}; it was left alone"
+        return overrides.set_for(
+            cfg,
+            relpath,
+            allow=tuple(allow) if allow is not None else None,
+            allow_replace=replace if allow is not None else None,
         )
-    if backup is not None:
-        backup.unlink(missing_ok=True)
-    return path
-
-
-def _restore(path: Path, backup: Path | None, original: str) -> None:
-    if backup is not None and backup.is_file():
-        backup.replace(path)
-    elif original:
-        path.write_text(original, encoding="utf-8")
-    else:
-        path.unlink(missing_ok=True)
+    except overrides.OverrideError as e:
+        raise AclError(str(e)) from e
 
 
 def restricted_dirs(conn) -> list[tuple[str, acl.Chain]]:
