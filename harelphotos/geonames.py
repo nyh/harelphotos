@@ -44,7 +44,11 @@ ALL_FILE = "allCountries.zip"          # 421 MB, 13.5 M rows; landmarks only
 # 2.7 km away and two stream channels were closer than anything meaningful.
 LANDMARK_RADII_M = {
     # Travel. Large, and where a holiday actually passes through.
-    "AIRP": 4000, "PRT": 3000, "MAR": 1500, "RSTN": 400,
+    # 2.5 km, not more: it now overrides the town outright, and a bigger
+    # circle around a city airport would swallow the neighbourhoods beside it.
+    # Measured: 2.03 km from the middle of Boston Logan while in its terminal,
+    # 1.77 km from Ben Gurion's while in that one.
+    "AIRP": 2500, "PRT": 3000, "MAR": 1500, "RSTN": 400,
 
     # Built things, by how big the thing physically is -- not by how famous.
     # A bridge you are either on or not: 800 m put a photo taken indoors 793 m
@@ -86,12 +90,19 @@ LANDMARK_CODES = frozenset(LANDMARK_RADII_M)
 # Deliberately not AMUS: a theme park is genuinely large and deliberately built
 # next to a town, so Walt Disney World would lose its name to Celebration,
 # Florida. Nor AIRP, for the same reason -- that is the whole point of it.
+# AMUS belongs here for the same reason PRK does: it covers Walt Disney World,
+# a hundred square kilometres, and Tel Aviv's Luna Park, a hundred metres
+# across. What separates them is not the code but the neighbourhood -- so the
+# shrink applies only when a town of real size is close by. Disney's nearest
+# neighbour is a company town of fifty people; Luna Park's is a city of
+# 432,000, and a fairground does not get to displace that city from two
+# kilometres away.
 AREA_SHRINK_CODES = frozenset({
-    "PRK", "RESN", "RESV", "FRST", "CNYN", "DSRT", "PLAT", "GLCR",
+    "PRK", "AMUS", "RESN", "RESV", "FRST", "CNYN", "DSRT", "PLAT", "GLCR",
     "ISL", "LK", "LGN", "BCH",
 })
 AREA_TOWN_NEAR_M = 2000
-AREA_SHRUNK_M = 400
+AREA_SHRUNK_M = 250
 
 # Places you are overwhelmingly likely to be *inside* rather than beside.
 #
@@ -102,6 +113,12 @@ AREA_SHRUNK_M = 400
 # than the resort's own centre. So these beat a small town whatever the
 # distances say, as long as you are within their radius at all.
 DESTINATION_CODES = frozenset({"AIRP", "AMUS", "PRT"})
+
+# GeoNames marks features that no longer exist by putting "(historical)" in the
+# name, and keeps them. "Wood Island Park (historical)" is a park that was
+# demolished to build Boston's airport, and it captioned a photo taken in that
+# airport's terminal. There are 123,855 such rows in the United States alone.
+HISTORICAL_MARK = "(historical)"
 
 # Being inside a landmark's radius is not on its own enough to name it: a
 # nature reserve 4.6 km away is "within 5 km" and still not where you are, and
@@ -284,6 +301,8 @@ def build_landmarks(db_path: Path, cache_dir: Path | None = None, progress=None)
                     f = raw.split("\t")
                     if len(f) <= COL_FCODE or f[COL_FCODE] not in LANDMARK_CODES:
                         continue
+                    if HISTORICAL_MARK in f[COL_NAME]:
+                        continue      # demolished, drained, or renamed away
                     try:
                         lat, lon = float(f[COL_LAT]), float(f[COL_LON])
                     except ValueError:
@@ -380,17 +399,17 @@ class Geocoder:
                 return best, haversine(lat, lon, best["lat"], best["lon"])
         return None, None      # mid-ocean, or a coordinate far from anywhere
 
-    def _nearest_landmark(self, lat: float, lon: float, town_dist: float | None = None):
-        """The closest curated landmark that you are actually *at*.
+    def _landmark_candidates(self, lat: float, lon: float, town_dist: float | None,
+                             town_pop: int = 0):
+        """Every curated landmark whose own radius you are inside.
 
-        Each feature code carries its own radius, because the features are not
-        the same size: a kilometre from a museum is not at the museum, but a
-        kilometre from an airport is in the middle of one. And an area feature
-        with a town beside it is not the wilderness its code allows for, so
-        `town_dist` shrinks those (see AREA_SHRINK_CODES).
+        A radius per feature code, because the features are not the same size:
+        a kilometre from a museum is not at the museum, but a kilometre from an
+        airport is in the middle of one. And an area feature with a town beside
+        it is not the wilderness its code allows for (AREA_SHRINK_CODES).
         """
         if not self.has_landmarks:
-            return None
+            return []
         d = LANDMARK_MAX_M / 111_320.0
         dlon = d / max(0.05, math.cos(math.radians(lat)))
         rows = self.conn.execute(
@@ -398,24 +417,39 @@ class Geocoder:
             "WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?",
             (lat - d, lat + d, lon - dlon, lon + dlon),
         ).fetchall()
-        near_town = town_dist is not None and town_dist <= AREA_TOWN_NEAR_M
-        best = None
+        # A *substantial* town nearby, not merely any hamlet.
+        near_town = (town_dist is not None and town_dist <= AREA_TOWN_NEAR_M
+                     and town_pop >= LANDMARK_TOWN_POP_FLOOR)
+        out = []
         for r in rows:
+            if HISTORICAL_MARK in r["name"]:
+                continue          # demolished, drained, or renamed away
             dist = haversine(lat, lon, r["lat"], r["lon"])
             radius = LANDMARK_RADII_M.get(r["code"], 0)
             if near_town and r["code"] in AREA_SHRINK_CODES:
                 radius = min(radius, AREA_SHRUNK_M)
             if dist <= radius:
-                # Closest wins among those you are genuinely within.
-                if best is None or dist < best[1]:
-                    best = (r, dist)
-        return best
+                out.append((r, dist, radius))
+        return out
+
+    @staticmethod
+    def _pick(candidates):
+        """A destination outranks whatever else you happen to be beside.
+
+        Inside Boston's airport the nearest curated things are a beach and a
+        park a few hundred metres off and the airport two kilometres away --
+        and the airport is where the photograph was taken.
+        """
+        if not candidates:
+            return None
+        return min(candidates,
+                   key=lambda c: (c[0]["code"] not in DESTINATION_CODES, c[1]))
 
     def landmark(self, lat: float, lon: float) -> str | None:
         key = (round(lat, CACHE_PRECISION), round(lon, CACHE_PRECISION))
         if key in self._landmark_cache:
             return self._landmark_cache[key]
-        found = self._nearest_landmark(lat, lon)
+        found = self._pick(self._landmark_candidates(lat, lon, None))
         name = found[0]["name"] if found else None
         self._landmark_cache[key] = name
         return name
@@ -433,35 +467,47 @@ class Geocoder:
         return result
 
     def _describe_row(self, row, dist: float, lat: float, lon: float):
-        mark = self._nearest_landmark(lat, lon, town_dist=dist)
         pop = _int(row["pop"])
+        candidates = self._landmark_candidates(lat, lon, town_dist=dist, town_pop=pop)
         name, keep_town = None, True
 
-        if mark is not None:
-            mark_row, mark_dist = mark
-            if pop >= LANDMARK_TOWN_POP_FLOOR:
-                # A town people have heard of. It keeps its place and the
-                # landmark joins it -- if you are actually inside the thing,
-                # which for a small thing means closer than the blanket
-                # threshold: 750 m from a theatre is not at the theatre.
-                inside = min(LANDMARK_INSIDE_M,
-                             LANDMARK_RADII_M.get(mark_row["code"], LANDMARK_INSIDE_M))
-                if mark_dist <= inside:
-                    name = mark_row["name"]
-            elif (mark_row["code"] in DESTINATION_CODES
-                  or mark_dist <= dist + LANDMARK_SLACK_M):
-                # A hamlet, a moshav, a suburb. The landmark is the useful
-                # half, and the town would only add noise.
-                name, keep_town = mark_row["name"], False
+        airports = [c for c in candidates if c[0]["code"] == "AIRP"]
+        if airports:
+            # An airport replaces the town whatever the town's size. A tourist
+            # inside one is in the airport, not in the neighbourhood of 15,741
+            # people whose edge it happens to touch -- nor in the moshav of 971
+            # that is 200 m nearer than the runway.
+            name, keep_town = min(airports, key=lambda c: c[1])[0]["name"], False
+        elif pop < LANDMARK_TOWN_POP_FLOOR:
+            # A hamlet, a moshav, a suburb: the landmark is the useful half and
+            # the town would only add noise. Still has to be roughly as close
+            # as the town, unless it is a destination -- otherwise a nature
+            # reserve 4.6 km from central Haifa displaces the suburb you are
+            # standing in, which was wrong before.
+            near = [c for c in candidates
+                    if c[0]["code"] in DESTINATION_CODES
+                    or c[1] <= dist + LANDMARK_SLACK_M]
+            best = self._pick(near)
+            if best is not None:
+                name, keep_town = best[0]["name"], False
+        else:
+            # A town people have heard of keeps its place, and the landmark
+            # joins it only from genuinely inside -- which for a small thing is
+            # closer than the blanket threshold: 750 m from a theatre is not at
+            # the theatre, and an amusement park across a city does not get to
+            # displace the city.
+            inside = [c for c in candidates
+                      if c[1] <= min(LANDMARK_INSIDE_M, c[2])]
+            best = self._pick(inside)
+            if best is not None:
+                name = best[0]["name"]
 
         parts = [p for p in (name, row["name"] if keep_town else None) if p]
         region = self._admin1.get(f"{row['cc']}.{row['admin1']}")
         country = self._countries.get(row["cc"], row["cc"])
-        # A region earns its place only when it is not repeating what is
-        # already there ("Tel Aviv, Tel Aviv, Israel" reads badly), and not
-        # when a landmark and a town are already two names deep.
-        if (region and row["cc"] in REGION_COUNTRIES
-                and len(parts) < 2 and region not in parts):
+        # Always, in a country whose subdivisions people use: "Orient Heights,
+        # United States" is a poor answer when Massachusetts is what places it.
+        if region and row["cc"] in REGION_COUNTRIES and region not in parts:
             parts.append(region)
         if country:
             parts.append(country)

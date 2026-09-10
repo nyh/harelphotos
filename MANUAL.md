@@ -354,17 +354,28 @@ at any distance — a museum 250 m, an archaeological site 800 m, a mountain
 Two rules on top of that, each of which exists because the plain version got
 something wrong:
 
-**An area with a town beside it is not a wilderness.** GeoNames files a
-national park and a neighbourhood ballfield under the same code, and in the
-United States it files National Register "historic districts" there too — so a
-photo taken indoors was captioned with a historic district 426 m away, having
-inherited a radius meant for Yellowstone. Where a town is within 2 km, those
-area features shrink to 400 m. Out in the open they keep the full radius.
+**An area with a town beside it is not a wilderness.** GeoNames records no
+extent for anything, so a national park, a neighbourhood ballfield, a
+fairground and — in the United States — a National Register "historic district"
+all share a code and a radius. A photo taken indoors was captioned with a
+historic district 426 m away, having inherited a radius meant for Yellowstone.
 
-**An airport or a resort outranks a hamlet inside it.** A tourist at Ben Gurion
-Airport is in the airport, not in the moshav 200 m nearer; a photo at Walt
-Disney World is not in Bay Lake, population 50, which sits inside the resort
-1.6 km closer than the resort's own centre. Streams, churches, schools, hotels,
+A substantial town nearby is what separates them, because a five-kilometre
+wilderness does not have a city in it: where a town of 5,000 or more is within
+2 km, area features shrink to 250 m. That is why Walt Disney World keeps its
+full reach — its nearest neighbour is a company town of fifty people — while
+Tel Aviv's Luna Park, a hundred metres across, cannot reach across the city
+from two kilometres away.
+
+**An airport outranks the town outright.** A tourist inside one is in the
+airport, not in the moshav 200 m nearer than the runway nor the neighbourhood
+of 15,741 whose edge it touches. Only airports get that: making every large
+attraction override the town turned central Tel Aviv into a fairground.
+
+**Things that no longer exist are ignored.** GeoNames keeps demolished features
+with "(historical)" in the name — 123,855 of them in the United States alone.
+One of them, a park demolished to build Boston's airport, was captioning photos
+taken inside that airport. Streams, churches, schools, hotels,
 wells and road junctions are excluded outright — they are millions of rows that
 would label a family photo "Saint Mary Church".
 

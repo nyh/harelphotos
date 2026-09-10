@@ -120,7 +120,9 @@ def test_the_curated_codes_exclude_the_noise(db):
 def test_an_airport_gets_a_far_wider_radius_than_a_museum(db):
     """A kilometre from a museum is not at the museum; a kilometre from an
     airport is in the middle of one."""
-    assert geonames.LANDMARK_RADII_M["AIRP"] > 3000
+    # 2.5 km, not more: an airport overrides the town outright, so a bigger
+    # circle around a city airport would swallow the neighbourhoods beside it.
+    assert 2000 < geonames.LANDMARK_RADII_M["AIRP"] <= 3000
     assert geonames.LANDMARK_RADII_M["MUS"] < 1000
 
 
@@ -255,3 +257,105 @@ def test_joining_a_city_uses_the_things_own_radius(tmp_path):
     got = name_at(path, 42.3119, -71.226175)
     assert "Grand Theatre" not in got, got
     assert got.startswith("Bigcity")
+
+
+def test_a_demolished_park_does_not_caption_the_airport_built_over_it(tmp_path):
+    """GeoNames keeps features that no longer exist, marked "(historical)" --
+    123,855 of them in the United States alone. "Wood Island Park (historical)"
+    was demolished to build Boston's airport, and it captioned a photo taken
+    inside that airport's terminal.
+
+    Geometry from the real dump: the defunct park 252 m away, a beach at 314 m,
+    and Logan International Airport 2.03 km away.
+    """
+    path = _world(
+        tmp_path,
+        [("Orient Heights", "US", "MA", 42.3922, -71.0143, 15_741)],
+        [("Wood Island Park (historical)", "US", "PRK", 42.3855, -71.0143),
+         ("Orient Heights Beach", "US", "BCH", 42.3860, -71.0143),
+         ("Logan International Airport", "US", "AIRP", 42.36514, -71.01777)],
+    )
+    got = name_at(path, 42.3832472, -71.0143028)
+    assert "historical" not in got, got
+    assert "Beach" not in got, got
+    assert got == "Logan International Airport, Massachusetts, United States", got
+
+
+def test_an_airport_outranks_a_neighbourhood_of_fifteen_thousand(tmp_path):
+    """Unlike other landmarks, which join a town people have heard of rather
+    than replacing it: a tourist inside an airport is in the airport."""
+    path = _world(
+        tmp_path,
+        [("Orient Heights", "US", "MA", 42.3922, -71.0143, 15_741)],
+        [("Logan International Airport", "US", "AIRP", 42.36514, -71.01777)],
+    )
+    got = name_at(path, 42.3832472, -71.0143028)
+    assert got.startswith("Logan International Airport"), got
+    assert "Orient Heights" not in got
+
+
+def test_an_amusement_park_does_not_displace_a_city(tmp_path):
+    """The airport rule must not generalise to every large attraction: making
+    all of them override the town turned central Tel Aviv into "Tel Aviv Luna
+    Park" and Times Square into an amusement park."""
+    path = _world(
+        tmp_path,
+        [("Bigcity", "US", "MA", 42.3119, -71.2262, 400_000)],
+        [("Fun Land", "US", "AMUS", 42.3299, -71.2262),          # ~2 km
+         ("City Gardens", "US", "PRK", 42.3141, -71.2262)],      # ~245 m
+    )
+    got = name_at(path, 42.3119, -71.226175)
+    assert "Fun Land" not in got, got
+    assert got == "City Gardens, Bigcity, Massachusetts, United States", got
+
+
+def test_the_state_is_kept_even_with_a_landmark_and_a_town(tmp_path):
+    """"Orient Heights, United States" is a poor answer when Massachusetts is
+    the thing that places it."""
+    path = _world(
+        tmp_path,
+        [("Sometown", "US", "MA", 42.3119, -71.2262, 400_000)],
+        [("A Monument", "US", "MNMT", 42.3120, -71.2262)],
+    )
+    got = name_at(path, 42.3119, -71.226175)
+    assert got == "A Monument, Sometown, Massachusetts, United States", got
+
+
+def test_a_small_fairground_does_not_reach_across_a_city(tmp_path):
+    """AMUS covers Walt Disney World, a hundred square kilometres, and Tel
+    Aviv's Luna Park, a hundred metres across. Being in the fairground is worth
+    saying; being two kilometres away is not."""
+    path = _world(
+        tmp_path,
+        [("Bigcity", "US", "MA", 42.3119, -71.2262, 432_000)],
+        [("Luna Park", "US", "AMUS", 42.3299, -71.2262)],        # ~2 km
+    )
+    assert "Luna Park" not in name_at(path, 42.3119, -71.226175)
+    # Standing in it, though, it wins over the city.
+    got = name_at(path, 42.3298, -71.2262)
+    assert got.startswith("Luna Park"), got
+
+
+def test_a_huge_resort_keeps_its_reach_because_its_neighbour_is_tiny(tmp_path):
+    """The same code, the opposite answer, and the neighbourhood is what tells
+    them apart: Disney's nearest town is a company town of fifty people."""
+    path = _world(
+        tmp_path,
+        [("Bay Lake", "US", "FL", 28.3891, -81.5639, 50)],
+        [("Walt Disney World Resort", "US", "AMUS", 28.4034, -81.5639)],
+    )
+    got = name_at(path, 28.3852, -81.5639)
+    assert got.startswith("Walt Disney World Resort"), got
+
+
+def test_a_reserve_miles_off_does_not_displace_the_suburb_you_are_in(tmp_path):
+    """A nature reserve 4.6 km from central Haifa is "within 5 km" of it and
+    still not where the photograph was taken."""
+    path = _world(
+        tmp_path,
+        [("Small Suburb", "US", "MA", 42.3156, -71.2262, 0)],     # ~410 m
+        [("Far Reserve", "US", "RESN", 42.3532, -71.2262)],       # ~4.6 km
+    )
+    got = name_at(path, 42.3119, -71.226175)
+    assert "Far Reserve" not in got, got
+    assert got.startswith("Small Suburb")
