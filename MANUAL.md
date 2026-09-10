@@ -418,6 +418,17 @@ viewpoint, because the canyon's own coordinate is tens of kilometres away. That
 is why it is opt-in, and why the town is kept whenever it is a place people
 have heard of.
 
+### A city, not one of its neighbourhoods
+
+GeoNames files Boston's North End as a "section of a populated place" — 10,131
+inhabitants, and 288 m nearer to a photo in Christopher Columbus Park than
+Boston itself. A traveller means Boston, so where the closest place is a section
+of somewhere, or has no recorded population at all, a real city within another
+kilometre and a half is preferred.
+
+A village with people in it is still where you are: the rule only reaches past
+places that are not municipalities in their own right.
+
 ### A note on regions
 
 A first-level subdivision is printed only where a traveller would use it — a

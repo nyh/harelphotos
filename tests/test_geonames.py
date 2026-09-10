@@ -19,7 +19,7 @@ def gc(tmp_path):
     conn = sqlite3.connect(path)
     conn.executescript(geonames.SCHEMA)
     conn.executemany(
-        "INSERT INTO places VALUES (?,?,?,?,?,?)",
+        "INSERT INTO places (name, cc, admin1, lat, lon, pop) VALUES (?,?,?,?,?,?)",
         [
             ("Náxos", "GR", "83", 37.1036, 25.3766, 7000),
             ("Filoti", "GR", "83", 37.0472, 25.5236, 1500),
@@ -119,7 +119,7 @@ def test_geocode_reports_progress_on_every_row(tmp_path, monkeypatch):
     gpath = cfg.state_dir / "geonames.sqlite"
     g = _sqlite3.connect(gpath)
     g.executescript(geonames.SCHEMA)
-    g.execute("INSERT INTO places VALUES ('Náxos','GR','24',37.1036,25.3766,7000)")
+    g.execute("INSERT INTO places (name, cc, admin1, lat, lon, pop) VALUES ('Náxos','GR','24',37.1036,25.3766,7000)")
     g.execute("INSERT INTO countries VALUES ('GR','Greece')")
     g.commit(); g.close()
 

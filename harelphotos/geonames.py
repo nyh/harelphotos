@@ -177,6 +177,17 @@ LANDMARK_INSIDE_M = 750
 # "Sedona, Arizona, United States" is how people actually say it, and the
 # country alone would be uselessly vague. So the region is printed only where
 # it does that work.
+# "Section of a populated place" -- a neighbourhood, not a town. GeoNames files
+# Boston's North End as one, with 10,131 inhabitants, 288 m nearer than Boston
+# itself. A traveller means Boston: they have heard of it, and the city is what
+# places the photograph.
+#
+# Not enough on its own, though: "Downtown/Financial District" is filed as a
+# plain PPL with no population at all, so the rule below asks for a real city
+# whenever the nearest place is a section OR has no recorded population.
+SECTION_CODES = frozenset({"PPLX", "PPLL", "PPLS"})
+CITY_SLACK_M = 1500
+
 REGION_COUNTRIES = frozenset({
     "US", "CA", "AU", "BR", "MX", "IN", "RU", "CN", "AR",
 })
@@ -196,7 +207,8 @@ CACHE_PRECISION = 3
 NEAR_THRESHOLD_M = 5000
 
 SCHEMA = """
-CREATE TABLE places (name TEXT, cc TEXT, admin1 TEXT, lat REAL, lon REAL, pop INTEGER);
+CREATE TABLE places
+  (name TEXT, cc TEXT, admin1 TEXT, lat REAL, lon REAL, pop INTEGER, code TEXT);
 CREATE INDEX places_ll ON places(lat, lon);
 CREATE TABLE countries (cc TEXT PRIMARY KEY, name TEXT);
 CREATE TABLE admin1 (key TEXT PRIMARY KEY, name TEXT);
@@ -266,7 +278,8 @@ def build(db_path: Path, cache_dir: Path | None = None, progress=None) -> int:
             pop = int(f[COL_POP] or 0)
         except ValueError:
             pop = 0
-        rows.append((f[COL_NAME], f[COL_CC], f[COL_ADMIN1], lat, lon, pop))
+        rows.append((f[COL_NAME], f[COL_CC], f[COL_ADMIN1], lat, lon, pop,
+                     f[COL_FCODE]))
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = db_path.with_name(db_path.name + ".tmp")
@@ -274,7 +287,7 @@ def build(db_path: Path, cache_dir: Path | None = None, progress=None) -> int:
     conn = sqlite3.connect(tmp)
     try:
         conn.executescript(SCHEMA)
-        conn.executemany("INSERT INTO places VALUES (?,?,?,?,?,?)", rows)
+        conn.executemany("INSERT INTO places VALUES (?,?,?,?,?,?,?)", rows)
         conn.executemany(
             "INSERT OR REPLACE INTO countries VALUES (?,?)",
             [
@@ -297,7 +310,51 @@ def build(db_path: Path, cache_dir: Path | None = None, progress=None) -> int:
         conn.commit()
     finally:
         conn.close()
+    _carry_over_landmarks(db_path, tmp)
     tmp.replace(db_path)
+    return len(rows)
+
+
+def _carry_over_landmarks(old: Path, new: Path) -> int:
+    """Move an existing landmark table into a freshly rebuilt database.
+
+    `init --geonames` writes a new file and renames it over the old one, which
+    would take the landmarks with it -- and those cost a 421 MB download. They
+    do not depend on anything in the places table, so they can simply be
+    carried across.
+    """
+    if not old.exists():
+        return 0
+    src = sqlite3.connect(f"file:{old}?mode=ro", uri=True)
+    try:
+        have = src.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='landmarks'"
+        ).fetchone()
+        if not have:
+            return 0
+        rows = src.execute("SELECT name, cc, code, lat, lon FROM landmarks").fetchall()
+        fingerprint = src.execute(
+            "SELECT value FROM meta WHERE key = 'landmark_codes'"
+        ).fetchone()
+    except sqlite3.Error as e:
+        log.warning("could not carry the landmarks across: %s", e)
+        return 0
+    finally:
+        src.close()
+
+    dst = sqlite3.connect(new)
+    try:
+        dst.executescript(LANDMARK_SCHEMA)
+        dst.executemany("INSERT INTO landmarks VALUES (?,?,?,?,?)", rows)
+        dst.execute("INSERT OR REPLACE INTO meta VALUES ('landmarks', ?)",
+                    (str(len(rows)),))
+        if fingerprint:
+            dst.execute("INSERT OR REPLACE INTO meta VALUES ('landmark_codes', ?)",
+                        (fingerprint[0],))
+        dst.commit()
+    finally:
+        dst.close()
+    log.info("carried %d landmarks into the rebuilt dataset", len(rows))
     return len(rows)
 
 
@@ -429,6 +486,12 @@ class Geocoder:
         self._admin1 = {
             r["key"]: r["name"] for r in self.conn.execute("SELECT key, name FROM admin1")
         }
+        # Whether this dataset records a feature code per place. Added later,
+        # so a geonames.sqlite built by an older version simply behaves as it
+        # did rather than failing.
+        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(places)")}
+        self._has_place_codes = "code" in cols
+        self._code_col = ", code" if self._has_place_codes else ""
         self._cache: dict[tuple[float, float], tuple[str, int] | None] = {}
         self._landmark_cache: dict[tuple[float, float], str | None] = {}
         self.has_landmarks = bool(
@@ -449,18 +512,50 @@ class Geocoder:
         self.conn.close()
 
     def _nearest(self, lat: float, lon: float):
+        """The place to name: normally the closest, but a city over one of its
+        own neighbourhoods.
+
+        GeoNames files Boston's North End as a "section of a populated place"
+        with 10,131 inhabitants, 288 m nearer than Boston. A traveller means
+        Boston -- they have heard of it, and it is the city that places the
+        photograph. Sections are not the only trouble: "Downtown/Financial
+        District" is a plain PPL with no population at all, so a real city is
+        preferred whenever the nearest place is a section *or* has none.
+        """
         for d in self.BOXES:
             # A degree of longitude shrinks towards the poles; widen to match.
             dlon = d / max(0.05, math.cos(math.radians(lat)))
             rows = self.conn.execute(
-                "SELECT name, cc, admin1, lat, lon, pop FROM places "
+                f"SELECT name, cc, admin1, lat, lon, pop{self._code_col} FROM places "
                 "WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?",
                 (lat - d, lat + d, lon - dlon, lon + dlon),
             ).fetchall()
-            if rows:
-                best = min(rows, key=lambda r: haversine(lat, lon, r["lat"], r["lon"]))
-                return best, haversine(lat, lon, best["lat"], best["lon"])
+            if not rows:
+                continue
+            scored = sorted(
+                ((r, haversine(lat, lon, r["lat"], r["lon"])) for r in rows),
+                key=lambda rd: rd[1],
+            )
+            best, best_dist = scored[0]
+            if self._has_place_codes and self._is_vague(best):
+                city = next(
+                    (rd for rd in scored
+                     if rd[1] <= best_dist + CITY_SLACK_M and not self._is_vague(rd[0])),
+                    None,
+                )
+                if city is not None:
+                    return city
+            return best, best_dist
         return None, None      # mid-ocean, or a coordinate far from anywhere
+
+    @staticmethod
+    def _is_vague(row) -> bool:
+        """A neighbourhood, or something with no population recorded."""
+        try:
+            code = row["code"]
+        except (KeyError, IndexError):
+            code = None
+        return (code in SECTION_CODES) or _int(row["pop"]) < 1
 
     def _landmark_candidates(self, lat: float, lon: float, town_dist: float | None,
                              town_pop: int = 0):

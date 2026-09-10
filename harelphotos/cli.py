@@ -383,6 +383,14 @@ def cmd_geocode(args: argparse.Namespace) -> int:
         sys.stderr.write("\r\033[K")
         sys.stderr.flush()
     print(stats.summary())
+    if stats.places_stale:
+        # Without the feature code we cannot tell a city from one of its own
+        # neighbourhoods, and photographs in Boston come out labelled "North
+        # End". Rebuilding keeps the landmarks; only the 14 MB is re-fetched.
+        print("\nNOTE: the place dataset predates this version and cannot tell\n"
+              "      a city from one of its neighbourhoods. Re-run\n"
+              "      'harelphotos init --geonames' (14 MB; your landmarks are\n"
+              "      kept), then geocode again.", file=sys.stderr)
     if stats.landmarks_stale:
         # The table is filtered when it is built, so a code added since then
         # was never stored and no amount of re-geocoding will find it.

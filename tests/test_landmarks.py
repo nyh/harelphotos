@@ -23,7 +23,7 @@ def db(tmp_path):
     conn = sqlite3.connect(path)
     conn.executescript(geonames.SCHEMA)
     conn.executescript(geonames.LANDMARK_SCHEMA)
-    conn.executemany("INSERT INTO places VALUES (?,?,?,?,?,?)", [
+    conn.executemany("INSERT INTO places (name, cc, admin1, lat, lon, pop) VALUES (?,?,?,?,?,?)", [
         ("Bigtown",  "XX", "01", 32.0000, 34.0000, 400_000),
         ("Hamlet",   "XX", "01", 33.0000, 34.0000, 900),
         ("Suburb",   "XX", "01", 34.0000, 34.0000, 0),
@@ -40,7 +40,7 @@ def db(tmp_path):
     conn.execute("INSERT INTO countries VALUES ('XX','Exampleland')")
     conn.execute("INSERT INTO admin1 VALUES ('XX.01','Example Region')")
     # ... and a federal country, where the state IS worth printing.
-    conn.execute("INSERT INTO places VALUES ('Sedona','US','AZ',34.87,-111.76,10000)")
+    conn.execute("INSERT INTO places (name, cc, admin1, lat, lon, pop) VALUES ('Sedona','US','AZ',34.87,-111.76,10000)")
     conn.execute("INSERT INTO countries VALUES ('US','United States')")
     conn.execute("INSERT INTO admin1 VALUES ('US.AZ','Arizona')")
     conn.commit()
@@ -95,7 +95,7 @@ def test_without_the_landmark_table_nothing_changes(tmp_path):
     path = tmp_path / "geonames.sqlite"
     conn = sqlite3.connect(path)
     conn.executescript(geonames.SCHEMA)
-    conn.execute("INSERT INTO places VALUES ('Bigtown','XX','01',32.0,34.0,400000)")
+    conn.execute("INSERT INTO places (name, cc, admin1, lat, lon, pop) VALUES ('Bigtown','XX','01',32.0,34.0,400000)")
     conn.execute("INSERT INTO countries VALUES ('XX','Exampleland')")
     conn.commit(); conn.close()
 
@@ -153,8 +153,8 @@ def test_a_bridge_does_not_reach_across_a_town(tmp_path):
     conn = sqlite3.connect(path)
     conn.executescript(geonames.SCHEMA)
     conn.executescript(geonames.LANDMARK_SCHEMA)
-    conn.execute("INSERT INTO places VALUES "
-                 "('Newton Upper Falls','US','MA',42.3119,-71.2262,9000)")
+    conn.execute("INSERT INTO places (name, cc, admin1, lat, lon, pop) "
+                 "VALUES ('Newton Upper Falls','US','MA',42.3119,-71.2262,9000)")
     conn.execute("INSERT INTO landmarks VALUES "
                  "('Echo Bridge','US','BDG',42.3167,-71.2333)")
     conn.execute("INSERT INTO countries VALUES ('US','United States')")
@@ -182,7 +182,7 @@ def _world(tmp_path, places, landmarks):
     conn = sqlite3.connect(path)
     conn.executescript(geonames.SCHEMA)
     conn.executescript(geonames.LANDMARK_SCHEMA)
-    conn.executemany("INSERT INTO places VALUES (?,?,?,?,?,?)", places)
+    conn.executemany("INSERT INTO places (name, cc, admin1, lat, lon, pop) VALUES (?,?,?,?,?,?)", places)
     conn.executemany("INSERT INTO landmarks VALUES (?,?,?,?,?)", landmarks)
     conn.execute("INSERT INTO countries VALUES ('US','United States')")
     conn.execute("INSERT INTO admin1 VALUES ('US.MA','Massachusetts')")
@@ -415,7 +415,7 @@ def test_a_table_built_with_an_older_code_list_says_so(tmp_path):
     conn = sqlite3.connect(path)
     conn.executescript(geonames.SCHEMA)
     conn.executescript(geonames.LANDMARK_SCHEMA)
-    conn.execute("INSERT INTO places VALUES ('Town','US','MA',42.0,-71.0,900)")
+    conn.execute("INSERT INTO places (name, cc, admin1, lat, lon, pop) VALUES ('Town','US','MA',42.0,-71.0,900)")
     conn.execute("INSERT INTO meta VALUES ('landmark_codes','deadbeef')")
     conn.commit(); conn.close()
 
@@ -442,7 +442,7 @@ def test_no_landmark_table_is_not_stale(tmp_path):
     path = tmp_path / "geonames.sqlite"
     conn = sqlite3.connect(path)
     conn.executescript(geonames.SCHEMA)
-    conn.execute("INSERT INTO places VALUES ('Town','US','MA',42.0,-71.0,900)")
+    conn.execute("INSERT INTO places (name, cc, admin1, lat, lon, pop) VALUES ('Town','US','MA',42.0,-71.0,900)")
     conn.commit(); conn.close()
     gc = geonames.Geocoder(path)
     try:
@@ -474,3 +474,95 @@ def test_the_download_cache_is_reported_and_removable(tmp_path):
     cache.mkdir(parents=True)
     (cache / "allCountries.zip").write_bytes(b"x" * 5000)
     assert geonames.cache_size(db) == 5000
+
+
+# ------------------------------------------------ a city, not its neighbourhood
+
+def test_a_city_is_named_rather_than_one_of_its_neighbourhoods(tmp_path):
+    """A photo in Boston read "Christopher Columbus Park, North End". GeoNames
+    files the North End as a section of a populated place -- 10,131 people,
+    288 m nearer than Boston itself -- and a traveller means Boston.
+
+    Distances and populations from the real US dump.
+    """
+    path = tmp_path / "geonames.sqlite"
+    conn = sqlite3.connect(path)
+    conn.executescript(geonames.SCHEMA)
+    conn.executescript(geonames.LANDMARK_SCHEMA)
+    conn.executemany("INSERT INTO places VALUES (?,?,?,?,?,?,?)", [
+        ("Quincy Market", "US", "MA", 42.3608, -71.0507, 0, "PPLX"),      # 202 m
+        ("North End", "US", "MA", 42.3627, -71.0507, 10_131, "PPLX"),     # 413 m
+        ("Downtown/Financial District", "US", "MA", 42.3630, -71.0507, 0, "PPL"),
+        ("Boston", "US", "MA", 42.3653, -71.0507, 653_833, "PPLA"),       # 701 m
+    ])
+    conn.execute("INSERT INTO countries VALUES ('US','United States')")
+    conn.execute("INSERT INTO admin1 VALUES ('US.MA','Massachusetts')")
+    conn.commit(); conn.close()
+
+    got = name_at(path, 42.3589889, -71.0506944)
+    assert got == "Boston, Massachusetts, United States", got
+
+
+def test_a_real_small_town_is_not_swallowed_by_a_nearby_city(tmp_path):
+    """The rule must not reach for the nearest metropolis: a village with
+    people in it is where you are."""
+    path = tmp_path / "geonames.sqlite"
+    conn = sqlite3.connect(path)
+    conn.executescript(geonames.SCHEMA)
+    conn.executemany("INSERT INTO places VALUES (?,?,?,?,?,?,?)", [
+        ("Little Village", "US", "MA", 42.3600, -71.0507, 900, "PPL"),
+        ("Big City", "US", "MA", 42.3680, -71.0507, 653_833, "PPLA"),
+    ])
+    conn.execute("INSERT INTO countries VALUES ('US','United States')")
+    conn.execute("INSERT INTO admin1 VALUES ('US.MA','Massachusetts')")
+    conn.commit(); conn.close()
+
+    got = name_at(path, 42.3589889, -71.0506944)
+    assert got.startswith("Little Village"), got
+
+
+def test_an_older_dataset_without_codes_still_works(tmp_path):
+    """A geonames.sqlite built before this simply behaves as it did."""
+    path = tmp_path / "geonames.sqlite"
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        "CREATE TABLE places (name TEXT, cc TEXT, admin1 TEXT, lat REAL, "
+        "lon REAL, pop INTEGER);"
+        "CREATE TABLE countries (cc TEXT PRIMARY KEY, name TEXT);"
+        "CREATE TABLE admin1 (key TEXT PRIMARY KEY, name TEXT);"
+        "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);")
+    conn.execute("INSERT INTO places (name, cc, admin1, lat, lon, pop) VALUES ('Oldtown','US','MA',42.36,-71.05,900)")
+    conn.execute("INSERT INTO countries VALUES ('US','United States')")
+    conn.execute("INSERT INTO admin1 VALUES ('US.MA','Massachusetts')")
+    conn.commit(); conn.close()
+
+    gc = geonames.Geocoder(path)
+    try:
+        assert gc._has_place_codes is False
+        assert gc.describe(42.3589889, -71.0506944)[0].startswith("Oldtown")
+    finally:
+        gc.close()
+
+
+def test_rebuilding_places_keeps_the_landmarks(tmp_path):
+    """`init --geonames` writes a new file and renames it over the old one,
+    which would take a 421 MB download's worth of landmarks with it."""
+    old = tmp_path / "geonames.sqlite"
+    conn = sqlite3.connect(old)
+    conn.executescript(geonames.SCHEMA)
+    conn.executescript(geonames.LANDMARK_SCHEMA)
+    conn.executemany("INSERT INTO landmarks VALUES (?,?,?,?,?)",
+                     [(f"L{i}", "US", "PRK", 42.0 + i / 1000, -71.0)
+                      for i in range(50)])
+    conn.execute("INSERT INTO meta VALUES ('landmark_codes','abc123')")
+    conn.commit(); conn.close()
+
+    new = tmp_path / "new.sqlite"
+    c = sqlite3.connect(new); c.executescript(geonames.SCHEMA); c.commit(); c.close()
+    assert geonames._carry_over_landmarks(old, new) == 50
+
+    c = sqlite3.connect(new)
+    assert c.execute("SELECT count(*) FROM landmarks").fetchone()[0] == 50
+    assert c.execute(
+        "SELECT value FROM meta WHERE key='landmark_codes'").fetchone()[0] == "abc123"
+    c.close()
