@@ -7,12 +7,21 @@
  */
 
 :root {
+  /* Tells the browser to style what we do not: form controls, scrollbars,
+     the canvas behind a short page. Without it those stay light while
+     everything else goes dark, which looks broken rather than themed. */
+  color-scheme: light dark;
+
   --bg: #ffffff;
   --fg: #1a1a1a;
   --dim: #6b6b6b;
   --line: #e2e2e2;
   --card: #f6f6f6;
   --accent: #2d6cdf;
+  /* Text on an accent-coloured button. White fails on the lighter accent the
+     dark scheme uses -- 2.53:1, against the 4.5:1 that ordinary text needs --
+     so the dark scheme puts dark text on it instead, at 6.79:1. */
+  --on-accent: #ffffff;
   --gap: 4px;
   --radius: 6px;
 }
@@ -25,6 +34,7 @@
     --line: #2c2c2c;
     --card: #1c1c1c;
     --accent: #6ba3ff;
+    --on-accent: #0b1b36;
   }
 }
 
@@ -405,7 +415,7 @@ form.login button {
   border: 0;
   border-radius: var(--radius);
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   cursor: pointer;
 }
 

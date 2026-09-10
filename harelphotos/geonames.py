@@ -128,6 +128,12 @@ AREA_SHRUNK_M = 250
 # distances say, as long as you are within their radius at all.
 DESTINATION_CODES = frozenset({"AIRP", "AMUS", "PRT"})
 
+# The known cost of the airport rule, accepted deliberately: a 2.5 km circle
+# around a city airport covers the neighbourhoods beside it, so a photo taken
+# in the city near one is labelled with the airport. Reported and left alone --
+# being inside the airport is much the commoner case for a traveller, which is
+# the whole reason the rule exists.
+
 # GeoNames marks features that no longer exist by putting "(historical)" in the
 # name, and keeps them. "Wood Island Park (historical)" is a park that was
 # demolished to build Boston's airport, and it captioned a photo taken in that

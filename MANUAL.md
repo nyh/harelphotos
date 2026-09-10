@@ -302,6 +302,12 @@ short window, the top bar shrinks to about a third of its height rather than
 floating over the photo: covering part of the picture to make the rest slightly
 bigger is the wrong trade on a page whose entire purpose is looking at it.
 
+You will not see the prefetch happening without looking for it: the images are
+requested off-document, at low priority, after the page has finished loading —
+and not at all once they are in the browser cache, which is where they stay for
+a year. DevTools → Network, filter to images with the cache disabled, shows
+them.
+
 In a large album the browser stops fetching photos you have scrolled far past.
 Requests already queued for them are abandoned, so the ones filling the screen
 are not stuck behind hundreds of others; anything that had finished loading is
@@ -1048,6 +1054,18 @@ an override simply takes precedence over it, and `--clear` removes the override
 so the hand-written one applies again.
 
 ---
+
+## Dark mode
+
+The site follows whatever your system is set to; there is no switch in the
+page. Everything is a handful of CSS variables, so both palettes come from one
+place, and `color-scheme` is declared so that the parts the stylesheet does not
+paint — form controls, scrollbars, the canvas behind a short page — follow too.
+A phone's status bar follows as well, via `theme-color`.
+
+The dark palette lightens the accent colour, which means white text on an
+accent-coloured button drops to 2.53:1 contrast — below the 4.5:1 ordinary text
+needs. Dark text on it is 6.79:1, so the dark scheme uses that.
 
 ## Very large albums
 
