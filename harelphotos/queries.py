@@ -7,6 +7,9 @@ that came back out of SQLite, which were produced by ``os.scandir`` — so
 (DESIGN.md 10.2).
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from __future__ import annotations
 
 import json

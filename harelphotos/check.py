@@ -7,6 +7,9 @@ file cannot stop a two-hour scan — which only works if there is somewhere to g
 and look at them afterwards.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from __future__ import annotations
 
 import sqlite3

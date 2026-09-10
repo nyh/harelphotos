@@ -23,6 +23,9 @@ Both were wrong before, and both were wrong in ways that only showed up over a
 real network.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import json
 import subprocess
 import sys

@@ -11,6 +11,9 @@ a missing SELinux boolean shows up as a 503 with a correct-looking config; a
 nothing at all.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from __future__ import annotations
 
 import os

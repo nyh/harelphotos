@@ -21,6 +21,9 @@ dangerous direction:
   notices, because nobody complains about photos they cannot see.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from __future__ import annotations
 
 from dataclasses import dataclass

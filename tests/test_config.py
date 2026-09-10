@@ -4,6 +4,9 @@ Unlike .album.toml, a bad global config is fatal — we would not know where the
 photos are — so these assert that problems raise with a useful message.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import os
 from pathlib import Path
 

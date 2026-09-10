@@ -63,7 +63,35 @@ machine they stay exactly where they are.
 ## Documents
 
 - [`MANUAL.md`](MANUAL.md) — **how to use what exists today.**
+- [`INSTALL.md`](INSTALL.md) — putting it on a server: Python, Apache, TLS,
+  systemd, Google sign-in.
 - [`PLAN`](PLAN) — the original statement of intent.
 - [`DESIGN.md`](DESIGN.md) — the full design: data model, scanner, image
   pipeline, web app, authentication, deployment, testing, and a milestone
   breakdown.
+- [`IDEAS.md`](IDEAS.md) — what might come next, and what deliberately should
+  not.
+
+## Licence
+
+GNU General Public License, version 3 or later. The full text is in
+[`LICENSE`](LICENSE); every source file carries an SPDX identifier.
+
+    Copyright (C) 2026 Nadav Har'El
+
+    This program is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by the Free
+    Software Foundation, either version 3 of the License, or (at your option)
+    any later version.
+
+    This program is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+    more details.
+
+    You should have received a copy of the GNU General Public License along
+    with this program. If not, see <https://www.gnu.org/licenses/>.
+
+The place-name data is not covered by that: it comes from
+[GeoNames](https://www.geonames.org/) under CC BY 4.0, and is downloaded at
+run time rather than distributed here.

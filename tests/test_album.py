@@ -4,6 +4,9 @@ The recurring theme: a mistake in one file degrades that directory to defaults
 and is reported, never raised.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from harelphotos import album
 
 

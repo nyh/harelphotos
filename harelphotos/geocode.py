@@ -5,6 +5,9 @@ the header pass, so this never opens a photo file. Running it is seconds, not a
 re-read of 300 GB.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from __future__ import annotations
 
 import json

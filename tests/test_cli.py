@@ -1,5 +1,8 @@
 """End-to-end CLI behaviour for the M1 commands."""
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import argparse
 from pathlib import Path
 

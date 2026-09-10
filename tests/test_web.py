@@ -1,5 +1,8 @@
 """The web application (DESIGN.md 10, 11)."""
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from __future__ import annotations
 
 import pytest

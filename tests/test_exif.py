@@ -1,5 +1,8 @@
 """EXIF parsing (DESIGN.md 9.3)."""
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import io
 import time
 

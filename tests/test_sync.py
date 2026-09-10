@@ -6,6 +6,9 @@ snapshot, which must be consistent even though the index is a live WAL-mode
 database being written to.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import sqlite3
 
 import pytest

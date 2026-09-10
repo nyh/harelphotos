@@ -8,6 +8,9 @@ Note this runs in scan **phase 2**, from bytes already read for the content
 signature, with no pixel decoding: ``Image.open`` parses only the header.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from __future__ import annotations
 
 import io

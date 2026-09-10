@@ -5,6 +5,9 @@ interleave scan generations, and let one process's prune delete files the
 other just wrote. Cheaper to forbid than to reason about.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from __future__ import annotations
 
 import errno

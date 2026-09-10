@@ -4,6 +4,9 @@ The dataset itself is a 14 MB download, so these tests build a tiny stand-in
 with the same schema rather than requiring the network.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from __future__ import annotations
 
 import sqlite3

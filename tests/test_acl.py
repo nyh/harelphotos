@@ -4,6 +4,9 @@ The accumulate rule and its escape hatch are the security core of the project,
 so these are deliberately thorough.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from harelphotos import acl
 
 GROUPS = {

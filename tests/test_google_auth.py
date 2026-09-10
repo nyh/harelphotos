@@ -4,6 +4,9 @@ Every test here is about refusing to sign in the wrong person. The happy path
 is one test; the rest are the ways a token can be genuine but not ours.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import base64
 import json
 import time

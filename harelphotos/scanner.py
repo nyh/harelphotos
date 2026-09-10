@@ -11,6 +11,9 @@ metadata tidying (``jhead -ft``), and letting that trigger a re-encode of the
 whole collection would be a 22 core-hour mistake.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from __future__ import annotations
 
 import hashlib

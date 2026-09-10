@@ -12,6 +12,9 @@ Two things happen here that are easy to get subtly wrong:
   to*; it is not a route by which a request can reach one.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from __future__ import annotations
 
 import logging

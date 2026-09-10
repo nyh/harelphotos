@@ -6,6 +6,9 @@ right answer is to delete the file and rescan — which is why there is no
 elaborate migration machinery.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from __future__ import annotations
 
 import sqlite3

@@ -5,6 +5,9 @@ halfway leaves files whose database row was never written, and retuning the
 size ladder leaves whole tier directories nobody will ask for again.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from __future__ import annotations
 
 import os

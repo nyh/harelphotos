@@ -17,6 +17,9 @@ Two deliberate splits in responsibility:
   config.toml takes effect immediately without a rescan.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from __future__ import annotations
 
 import json

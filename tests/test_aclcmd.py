@@ -6,6 +6,9 @@ harm: writing a restriction that is not actually in force, and damaging a
 `.album.toml` somebody wrote by hand.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from __future__ import annotations
 
 import pytest

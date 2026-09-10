@@ -6,6 +6,9 @@ returned object and the affected keys fall back to their defaults. The scanner
 stores that message in ``dirs.cfg_error`` and ``harelphotos check`` lists it.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from __future__ import annotations
 
 import tomllib

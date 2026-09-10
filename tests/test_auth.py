@@ -5,6 +5,9 @@ The security-critical tests. The one that matters most is
 registered route, so a new one cannot quietly forget the gate.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from __future__ import annotations
 
 import re

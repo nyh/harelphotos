@@ -6,6 +6,10 @@
  * between a future Hebrew interface being one `dir="rtl"` and being a rewrite.
  */
 
+/*
+ * Copyright (C) 2026 Nadav Har'El
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 :root {
   /* Tells the browser to style what we do not: form controls, scrollbars,
      the canvas behind a short page. Without it those stay light while

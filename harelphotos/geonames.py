@@ -10,6 +10,9 @@ under a second, 0.16 ms per distinct lookup, and 0.7 s for an 80,000-photo
 collection once coordinates are rounded and memoised.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from __future__ import annotations
 
 import io

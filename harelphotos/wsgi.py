@@ -9,6 +9,9 @@ starting, visibly in ``systemctl status``, rather than turn every request into
 a 500 that only the log explains.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from __future__ import annotations
 
 from .web import wsgi_app

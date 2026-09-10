@@ -8,6 +8,11 @@
  * already produces very nearly the same grid, and the prev/next links are real
  * links. This only makes it exact and quick.
  */
+
+/*
+ * Copyright (C) 2026 Nadav Har'El
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 (function () {
   "use strict";
 

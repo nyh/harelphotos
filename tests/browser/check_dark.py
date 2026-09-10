@@ -18,6 +18,9 @@ light while everything else darkens, and whether the `theme-color` meta follows
 the scheme, without which a phone's status bar stays white above a dark page.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import base64
 import io
 import json

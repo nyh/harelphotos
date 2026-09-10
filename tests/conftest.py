@@ -15,6 +15,9 @@ the `local_server_allowed` fixture. That keeps the ban the default while
 leaving one deliberate, visible way through it.
 """
 
+# Copyright (C) 2026 Nadav Har'El
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import socket
 
 import pytest
