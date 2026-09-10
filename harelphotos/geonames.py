@@ -56,7 +56,12 @@ LANDMARK_RADII_M = {
     # between them. A dig or a battlefield really is that wide.
     # Things you have to be standing at. Worth having -- a dam or a mast you
     # walked up to is a good caption -- and worthless at any distance.
-    "DAM": 120, "BDG": 150, "TOWR": 150, "LTHSE": 150,
+    # No TOWR. It is 16,579 rows in the United States and almost all of them
+    # are broadcast masts -- "WBUR-FM (Boston)" is not a caption anybody wants,
+    # and seven of them stood 521 m from one of the photos that prompted this
+    # work. Nothing famous is lost: the Eiffel Tower is filed as MNMT, and TOWR
+    # in France is 235 old stone towers.
+    "DAM": 120, "BDG": 150, "LTHSE": 150,
     # A shopping centre is a place a holiday actually spends an afternoon, and
     # you are inside one or you are not. Found while looking at why a photo
     # taken in a shop was captioned with a pond: the mall was 54 m away and not
@@ -301,10 +306,9 @@ def build_landmarks(db_path: Path, cache_dir: Path | None = None, progress=None)
 
     Streams the 421 MB worldwide dump a line at a time and keeps only the
     curated feature codes. Measured against the real per-country dumps that is
-    16% of rows in the United States and 25% in Israel -- roughly 2 M rows
-    worldwide and about 260 MB once indexed. (The design predicted a tenth,
-    before dams, masts and shopping centres were added; dams alone are 57,000
-    rows in the United States.)
+    9% of France, 15% of the United States and 25% of Israel -- roughly 2 M
+    rows worldwide and about 250 MB once indexed. The proportion says more
+    about how densely a country is mapped than about the allowlist.
 
     Streaming rather than reading it in: the machine this runs on has a
     gigabyte of memory.

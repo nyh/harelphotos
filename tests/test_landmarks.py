@@ -234,16 +234,17 @@ def test_a_resort_beats_the_hamlet_inside_it(tmp_path):
 
 
 def test_a_thing_you_must_stand_at_is_only_named_from_beside_it(tmp_path):
-    """A dam or a mast is a good caption at twenty metres and meaningless at
-    five hundred -- and there were seven radio masts 521 m from that house."""
+    """A dam is a good caption at twenty metres and meaningless at five
+    hundred. (Masts were in this list too and are not any more -- see
+    test_broadcast_masts_are_not_landmarks.)"""
     path = _world(
         tmp_path,
         [("Sometown", "US", "MA", 42.3119, -71.2262, 9000)],
-        [("Tall Mast", "US", "TOWR", 42.3166, -71.2262)],           # ~520 m
+        [("Mill Dam", "US", "DAM", 42.3166, -71.2262)],             # ~520 m
     )
-    assert "Tall Mast" not in name_at(path, 42.3119, -71.226175)
+    assert "Mill Dam" not in name_at(path, 42.3119, -71.226175)
     # But standing at its foot, it is worth having.
-    assert name_at(path, 42.3165, -71.2262).startswith("Tall Mast")
+    assert name_at(path, 42.3165, -71.2262).startswith("Mill Dam")
 
 
 def test_joining_a_city_uses_the_things_own_radius(tmp_path):
@@ -449,3 +450,14 @@ def test_no_landmark_table_is_not_stale(tmp_path):
         assert gc.landmarks_stale is False
     finally:
         gc.close()
+
+
+def test_broadcast_masts_are_not_landmarks(db):
+    """16,579 rows in the United States, almost all of them masts, and seven of
+    them stood 521 m from one of the photos that prompted this work. Nothing
+    famous is lost: the Eiffel Tower is filed as MNMT, and TOWR in France is
+    235 old stone towers."""
+    assert "TOWR" not in geonames.LANDMARK_CODES
+    # The things a traveller does recognise are still there.
+    for wanted in ("MNMT", "CSTL", "LTHSE", "DAM", "MALL", "AIRP"):
+        assert wanted in geonames.LANDMARK_CODES, wanted

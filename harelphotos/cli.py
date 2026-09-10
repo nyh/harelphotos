@@ -46,8 +46,9 @@ def cmd_init(args: argparse.Namespace) -> int:
         print("Landmarks name airports, parks, monuments, shopping centres and\n"
               "the like, on top of the town. This downloads GeoNames' worldwide\n"
               "dump -- about 421 MB, cached so a rebuild does not fetch it\n"
-              "again -- and keeps the sixth of it that is a landmark: roughly\n"
-              "2 million rows, about 260 MB once indexed.\n")
+              "again -- and keeps the part of it that is a landmark: 9% of\n"
+              "France, 15% of the United States, roughly 2 million rows\n"
+              "worldwide and about 250 MB once indexed.\n")
         n = geonames.build_landmarks(dest, progress=lambda m: print(f"  {m}"))
         print(f"kept {n:,} landmarks in {dest} "
               f"({dest.stat().st_size / 1e6:.0f} MB)")
