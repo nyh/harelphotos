@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from harelphotos import db, scanner
@@ -67,11 +69,33 @@ def test_site_name_heads_the_front_page_only(client):
     the name in the breadcrumb and the window title instead, and the
     single-photo page exists to show one photograph as large as it will go.
     """
-    heading = f'<h1 class="masthead">{client.harelphotos_cfg.ui.site_title}</h1>'
+    heading = f'<h1 class="masthead">{client.harelphotos_cfg.ui.heading}</h1>'
     assert heading in client.get("/a/").get_data(as_text=True)
     assert "masthead" not in client.get("/a/2019/01/").get_data(as_text=True)
     assert "masthead" not in client.get("/p/2019/01/a.jpg").get_data(
         as_text=True)
+
+
+def test_front_page_heading_is_heading_not_site_title(scanned):
+    """`[ui] heading` is the visible heading, `[ui] site_title` the name in
+    the chrome -- the window title, the phone's home screen, the "X — site"
+    suffixes.
+
+    They default to the same string, which is exactly why this needs its own
+    test: the masthead was written against `site_title` and every other test
+    passed, while a real config that set the two differently -- as the login
+    page has always invited, since its own h1 is `heading` -- put the wrong
+    words at the top of the page.
+    """
+    cfg = replace(scanned, ui=replace(scanned.ui,
+                                      heading="The Family Photo Album",
+                                      site_title="fam-pics"))
+    app = create_app(cfg, require_login=False)
+    app.config.update(TESTING=True)
+    with app.test_client() as c:
+        body = c.get("/a/").get_data(as_text=True)
+    assert '<h1 class="masthead">The Family Photo Album</h1>' in body
+    assert "fam-pics</title>" in body            # site_title still names the tab
 
 
 def test_breadcrumbs_are_present(client):

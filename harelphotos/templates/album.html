@@ -27,7 +27,7 @@
       the window title carry the name the rest of the time, and the
       single-photo view gets nothing -- it exists to show one photograph as
       large as it will go. -#}
-  {% if not album.path %}<h1 class="masthead">{{ cfg.ui.site_title }}</h1>{% endif %}
+  {% if not album.path %}<h1 class="masthead">{{ cfg.ui.heading }}</h1>{% endif %}
 
   {% if album.description %}<p class="blurb">{{ album.description }}</p>{% endif %}
 

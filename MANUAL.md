@@ -883,19 +883,32 @@ organised by date: the card then repeats what the folder name already says, and
 says it less accurately, because a single photo with a wrong camera clock
 widens the whole range. The album's own header keeps its dates either way.
 
-Under `[ui]`, **`site_title`** names the album. It is the window title on every
-page, the name beside the icon when the site is added to a phone's home screen,
-the heading on the login page, and the heading above the first row of cards on
-the album's front page:
+Under `[ui]`, the album has **two** names, and the difference is worth knowing
+because they are easy to confuse:
 
 ```toml
 [ui]
-site_title = "The Harel Family Photo Album"
+heading    = "The Harel Family Photo Album"   # what people read
+site_title = "Harel Family Photos"            # what the machinery calls it
 ```
 
-Only the front page. Deeper in the tree the breadcrumb already says where you
-are, and a heading naming the site above a listing of January 2019 reads as a
-letterhead rather than a title.
+- **`heading`** is the visible one: the large heading on the login page, and
+  the heading above the first row of cards on the album's front page. Write it
+  the way you would say it out loud.
+- **`site_title`** is the name in the chrome: the window and tab title on every
+  page, the `"January 2019 — …"` suffix, and the name beside the icon when the
+  site is added to a phone's home screen. Shorter is better, because a phone
+  gives a home-screen label about a dozen characters before truncating it.
+
+Both default to `"Photo Album"`, so a configuration that sets neither looks
+consistent and one that sets only `site_title` will show `"Photo Album"` as its
+heading — which is usually not what was meant.
+
+The front-page heading appears on the front page only. Deeper in the tree the
+breadcrumb already says where you are, and a heading naming the site above a
+listing of January 2019 reads as a letterhead rather than a title. The
+single-photo view has no heading either: it exists to show one photograph as
+large as it will go.
 
 **`session_days`** is counted from when you log in, not from last use. The
 session cookie is deliberately not re-sent on every response: its value is part
