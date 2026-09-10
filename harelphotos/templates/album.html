@@ -19,12 +19,15 @@
 </header>
 
 <main>
-  {#- The site's name, on every album page including the front one. The old
-      album had it and its absence was missed: a page that says only "2019" at
-      the top could be anyone's photographs, and the whole point of this one is
-      that they are a particular family's. Not in the single-photo view, which
-      exists to show one photograph as large as it will go. -#}
-  <h1 class="masthead">{{ cfg.ui.site_title }}</h1>
+  {#- The site's name, on the front page only. Tried on every album page first,
+      and it was wrong: above a listing of January 2019 the biggest text on the
+      screen named the site rather than what you had opened, and it repeated
+      all the way down the tree. On the front page it is the title of what you
+      are looking at; anywhere deeper it is a letterhead. The breadcrumb and
+      the window title carry the name the rest of the time, and the
+      single-photo view gets nothing -- it exists to show one photograph as
+      large as it will go. -#}
+  {% if not album.path %}<h1 class="masthead">{{ cfg.ui.site_title }}</h1>{% endif %}
 
   {% if album.description %}<p class="blurb">{{ album.description }}</p>{% endif %}
 

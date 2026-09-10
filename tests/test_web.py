@@ -58,16 +58,18 @@ def test_nested_album(client):
     assert "/p/2019/01/a.jpg" in body         # links to the photo page
 
 
-def test_site_name_heads_every_album_but_not_a_photo(client):
-    """The site is named as a heading on album pages, never in the viewer.
+def test_site_name_heads_the_front_page_only(client):
+    """The site is named as a heading on the front page and nowhere else.
 
-    A listing headed only "2019" could be anybody's photographs. The
-    single-photo page is the exception: it exists to show one photograph as
-    large as it will go, and it still carries the name in the window title.
+    On every album page it read as a letterhead: above a listing of January
+    2019 the largest text on the screen named the site rather than what you
+    had opened, and it repeated all the way down the tree. Deeper pages carry
+    the name in the breadcrumb and the window title instead, and the
+    single-photo page exists to show one photograph as large as it will go.
     """
     heading = f'<h1 class="masthead">{client.harelphotos_cfg.ui.site_title}</h1>'
     assert heading in client.get("/a/").get_data(as_text=True)
-    assert heading in client.get("/a/2019/01/").get_data(as_text=True)
+    assert "masthead" not in client.get("/a/2019/01/").get_data(as_text=True)
     assert "masthead" not in client.get("/p/2019/01/a.jpg").get_data(
         as_text=True)
 
