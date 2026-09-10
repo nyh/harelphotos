@@ -8,7 +8,7 @@
 
 /*
  * Copyright (C) 2026 Nadav Har'El
- * SPDX-License-Identifier: GPL-3.0-or-later
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 :root {
   /* Tells the browser to style what we do not: form controls, scrollbars,
@@ -490,6 +490,8 @@ form.login button {
 /* --------------------------------------------------- chrome (11.3) */
 
 .usermenu { display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; }
+.usermenu .source { font-size: 0.85rem; }
+@media (max-height: 520px) { .viewer .usermenu .source { display: none; } }
 .usermenu form, form.inline { display: inline; }
 button.linklike {
   font: inherit;

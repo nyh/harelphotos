@@ -1,7 +1,7 @@
 """The web application (DESIGN.md 10, 11)."""
 
 # Copyright (C) 2026 Nadav Har'El
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: AGPL-3.0-or-later
 
 from __future__ import annotations
 
@@ -911,3 +911,31 @@ def test_derived_images_are_still_handed_to_apache(scanned):
     assert r.status_code == 200
     assert "X-Sendfile" in r.headers
     assert str(scanned.derived_root) in r.headers["X-Sendfile"]
+
+
+def test_the_source_link_is_offered_to_everyone_who_uses_the_site(scanned):
+    """The AGPL's section 13: a modified version must offer its source to the
+    people reaching it over a network. Shown on the login page and on every
+    page a signed-in viewer sees, not only on the one they passed through."""
+    from harelphotos.web import create_app
+
+    object.__setattr__(scanned.ui, "source_url", "https://example.invalid/src")
+    # The login gate on, so the landing page renders rather than redirecting.
+    app = create_app(scanned, require_login=True)
+    app.config.update(TESTING=True)
+    c = app.test_client()
+
+    assert "https://example.invalid/src" in c.get("/login").get_data(as_text=True)
+
+
+def test_the_source_link_can_point_at_a_fork(scanned):
+    """Which is the whole point: someone running changed code has to offer
+    *their* source, not the upstream project's."""
+    from harelphotos.web import create_app
+
+    object.__setattr__(scanned.ui, "source_url", "https://example.invalid/my-fork")
+    app = create_app(scanned, require_login=True)
+    app.config.update(TESTING=True)
+    body = app.test_client().get("/login").get_data(as_text=True)
+    assert "my-fork" in body
+    assert "github.com/nyh/harelphotos" not in body

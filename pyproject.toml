@@ -2,7 +2,7 @@
 name = "harelphotos"
 version = "0.1.0"
 description = "A self-hosted photo gallery over an ordinary directory tree of JPEGs"
-license = "GPL-3.0-or-later"
+license = "AGPL-3.0-or-later"
 license-files = ["LICENSE"]
 authors = [{ name = "Nadav Har'El" }]
 requires-python = ">=3.11"          # tomllib in the stdlib; see DESIGN.md 3.1

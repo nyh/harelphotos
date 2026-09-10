@@ -1,7 +1,7 @@
 """Global configuration: loading, defaults and validation (DESIGN.md 5.1)."""
 
 # Copyright (C) 2026 Nadav Har'El
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: AGPL-3.0-or-later
 
 from __future__ import annotations
 
@@ -96,6 +96,13 @@ class Ui:
     # the folder name says, and says it less accurately, since a single photo
     # with a wrong clock widens the range.
     dir_card_dates: bool = True
+    # Where this software's source can be had. Shown in the page footer.
+    #
+    # The AGPL's section 13 requires a modified version to offer its source to
+    # everyone who reaches it over a network, so anyone running changed code
+    # should point this at their own repository. Unmodified, the default is
+    # already correct.
+    source_url: str = "https://github.com/nyh/harelphotos"
 
 
 @dataclass(frozen=True)
@@ -291,6 +298,7 @@ def from_dict(raw: dict, src: Path) -> Config:
         ),
         dir_card_aspect=str(u.get("dir_card_aspect", "4/3")),
         dir_card_dates=bool(u.get("dir_card_dates", True)),
+        source_url=str(u.get("source_url", Ui.source_url)).strip(),
     )
 
     s = raw.get("scan") or {}

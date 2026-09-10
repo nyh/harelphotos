@@ -6,7 +6,7 @@ log the whole family out.
 """
 
 # Copyright (C) 2026 Nadav Har'El
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: AGPL-3.0-or-later
 
 from __future__ import annotations
 
@@ -45,6 +45,7 @@ album_page_size = 5000
 dirsort         = "name"                    # "-name" = newest first
 dir_card_aspect = "4/3"                     # "native" = do not crop covers
 dir_card_dates  = true                      # dates under a subdirectory's card
+# source_url    = "https://github.com/you/harelphotos"   # if you modified it
 
 [sizes]
 thumb = [256, 512]                          # album grid

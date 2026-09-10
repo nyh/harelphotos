@@ -1,97 +1,143 @@
 # harelphotos
 
-A self-hosted photo gallery for a personal collection — a Google-Photos-like
-browsing experience over an ordinary directory tree of JPEGs, served from a
-small Linux server to a handful of invited family members.
+A private, self-hosted photo gallery over a directory tree you already have.
 
-> **Status: in progress.** Indexing, image generation, browsing and local
-> accounts all work — see [`MANUAL.md`](MANUAL.md). Still to come: Google
-> sign-in and the server deployment behind Apache with TLS.
-> [`DESIGN.md`](DESIGN.md) is the plan being followed.
+You point it at your photos, it builds an index and a set of resized copies
+somewhere else, and it serves a fast, Google-Photos-shaped web gallery to the
+handful of people you invite. It runs comfortably on a small, slow machine, and
+a collection of a hundred thousand photographs is unremarkable for it.
 
-## The problem
+## Who it is for
 
-~300 GB of photos (98,460 JPEGs in 739 directories, measured) live in a
-hierarchical directory tree on a
-CPU-weak, internet-connected Linux server. The goal is a fast, pretty, private
-web gallery over exactly that tree — no import step, no library format, no
-database that becomes the source of truth.
+**People with a collection already organised into directories** — by year, by
+month, by trip, by event, however you have kept it for the last twenty years.
+There is no import step and no library format. Your folders *are* the albums,
+your folder names are the album titles, and a subdirectory is a sub-album. If
+you rename a directory, the album is renamed; if you move photographs between
+them, the gallery follows on the next scan.
 
-## Approach
+**People who want that collection left exactly as it is.** Nothing here ever
+writes to your photo tree — not the scanner, not the web interface, not the
+commands that set covers or access rules. Every piece of state this software
+creates lives in a separate directory you nominate: the index, the resized
+copies, the place-name database, the settings you change from the browser. The
+deployment enforces it rather than trusting it, since the server process runs
+with your photographs mounted read-only.
 
-**The filesystem stays authoritative.** Photos and per-directory `.album.toml`
-files are the only real state. The SQLite index and the entire derived-image
-tree are caches: delete either and a rescan rebuilds it.
+That combination is the point. The collection stays yours, in the shape you
+made it, readable by any other program, and a backup of it is still just a copy
+of your photographs.
 
-**All the cost moves to scan time.** `harelphotos scan` walks the tree, detects
-what changed, and pre-generates every image size. A page view is then a few
-indexed SQLite reads plus a template render; the image bytes are static files
-the web server sends directly. No image processing ever happens in a request.
+## What it does
 
-## Design decisions
+- **Browses the tree.** Subdirectories appear as album cards with a cover and a
+  photo count; photographs appear below them in a justified grid that never
+  crops. Sorted by the date the photograph was taken, not by filename.
+- **Serves the right image size.** Four sizes of every photo are generated
+  ahead of time in AVIF, and the browser picks from them — a phone fetches a
+  phone-sized file, a desktop does not. No image processing happens during a
+  request.
+- **Names where photographs were taken**, from a local dataset: "Náxos,
+  Greece", and optionally the airport, park, museum or monument you were
+  standing in. Nothing is sent to a geocoding service; the coordinates of every
+  photograph your family has taken never leave the machine.
+- **Keeps it private.** Invited accounts only, with passwords or Google
+  sign-in. Any directory can be restricted to particular people, and
+  restrictions accumulate down the tree.
+- **Behaves like a photo viewer.** Arrow keys and swipes move between
+  photographs, Escape returns to the grid where you left it, the next and
+  previous images are fetched before you ask for them, and there is a panel
+  with the date, camera, exposure and place.
+- **Installs on a phone**, so it opens from the home screen without a browser
+  address bar.
 
-Chosen from measurements rather than taste — the numbers behind each are in
-[`DESIGN.md`](DESIGN.md):
+## Getting started
 
-| | |
-|---|---|
-| Derivative format | **AVIF**, four tiers (256/512 px grid, 1280/1600 px viewing) delivered by `srcset`; WebP/JPEG served to older browsers by content negotiation. Measured 48% smaller than WebP at matched SSIM |
-| Derived tree size | **~14 GB for 98,460 photos** — under 5% of the originals |
-| Bulk encode | **~22 core-hours** (~1.9 h on 12 cores), run on a fast machine and rsynced to the server |
-| Change detection | mtime decides whether to *look*; a content signature decides whether to *work*, so re-dating files doesn't trigger a mass re-encode |
-| Photo grid | justified rows, true aspect ratios, **never cropped** |
-| Album listing | separate section, uniform cards with the name captioned below |
-| Metadata | per-directory `.album.toml` — title, cover photo, sort order, access list |
-| Access control | local accounts and/or Google Sign-In, against an allowlist; restrictions inherit down the tree |
+```sh
+python3 -m venv .venv && .venv/bin/pip install -e .
+harelphotos init --photo-root ~/pictures --state-dir ~/.local/share/harelphotos
+harelphotos scan
+harelphotos serve
+```
 
-## Planned stack
+That gives you the whole gallery on `http://localhost:5000`, with no login and
+nothing exposed. The first scan is the slow part — it reads every photograph
+and encodes four sizes of each — but it is interruptible, resumable, and does
+not repeat work on later runs.
 
-Python 3.11+, and four dependencies: **Flask**, **Pillow** (which bundles the
-AVIF encoder), **requests**, **gunicorn** — behind Apache on the server. No
-build step, no npm, no ORM, no job queue, no database server. Targets Fedora and
-Rocky Linux 9, installed identically on both from one virtualenv.
+Place names are a separate, optional step, because they mean downloading a
+dataset:
 
-## Before implementation starts
+```sh
+harelphotos init --geonames     # ~14 MB: towns, worldwide
+harelphotos geocode             # turn coordinates into "Náxos, Greece"
 
-A short list of things on the real machines that no code will do — see
-[§0.1 of the design](DESIGN.md#01-manual-steps--things-no-code-will-do-for-you).
-The one with real work behind it: **on the server, the photos must be moved out
-of the home directory** (e.g. to `/srv/photos`), which removes the need for
-POSIX ACLs, an SELinux boolean and a weakened `ProtectHome`. On the home
-machine they stay exactly where they are.
+harelphotos init --landmarks    # ~421 MB: airports, parks, monuments
+harelphotos geocode --force     # ...and use them
+```
+
+Both are offline afterwards. No coordinates are ever sent anywhere.
+
+[`MANUAL.md`](MANUAL.md) is the guide to everything: the commands, the
+`.album.toml` settings, access control, place names, accounts.
+[`INSTALL.md`](INSTALL.md) covers putting it on a real server — Apache, TLS,
+systemd, Google sign-in.
+
+## How it works, briefly
+
+**The filesystem is authoritative.** Your photographs and any `.album.toml`
+files you write beside them are the only inputs. The SQLite index and the whole
+tree of resized images are caches: delete either and a rescan rebuilds it.
+
+**All the cost moves to scan time.** A page view is a few indexed SQLite reads
+and a template render; the image bytes are static files the web server sends
+directly. That is what lets it be quick on a slow machine.
+
+**A rescan does as little as possible.** It compares modification times to
+decide what to look at, and content fingerprints to decide what to re-encode,
+so touching a file's timestamp costs nothing and re-encoding only happens when
+the pixels actually changed.
+
+Four dependencies — Flask, Pillow, requests, gunicorn — and no build step, no
+JavaScript framework, and no database server.
 
 ## Documents
 
-- [`MANUAL.md`](MANUAL.md) — **how to use what exists today.**
-- [`INSTALL.md`](INSTALL.md) — putting it on a server: Python, Apache, TLS,
-  systemd, Google sign-in.
-- [`PLAN`](PLAN) — the original statement of intent.
-- [`DESIGN.md`](DESIGN.md) — the full design: data model, scanner, image
-  pipeline, web app, authentication, deployment, testing, and a milestone
-  breakdown.
-- [`IDEAS.md`](IDEAS.md) — what might come next, and what deliberately should
-  not.
+- [`MANUAL.md`](MANUAL.md) — **how to use it.** Start here.
+- [`INSTALL.md`](INSTALL.md) — putting it on a server with TLS.
+
+Of secondary interest, kept for the record:
+
+- [`IDEAS.md`](IDEAS.md) — what might come next, and what deliberately should not.
+- [`DESIGN.md`](DESIGN.md) — the design it was built from, including the
+  measurements behind the decisions.
+- [`PLAN`](PLAN) — the original statement of intent, before any of it existed.
 
 ## Licence
 
-GNU General Public License, version 3 or later. The full text is in
+GNU Affero General Public License, version 3 or later. The full text is in
 [`LICENSE`](LICENSE); every source file carries an SPDX identifier.
 
     Copyright (C) 2026 Nadav Har'El
 
     This program is free software: you can redistribute it and/or modify it
-    under the terms of the GNU General Public License as published by the Free
-    Software Foundation, either version 3 of the License, or (at your option)
-    any later version.
+    under the terms of the GNU Affero General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or (at your
+    option) any later version.
 
     This program is distributed in the hope that it will be useful, but WITHOUT
     ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
-    FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
-    more details.
+    FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License
+    for more details.
 
-    You should have received a copy of the GNU General Public License along
-    with this program. If not, see <https://www.gnu.org/licenses/>.
+    You should have received a copy of the GNU Affero General Public License
+    along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-The place-name data is not covered by that: it comes from
-[GeoNames](https://www.geonames.org/) under CC BY 4.0, and is downloaded at
-run time rather than distributed here.
+The Affero variant is deliberate: this is software people reach through a
+browser, and section 13 asks that anyone running a *modified* version offer its
+source to the people using it. If you do, point `[ui] source_url` in your
+configuration at your own repository — the page footer already shows that link.
+
+The place-name data is not covered by the above. It comes from
+[GeoNames](https://www.geonames.org/) under CC BY 4.0 and is downloaded at run
+time rather than distributed here.

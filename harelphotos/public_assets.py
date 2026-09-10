@@ -12,7 +12,7 @@ a path: the route serves `landing-640` or `landing-1280` and nothing else.
 """
 
 # Copyright (C) 2026 Nadav Har'El
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: AGPL-3.0-or-later
 
 from __future__ import annotations
 

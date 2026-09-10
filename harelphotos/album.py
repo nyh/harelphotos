@@ -7,7 +7,7 @@ stores that message in ``dirs.cfg_error`` and ``harelphotos check`` lists it.
 """
 
 # Copyright (C) 2026 Nadav Har'El
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: AGPL-3.0-or-later
 
 from __future__ import annotations
 

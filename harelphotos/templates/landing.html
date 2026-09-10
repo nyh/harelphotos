@@ -54,6 +54,12 @@
   <p class="legal">
     <a href="{{ url_for('privacy') }}">Privacy</a> ·
     <a href="{{ url_for('terms') }}">Terms</a>
+    {%- if cfg.ui.source_url %} ·
+    {#- The AGPL's section 13: a modified version must offer its source to
+        everyone who reaches it over a network. Point `[ui] source_url` at
+        your own repository if you are running changed code. -#}
+    <a href="{{ cfg.ui.source_url }}" rel="noopener">Source</a>
+    {%- endif %}
   </p>
 </div>
 {% endblock %}

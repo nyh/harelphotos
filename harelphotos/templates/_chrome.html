@@ -8,6 +8,12 @@
       <input type="hidden" name="csrf" value="{{ csrf_token() }}">
       <button type="submit" class="linklike">Log out</button>
     </form>
+    {%- if cfg.ui.source_url %}
+    {#- AGPL section 13 again: offered on every page a signed-in viewer sees,
+        not only on the one they passed through to get here. -#}
+    <a class="dim source" href="{{ cfg.ui.source_url }}" rel="noopener"
+       title="Source code for this site">Source</a>
+    {%- endif %}
   </div>
   {% endif %}
 {% endmacro %}
