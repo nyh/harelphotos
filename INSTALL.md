@@ -441,9 +441,14 @@ Upgrade:
 git pull && .venv/bin/pip install -e . && sudo systemctl restart harelphotos
 ```
 
-After an upgrade that changed `app.js` or the caching headers, reload the
-browser once with Ctrl-Shift-R. Ordinary reloads will happily keep using the
-cached script and images.
+No hard reload is needed after an upgrade. The stylesheet and the script are
+served under URLs containing a hash of their contents, so a new version has a
+new address and an ordinary page load fetches it; the old one being cached
+forever is the point rather than a problem. The same is true of the site icon.
+
+The exception is the *originals* and the generated images, whose URLs already
+carry a fingerprint of the pixels — change a photograph on disk without
+rescanning and the browser will rightly go on showing the copy it has.
 
 The index is a cache, not data. If it is ever damaged, delete it and rescan;
 you lose nothing but the time. The things that are *not* rebuildable are
