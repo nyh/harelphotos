@@ -756,6 +756,47 @@ idempotent and will not overwrite your config) or just restart the server.
 
 ---
 
+## `harelphotos acl` — who may see a directory
+
+Restrictions live in `.album.toml` files and you can edit them by hand. This
+command exists for the question those files do not answer on their own: *who
+can actually see this album, and why* — assembled from every `.album.toml`
+between the root and here, plus the `[groups]` in `config.toml`.
+
+```sh
+harelphotos acl 2019/wedding                    # who can see it, and from where
+harelphotos acl 2019/wedding --allow nyh,@family
+harelphotos acl 2019/wedding --allow sis --replace   # ignore what is inherited
+harelphotos acl 2019/wedding --clear            # drop this directory's own rule
+harelphotos acl --list                          # every restricted directory
+```
+
+Inspecting prints each restriction and the directory that imposed it, then the
+accounts that pass **all** of them — restrictions accumulate, so a
+subdirectory can only narrow what its parent allowed, never widen it.
+`--replace` is the escape hatch that starts afresh.
+
+It also warns about names matching no account and no group:
+
+```
+  WARNING: matches no account or group: granny
+```
+
+Worth heeding. That failure is silent and always restrictive — the album shows
+to fewer people than you meant, and nobody complains about photos they cannot
+see.
+
+Setting a restriction rescans that subtree before returning, because the web
+server reads the chain computed at scan time: a rule that is only in the file
+is not yet in force. Editing `.album.toml` by hand instead means running
+`harelphotos scan --dir <that directory>` yourself.
+
+Your hand-written files are safe to edit this way: comments, ordering and every
+other setting are preserved, and if the edit would have changed anything but
+`allow`/`allow_replace` the original is put back and the command refuses.
+
+---
+
 ## Very large albums
 
 A directory with more than `[ui] album_page_size` photos (default 5000) is

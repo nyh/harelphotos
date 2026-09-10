@@ -118,9 +118,9 @@ def test_config_show(project, capsys):
 
 
 def test_unimplemented_commands_say_which_milestone(project, capsys):
-    assert cli.main(["acl"]) == 2
+    assert cli.main(["cover"]) == 2
     err = capsys.readouterr().err
-    assert "not implemented" in err and "M5" in err
+    assert "not implemented" in err and "M9" in err
 
 
 def test_missing_config_is_a_clean_error(tmp_path, monkeypatch, capsys):

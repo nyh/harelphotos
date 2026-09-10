@@ -13,6 +13,7 @@ import logging
 import sys
 from pathlib import Path
 
+from . import aclcmd
 from . import check as check_mod
 from . import envcheck
 from . import config as config_mod
@@ -23,7 +24,6 @@ log = logging.getLogger("harelphotos")
 
 NOT_YET = {
     "cover": "M9",
-    "acl": "M5",
 }
 
 
@@ -346,6 +346,79 @@ def cmd_geocode(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_acl(args: argparse.Namespace) -> int:
+    cfg = _load_config(args)
+
+    if args.list:
+        conn = db.open_index(cfg.index_db, read_only=True)
+        rows = aclcmd.restricted_dirs(conn)
+        conn.close()
+        if not rows:
+            print("no directory is restricted")
+            return 0
+        print(f"{len(rows)} restricted director{'y' if len(rows) == 1 else 'ies'}:")
+        for path, chain in rows:
+            allow = " AND ".join("{" + ", ".join(link) + "}" for link in chain)
+            print(f"  /{path}  {allow}")
+        return 0
+
+    relpath = (args.dir or "").strip("/")
+    d = cfg.photo_root / relpath if relpath else cfg.photo_root
+    if not d.is_dir():
+        print(f"error: {d} is not a directory", file=sys.stderr)
+        return 1
+
+    if args.allow is not None or args.clear:
+        names = None if args.clear else [
+            a.strip() for a in args.allow.split(",") if a.strip()
+        ]
+        if names == []:
+            print("error: --allow needs at least one name; use --clear to remove "
+                  "the restriction", file=sys.stderr)
+            return 1
+        try:
+            path = aclcmd.write_allow(cfg, relpath, names, replace=args.replace)
+        except aclcmd.AclError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+        print(f"wrote {path}")
+
+        # A restriction that is not in the index is not in force: the web
+        # process reads the chain computed at scan time, so an edit does
+        # nothing until the subtree is walked again.
+        conn = db.open_index(cfg.index_db)
+        try:
+            scanner.scan(cfg, conn, subpath=relpath, headers_only=True)
+        finally:
+            conn.close()
+        print("rescanned the subtree, so the change is in force now")
+
+    return _print_acl(cfg, relpath)
+
+
+def _print_acl(cfg: config_mod.Config, relpath: str) -> int:
+    links = aclcmd.chain_with_sources(cfg, relpath)
+    where = "/" + relpath if relpath else "/ (the whole collection)"
+    print(f"\n{where}")
+    if not links:
+        print("  unrestricted — every account can see it")
+        return 0
+
+    print("  restrictions, all of which must admit you:")
+    for link in links:
+        src = "/" + link.dir_path if link.dir_path != "." else "/"
+        note = "  (replaces everything above it)" if link.replaced else ""
+        print(f"    from {src:<30} {', '.join(link.allow)}{note}")
+
+    can, unknown = aclcmd.who_can_view(cfg, links)
+    print(f"  can see it: {', '.join(sorted(can)) if can else 'NOBODY'}")
+    if unknown:
+        # Silent and always in the restrictive direction, so worth shouting
+        # about: nobody ever complains about photos they cannot see.
+        print(f"  WARNING: matches no account or group: {', '.join(sorted(unknown))}")
+    return 0
+
+
 def cmd_sync(args: argparse.Namespace) -> int:
     cfg = _load_config(args)
     dest = sync_mod.Destination.parse(args.dest)
@@ -595,6 +668,22 @@ def build_parser() -> argparse.ArgumentParser:
     pg = sub.add_parser("geocode", help="resolve place names from GPS already indexed")
     pg.add_argument("--force", action="store_true", help="re-resolve photos that have a place")
     pg.set_defaults(func=cmd_geocode)
+
+    pa = sub.add_parser(
+        "acl", help="inspect or set who may see a directory"
+    )
+    pa.add_argument("dir", nargs="?", default="",
+                    help="directory, relative to photo_root (default: the root)")
+    pa.add_argument("--allow", metavar="NAMES",
+                    help="comma-separated accounts and @groups; replaces this "
+                         "directory's own list")
+    pa.add_argument("--replace", action="store_true",
+                    help="with --allow, ignore restrictions inherited from above")
+    pa.add_argument("--clear", action="store_true",
+                    help="remove this directory's own restriction")
+    pa.add_argument("--list", action="store_true",
+                    help="list every restricted directory in the index")
+    pa.set_defaults(func=cmd_acl)
 
     psy = sub.add_parser(
         "sync", help="copy the generated images and index to the serving machine"
