@@ -168,3 +168,90 @@ def test_radii_follow_physical_size(db):
     """The ordering that keeps the rest honest."""
     r = geonames.LANDMARK_RADII_M
     assert r["BDG"] < r["MUS"] < r["CSTL"] < r["ANS"] < r["MT"] < r["AIRP"] <= r["PRK"]
+
+
+# --------------------------------------------- geometry taken from real data
+#
+# Each of these reproduces the distances and populations measured in the actual
+# GeoNames dumps, because every one of them was a wrong answer first.
+
+def _world(tmp_path, places, landmarks):
+    path = tmp_path / "geonames.sqlite"
+    conn = sqlite3.connect(path)
+    conn.executescript(geonames.SCHEMA)
+    conn.executescript(geonames.LANDMARK_SCHEMA)
+    conn.executemany("INSERT INTO places VALUES (?,?,?,?,?,?)", places)
+    conn.executemany("INSERT INTO landmarks VALUES (?,?,?,?,?)", landmarks)
+    conn.execute("INSERT INTO countries VALUES ('US','United States')")
+    conn.execute("INSERT INTO admin1 VALUES ('US.MA','Massachusetts')")
+    conn.execute("INSERT INTO admin1 VALUES ('US.FL','Florida')")
+    conn.commit(); conn.close()
+    return path
+
+
+def test_a_historic_district_does_not_caption_a_photo_taken_indoors(tmp_path):
+    """GeoNames files National Register historic districts under PRK, the same
+    code as Yellowstone, so a photo of a dog indoors was captioned "Newton
+    Upper Falls Historic District" 426 m away. A town 600 m off is the signal
+    that this is not a five-kilometre wilderness."""
+    path = _world(
+        tmp_path,
+        [("Newton Upper Falls", "US", "MA", 42.3173, -71.2262, 9000)],
+        [("Newton Upper Falls Historic District", "US", "PRK", 42.3157, -71.2262),
+         ("Mills Field", "US", "PRK", 42.3168, -71.2262)],
+    )
+    got = name_at(path, 42.3119, -71.226175)
+    assert "Historic District" not in got, got
+    assert "Mills Field" not in got, got
+    assert got.startswith("Newton Upper Falls"), got
+
+
+def test_a_park_out_in_the_open_keeps_its_generous_radius(tmp_path):
+    """The shrink must not cost a real national park its name: the signal is a
+    town nearby, and a wilderness does not have one."""
+    path = _world(
+        tmp_path,
+        [("Faraway", "US", "MA", 44.0000, -71.0000, 800)],     # 100+ km off
+        [("Big Wilderness", "US", "PRK", 42.3200, -71.2262)],
+    )
+    got = name_at(path, 42.3119, -71.226175)                    # ~900 m away
+    assert got.startswith("Big Wilderness"), got
+
+
+def test_a_resort_beats_the_hamlet_inside_it(tmp_path):
+    """Bay Lake, population 50, sits inside Walt Disney World 1.6 km nearer
+    than the resort's own centre. A tourist there means the resort."""
+    path = _world(
+        tmp_path,
+        [("Bay Lake", "US", "FL", 28.3891, -81.5639, 50)],          # 429 m
+        [("Walt Disney World Resort", "US", "AMUS", 28.4034, -81.5639)],  # 2028 m
+    )
+    got = name_at(path, 28.3852, -81.5639)
+    assert got.startswith("Walt Disney World Resort"), got
+    assert "Bay Lake" not in got
+
+
+def test_a_thing_you_must_stand_at_is_only_named_from_beside_it(tmp_path):
+    """A dam or a mast is a good caption at twenty metres and meaningless at
+    five hundred -- and there were seven radio masts 521 m from that house."""
+    path = _world(
+        tmp_path,
+        [("Sometown", "US", "MA", 42.3119, -71.2262, 9000)],
+        [("Tall Mast", "US", "TOWR", 42.3166, -71.2262)],           # ~520 m
+    )
+    assert "Tall Mast" not in name_at(path, 42.3119, -71.226175)
+    # But standing at its foot, it is worth having.
+    assert name_at(path, 42.3165, -71.2262).startswith("Tall Mast")
+
+
+def test_joining_a_city_uses_the_things_own_radius(tmp_path):
+    """750 m from a theatre is not at the theatre, even though 750 m from an
+    airport is inside one."""
+    path = _world(
+        tmp_path,
+        [("Bigcity", "US", "MA", 42.3119, -71.2262, 400_000)],
+        [("Grand Theatre", "US", "THTR", 42.3164, -71.2262)],       # ~500 m
+    )
+    got = name_at(path, 42.3119, -71.226175)
+    assert "Grand Theatre" not in got, got
+    assert got.startswith("Bigcity")

@@ -50,8 +50,10 @@ LANDMARK_RADII_M = {
     # A bridge you are either on or not: 800 m put a photo taken indoors 793 m
     # away at "Echo Bridge", which is a quarter of a mile of somebody's town
     # between them. A dig or a battlefield really is that wide.
-    "BDG": 150,
-    "MNMT": 250, "MUS": 250, "TOWR": 250, "THTR": 250,
+    # Things you have to be standing at. Worth having -- a dam or a mast you
+    # walked up to is a good caption -- and worthless at any distance.
+    "DAM": 120, "BDG": 150, "TOWR": 150, "LTHSE": 150,
+    "MNMT": 250, "MUS": 250, "THTR": 250,
     "OBS": 300, "AMTH": 300,
     "FLLS": 400,
     "CSTL": 500, "PAL": 500, "RUIN": 500,
@@ -68,6 +70,38 @@ LANDMARK_RADII_M = {
     "GLCR": 5000, "FRST": 5000, "CNYN": 5000, "DSRT": 5000, "PLAT": 5000,
 }
 LANDMARK_CODES = frozenset(LANDMARK_RADII_M)
+
+# Area features whose generous radius only holds out in the open.
+#
+# GeoNames files a national park and a neighbourhood ballfield under the same
+# code, PRK, with nothing to tell them apart -- and in the United States it
+# files National Register "historic districts" there too. So a photo taken
+# indoors was captioned "Newton Upper Falls Historic District", 426 m away,
+# because it inherited a radius meant for Yellowstone.
+#
+# A town nearby is the signal that settles it: a wilderness five kilometres
+# across does not have a village 600 m from the middle of it. When there is a
+# town close by, these shrink to something you have to be inside.
+#
+# Deliberately not AMUS: a theme park is genuinely large and deliberately built
+# next to a town, so Walt Disney World would lose its name to Celebration,
+# Florida. Nor AIRP, for the same reason -- that is the whole point of it.
+AREA_SHRINK_CODES = frozenset({
+    "PRK", "RESN", "RESV", "FRST", "CNYN", "DSRT", "PLAT", "GLCR",
+    "ISL", "LK", "LGN", "BCH",
+})
+AREA_TOWN_NEAR_M = 2000
+AREA_SHRUNK_M = 400
+
+# Places you are overwhelmingly likely to be *inside* rather than beside.
+#
+# A hamlet next to one of these is nominally closer and almost never where the
+# photograph was taken: a tourist at Ben Gurion Airport is in the airport, not
+# in the moshav 200 m nearer, and a photograph at Walt Disney World is not in
+# Bay Lake, population 50, which happens to sit inside the resort 1.6 km closer
+# than the resort's own centre. So these beat a small town whatever the
+# distances say, as long as you are within their radius at all.
+DESTINATION_CODES = frozenset({"AIRP", "AMUS", "PRT"})
 
 # Being inside a landmark's radius is not on its own enough to name it: a
 # nature reserve 4.6 km away is "within 5 km" and still not where you are, and
@@ -346,12 +380,14 @@ class Geocoder:
                 return best, haversine(lat, lon, best["lat"], best["lon"])
         return None, None      # mid-ocean, or a coordinate far from anywhere
 
-    def _nearest_landmark(self, lat: float, lon: float):
+    def _nearest_landmark(self, lat: float, lon: float, town_dist: float | None = None):
         """The closest curated landmark that you are actually *at*.
 
         Each feature code carries its own radius, because the features are not
         the same size: a kilometre from a museum is not at the museum, but a
-        kilometre from an airport is in the middle of one.
+        kilometre from an airport is in the middle of one. And an area feature
+        with a town beside it is not the wilderness its code allows for, so
+        `town_dist` shrinks those (see AREA_SHRINK_CODES).
         """
         if not self.has_landmarks:
             return None
@@ -362,10 +398,14 @@ class Geocoder:
             "WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?",
             (lat - d, lat + d, lon - dlon, lon + dlon),
         ).fetchall()
+        near_town = town_dist is not None and town_dist <= AREA_TOWN_NEAR_M
         best = None
         for r in rows:
             dist = haversine(lat, lon, r["lat"], r["lon"])
-            if dist <= LANDMARK_RADII_M.get(r["code"], 0):
+            radius = LANDMARK_RADII_M.get(r["code"], 0)
+            if near_town and r["code"] in AREA_SHRINK_CODES:
+                radius = min(radius, AREA_SHRUNK_M)
+            if dist <= radius:
                 # Closest wins among those you are genuinely within.
                 if best is None or dist < best[1]:
                     best = (r, dist)
@@ -393,7 +433,7 @@ class Geocoder:
         return result
 
     def _describe_row(self, row, dist: float, lat: float, lon: float):
-        mark = self._nearest_landmark(lat, lon)
+        mark = self._nearest_landmark(lat, lon, town_dist=dist)
         pop = _int(row["pop"])
         name, keep_town = None, True
 
@@ -401,10 +441,15 @@ class Geocoder:
             mark_row, mark_dist = mark
             if pop >= LANDMARK_TOWN_POP_FLOOR:
                 # A town people have heard of. It keeps its place and the
-                # landmark joins it -- if you are actually inside the thing.
-                if mark_dist <= LANDMARK_INSIDE_M:
+                # landmark joins it -- if you are actually inside the thing,
+                # which for a small thing means closer than the blanket
+                # threshold: 750 m from a theatre is not at the theatre.
+                inside = min(LANDMARK_INSIDE_M,
+                             LANDMARK_RADII_M.get(mark_row["code"], LANDMARK_INSIDE_M))
+                if mark_dist <= inside:
                     name = mark_row["name"]
-            elif mark_dist <= dist + LANDMARK_SLACK_M:
+            elif (mark_row["code"] in DESTINATION_CODES
+                  or mark_dist <= dist + LANDMARK_SLACK_M):
                 # A hamlet, a moshav, a suburb. The landmark is the useful
                 # half, and the town would only add noise.
                 name, keep_town = mark_row["name"], False

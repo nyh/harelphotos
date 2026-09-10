@@ -346,9 +346,25 @@ harelphotos geocode --force      # apply them to photos already geocoded
 ```
 
 A landmark is only claimed when you are genuinely at one, with a radius that
-follows how physically big the thing is rather than how famous it is. A bridge
-gets 150 m — you are on it or you are not — a museum 250 m, an archaeological
-site 800 m, a mountain 1.5 km, an airport 4 km, a national park 5 km. Streams, churches, schools, hotels,
+follows how physically big the thing is rather than how famous it is. A dam or
+a radio mast gets 120–150 m — worth having when you walked up to it, worthless
+at any distance — a museum 250 m, an archaeological site 800 m, a mountain
+1.5 km, an airport 4 km, a national park 5 km.
+
+Two rules on top of that, each of which exists because the plain version got
+something wrong:
+
+**An area with a town beside it is not a wilderness.** GeoNames files a
+national park and a neighbourhood ballfield under the same code, and in the
+United States it files National Register "historic districts" there too — so a
+photo taken indoors was captioned with a historic district 426 m away, having
+inherited a radius meant for Yellowstone. Where a town is within 2 km, those
+area features shrink to 400 m. Out in the open they keep the full radius.
+
+**An airport or a resort outranks a hamlet inside it.** A tourist at Ben Gurion
+Airport is in the airport, not in the moshav 200 m nearer; a photo at Walt
+Disney World is not in Bay Lake, population 50, which sits inside the resort
+1.6 km closer than the resort's own centre. Streams, churches, schools, hotels,
 wells and road junctions are excluded outright — they are millions of rows that
 would label a family photo "Saint Mary Church".
 
@@ -360,9 +376,12 @@ Whether the town is named alongside depends on the town:
 | `Gan Ha'Ir, Tel Aviv, Israel` | a park inside a city people have heard of — both halves are worth having |
 | `Ramat Hadar, Israel` | a nature reserve 4.6 km off is not where you are, so it is not mentioned |
 
-It is still a guess, and in a dense historic quarter the nearest curated
-feature is sometimes a minor one rather than the famous thing you meant. That
-is why it is opt-in.
+It is still a guess. GeoNames has no notion of significance, so where a large
+feature is recorded as a single central point the nearest curated thing can be
+a minor one: at the south rim of the Grand Canyon you get "Grandeur Point", a
+viewpoint, because the canyon's own coordinate is tens of kilometres away. That
+is why it is opt-in, and why the town is kept whenever it is a place people
+have heard of.
 
 ### A note on regions
 
