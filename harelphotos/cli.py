@@ -43,37 +43,42 @@ def _load_config(args: argparse.Namespace) -> config_mod.Config:
 
 
 def cmd_init(args: argparse.Namespace) -> int:
-    if args.landmarks:
+    if args.geonames or args.landmarks:
+        # Both together, in this order: the landmark table is added to the
+        # place database and cannot be built without it. Handled here rather
+        # than left to the caller, because `init --geonames --landmarks` is the
+        # obvious thing to type and used to run only the second half, which
+        # then failed on a fresh install.
         cfg = _load_config(args)
         dest = cfg.state_dir / "geonames.sqlite"
-        print("Landmarks name airports, parks, monuments, shopping centres and\n"
-              "the like, on top of the town. This downloads GeoNames' worldwide\n"
-              "dump -- about 421 MB, cached so a rebuild does not fetch it\n"
-              "again -- and keeps the part of it that is a landmark: 9% of\n"
-              "France, 15% of the United States, roughly 2 million rows\n"
-              "worldwide and about 250 MB once indexed.\n")
-        n = geonames.build_landmarks(dest, progress=lambda m: print(f"  {m}"))
-        print(f"kept {n:,} landmarks in {dest} "
-              f"({dest.stat().st_size / 1e6:.0f} MB)")
-        cached = geonames.cache_size(dest)
-        if cached:
-            print(f"\nThe download is cached in {geonames.cache_path(dest)}\n"
-                  f"({cached / 1e6:.0f} MB), so rebuilding the table does not\n"
-                  f"fetch it again. 'harelphotos gc' reclaims it, so pass\n"
-                  f"--keep-downloads while you are still changing your mind.")
-        print("Run 'harelphotos geocode --force' to apply them to photos\n"
-              "that already have a place name.")
+
+        if args.geonames:
+            print(f"downloading the place-name dataset (~14 MB) to {dest} ...")
+            n = geonames.build(dest, progress=lambda msg: print(f"  {msg}"))
+            print(f"built {dest} with {n:,} places "
+                  f"({dest.stat().st_size / 1e6:.0f} MB)")
+
+        if args.landmarks:
+            print("\nLandmarks name airports, parks, monuments, shopping centres\n"
+                  "and the like, on top of the town. This downloads GeoNames'\n"
+                  "worldwide dump -- about 421 MB, cached so a rebuild does not\n"
+                  "fetch it again -- and keeps the part of it that is a landmark:\n"
+                  "9% of France, 15% of the United States, roughly 2 million rows\n"
+                  "worldwide and about 250 MB once indexed.\n")
+            n = geonames.build_landmarks(dest, progress=lambda m: print(f"  {m}"))
+            print(f"kept {n:,} landmarks in {dest} "
+                  f"({dest.stat().st_size / 1e6:.0f} MB)")
+            cached = geonames.cache_size(dest)
+            if cached:
+                print(f"\nThe download is cached in {geonames.cache_path(dest)}\n"
+                      f"({cached / 1e6:.0f} MB), so rebuilding the table does not\n"
+                      f"fetch it again. 'harelphotos gc' reclaims it, so pass\n"
+                      f"--keep-downloads while you are still changing your mind.")
+
+        print("\nRun 'harelphotos geocode' to give photos their place names.")
         print("Data from GeoNames (https://www.geonames.org/), CC BY 4.0.")
         return 0
-    if args.geonames:
-        cfg = _load_config(args)
-        dest = cfg.state_dir / "geonames.sqlite"
-        print(f"downloading the place-name dataset (~14 MB) to {dest} ...")
-        n = geonames.build(dest, progress=lambda msg: print(f"  {msg}"))
-        print(f"built {dest} with {n:,} places "
-              f"({dest.stat().st_size / 1e6:.0f} MB)")
-        print("Data from GeoNames (https://www.geonames.org/), CC BY 4.0.")
-        return 0
+
     config_path = Path(args.config) if args.config else Path("config.toml")
     photo_root = Path(args.photo_root).expanduser().resolve() if args.photo_root else None
     if photo_root is None:

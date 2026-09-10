@@ -237,3 +237,51 @@ def test_gc_dry_run_removes_nothing(project, capsys):
     assert cli.main(["gc", "--dry-run"]) == 0
     assert "would remove" in capsys.readouterr().out
     assert cache.exists()
+
+
+def test_init_does_both_datasets_in_one_go(project, monkeypatch, capsys):
+    """`init --geonames --landmarks` is the obvious thing to type, and used to
+    run only the second half -- which then failed, because the landmark table
+    is added to the place database and cannot be built without it."""
+    from harelphotos import geonames
+
+    order = []
+
+    def fake(kind, n):
+        def build(dest, **kw):
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(b"x" * 100)      # the caller reports its size
+            order.append(kind)
+            return n
+        return build
+
+    monkeypatch.setattr(geonames, "build", fake("places", 5))
+    monkeypatch.setattr(geonames, "build_landmarks", fake("landmarks", 7))
+    monkeypatch.setattr(geonames, "cache_size", lambda dest: 0)
+
+    assert cli.main(["init", "--geonames", "--landmarks"]) == 0
+    assert order == ["places", "landmarks"], order
+
+
+def test_init_can_still_do_one_or_the_other(project, monkeypatch):
+    from harelphotos import geonames
+
+    order = []
+
+    def fake(kind, n):
+        def build(dest, **kw):
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(b"x" * 100)
+            order.append(kind)
+            return n
+        return build
+
+    monkeypatch.setattr(geonames, "build", fake("places", 5))
+    monkeypatch.setattr(geonames, "build_landmarks", fake("landmarks", 7))
+    monkeypatch.setattr(geonames, "cache_size", lambda dest: 0)
+
+    assert cli.main(["init", "--geonames"]) == 0
+    assert order == ["places"]
+    order.clear()
+    assert cli.main(["init", "--landmarks"]) == 0
+    assert order == ["landmarks"]

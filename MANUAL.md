@@ -353,6 +353,10 @@ harelphotos init --landmarks
 harelphotos geocode --force      # apply them to photos already geocoded
 ```
 
+Both datasets can be fetched in one command — `init --geonames --landmarks` —
+which does them in the order they need, since the landmark table is added to
+the place database and cannot be built without it.
+
 The download stays in `<state_dir>/geonames-cache/`, about 430 MB, so
 rebuilding the table does not fetch it again. **`harelphotos gc` removes it**,
 since reclaiming space is what that command is for and this is the largest

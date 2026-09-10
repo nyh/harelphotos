@@ -71,18 +71,32 @@ machine and wrong for anything else. To run it properly — behind Apache with
 TLS, as a systemd service, with accounts and invitations — see
 [`INSTALL.md`](INSTALL.md).
 
-Place names are a separate, optional step, because they mean downloading a
-dataset:
+Place names are optional, and separate because they mean downloading a dataset:
 
 ```sh
-harelphotos init --geonames     # ~14 MB: towns, worldwide
-harelphotos geocode             # turn coordinates into "Náxos, Greece"
-
-harelphotos init --landmarks    # ~421 MB: airports, parks, monuments
-harelphotos geocode --force     # ...and use them
+harelphotos init --geonames --landmarks
+harelphotos geocode
 ```
 
-Both are offline afterwards. No coordinates are ever sent anywhere.
+The first downloads the place-name data — a small file of towns worldwide, and
+a much larger one, several hundred megabytes, of airports, parks, museums and
+monuments. The second turns each photograph's coordinates into a name like
+"Náxos, Greece", or the airport you were standing in. Both are offline
+afterwards, and no coordinates are ever sent anywhere.
+
+## Keeping it up to date
+
+Add, delete, rename and rearrange photographs and directories as you like; the
+gallery follows. Re-run the two commands afterwards:
+
+```sh
+harelphotos scan
+harelphotos geocode
+```
+
+A rescan only looks at what the filesystem says has changed and only re-encodes
+photographs whose pixels actually differ, so it costs a fraction of the first
+one. `harelphotos gc` reclaims the space left by photographs you deleted.
 
 [`MANUAL.md`](MANUAL.md) is the guide to everything else: the commands, the
 `.album.toml` settings, access control, covers, hiding a directory, accounts.
