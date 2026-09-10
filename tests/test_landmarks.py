@@ -1,10 +1,19 @@
 """Landmark naming (DESIGN.md 9.5), the opt-in second layer over the cities.
 
-Every test here is about *not* saying something silly. GeoNames has no notion
-of significance, so the nearest feature to a city-centre photo is some minor
-sub-feature, and the nearest feature of any kind to a photo taken inside Ben
-Gurion Airport is a hill. The rules were derived from the real dump; these
-assert them on synthetic data with the same shape.
+**Getting the town right matters more than getting the landmark right.** A
+photograph labelled with the wrong city, or with a hospital record or a
+neighbourhood in place of one, is a bad answer; a correct city with a garden or
+a marker also mentioned is a slightly noisy one. So the tests below that assert
+a *town* -- Boston rather than "North End" or "VA Boston Healthcare System",
+Newton Upper Falls rather than Newton -- are the ones to keep working, and the
+landmark rules exist to avoid captioning a photo with something absurd rather
+than to find the perfect name.
+
+Every test here uses coordinates, distances and populations measured in the
+real GeoNames dumps, because each one was a wrong answer first. GeoNames has no
+notion of significance and records no extent, so one feature code covers a
+hundred square kilometres and a hundred metres alike -- most of these rules are
+a signal standing in for size.
 """
 
 from __future__ import annotations

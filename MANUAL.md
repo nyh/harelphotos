@@ -411,12 +411,19 @@ Whether the town is named alongside depends on the town:
 | `Gan Ha'Ir, Tel Aviv, Israel` | a park inside a city people have heard of — both halves are worth having |
 | `Ramat Hadar, Israel` | a nature reserve 4.6 km off is not where you are, so it is not mentioned |
 
+Getting the **town** right matters more than getting the landmark right, and
+the rules are weighted that way: a photo labelled with a hospital record or a
+neighbourhood instead of Boston is a bad answer, while a correct city with a
+pocket garden also mentioned is merely a slightly noisy one.
+
 It is still a guess. GeoNames has no notion of significance, so where a large
 feature is recorded as a single central point the nearest curated thing can be
 a minor one: at the south rim of the Grand Canyon you get "Grandeur Point", a
-viewpoint, because the canyon's own coordinate is tens of kilometres away. That
-is why it is opt-in, and why the town is kept whenever it is a place people
-have heard of.
+viewpoint, because the canyon's own coordinate is tens of kilometres away. In a
+dense historic quarter something is always within a couple of hundred metres,
+and nothing distinguishes a garden you are sitting in from one you walked past
+on the way to an ice cream shop. That is why it is opt-in, and why the town is
+kept whenever it is a place people have heard of.
 
 ### A city, not one of its neighbourhoods
 
