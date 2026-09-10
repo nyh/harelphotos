@@ -44,7 +44,10 @@ def gc(tmp_path):
 
 def test_nearest_place(gc):
     place, dist = gc.describe(37.1036, 25.3766)
-    assert place == "Náxos, South Aegean, Greece"
+    # No "South Aegean": a first-level subdivision is printed only where a
+    # traveller would use it, which is a state in a large federal country, not
+    # a region or district the country name has already placed.
+    assert place == "Náxos, Greece"
     assert dist < 100
 
 

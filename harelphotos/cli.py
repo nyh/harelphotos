@@ -40,9 +40,18 @@ def _load_config(args: argparse.Namespace) -> config_mod.Config:
 
 def cmd_init(args: argparse.Namespace) -> int:
     if args.landmarks:
-        print("init --landmarks is not implemented yet (M9); see DESIGN.md 9.5.",
-              file=sys.stderr)
-        return 2
+        cfg = _load_config(args)
+        dest = cfg.state_dir / "geonames.sqlite"
+        print("Landmarks name airports, parks, monuments and the like, on top\n"
+              "of the town. This downloads GeoNames' worldwide dump -- about\n"
+              "421 MB -- and keeps roughly a tenth of it.\n")
+        n = geonames.build_landmarks(dest, progress=lambda m: print(f"  {m}"))
+        print(f"kept {n:,} landmarks in {dest} "
+              f"({dest.stat().st_size / 1e6:.0f} MB)")
+        print("Run 'harelphotos geocode --force' to apply them to photos\n"
+              "that already have a place name.")
+        print("Data from GeoNames (https://www.geonames.org/), CC BY 4.0.")
+        return 0
     if args.geonames:
         cfg = _load_config(args)
         dest = cfg.state_dir / "geonames.sqlite"
@@ -708,7 +717,7 @@ def build_parser() -> argparse.ArgumentParser:
     pi.add_argument("--photo-root", help="directory holding your photos")
     pi.add_argument("--state-dir", help="where index.sqlite and derived/ go")
     pi.add_argument("--geonames", action="store_true", help="download the city dataset (M3)")
-    pi.add_argument("--landmarks", action="store_true", help="download landmarks too (M3)")
+    pi.add_argument("--landmarks", action="store_true", help="also name airports, parks and monuments (a 421 MB download)")
     pi.set_defaults(func=cmd_init)
 
     pc = sub.add_parser("config", help="inspect configuration")

@@ -314,6 +314,43 @@ image, from `srcset` — a phone does not pull the 1600px file just because it i
 next. The prefetch starts only after the photo you are actually looking at has
 loaded, so it never competes with it.
 
+### `harelphotos init --landmarks`
+
+Optional, and a much larger download than `--geonames`: about 421 MB of
+GeoNames' worldwide dump, of which roughly a tenth is kept. It names airports,
+parks, monuments, museums, mountains and the like, on top of the town.
+
+```sh
+harelphotos init --landmarks
+harelphotos geocode --force      # apply them to photos already geocoded
+```
+
+A landmark is only claimed when you are genuinely at one, with a radius per
+kind of thing: a kilometre from a museum is not at the museum, but a kilometre
+from an airport is in the middle of one. Streams, churches, schools, hotels,
+wells and road junctions are excluded outright — they are millions of rows that
+would label a family photo "Saint Mary Church".
+
+Whether the town is named alongside depends on the town:
+
+| | |
+|---|---|
+| `Ben Gurion Airport, Israel` | the nearest place is a moshav of 971 people; naming it would only add noise |
+| `Gan Ha'Ir, Tel Aviv, Israel` | a park inside a city people have heard of — both halves are worth having |
+| `Ramat Hadar, Israel` | a nature reserve 4.6 km off is not where you are, so it is not mentioned |
+
+It is still a guess, and in a dense historic quarter the nearest curated
+feature is sometimes a minor one rather than the famous thing you meant. That
+is why it is opt-in.
+
+### A note on regions
+
+A first-level subdivision is printed only where a traveller would use it — a
+state or province in a large federal country (`Sedona, Arizona, United
+States`). Elsewhere it is left out: "Central District, Israel" tells you
+nothing the country name had not already said. If your collection was geocoded
+before this, `harelphotos geocode --force` refreshes the stored names.
+
 ### `harelphotos init --geonames`
 
 Download and build the offline place-name dataset that `geocode` uses. Run it

@@ -63,9 +63,12 @@ def geocode(
                 continue
             place, dist = found
             stats.resolved += 1
+            # The landmark on its own as well as inside `place`, so the index
+            # records which photos are at one without parsing the string back.
+            mark = gc.landmark(lat, lon) if gc.has_landmarks else None
             conn.execute(
-                "UPDATE photos SET place = ?, place_dist = ? WHERE id = ?",
-                (place, dist, row["id"]),
+                "UPDATE photos SET place = ?, place_dist = ?, landmark = ? WHERE id = ?",
+                (place, dist, mark, row["id"]),
             )
             if n % 500 == 0:
                 conn.commit()
