@@ -369,22 +369,26 @@ def _register_routes(app: Flask, cfg: Config) -> None:
             ".jpeg": "image/jpeg",
             ".png": "image/png",
         }.get(Path(name).suffix, "application/octet-stream")
-        # NOT immutable, unlike every other image this application sends.
+        # Immutable only when the caller asked for a particular version.
         #
-        # A derivative may be called immutable because its URL contains a
-        # fingerprint of the pixels: change the photograph and the URL changes
-        # with it. These are fixed names -- `icon-192.png`, `landing-640.avif`
-        # -- whose contents change whenever the configuration does, so
-        # `max-age=31536000, immutable` was a promise we could not keep. It
-        # was kept anyway, by browsers: a phone that had installed the site
-        # kept showing the icon it downloaded first, and would have gone on
-        # doing so for a year.
+        # A photo derivative is safe to freeze for a year because its URL
+        # contains a fingerprint of the pixels: change the photograph and the
+        # URL changes with it. These are fixed names -- `icon-192.png`,
+        # `landing-640.avif` -- whose contents change whenever the
+        # configuration does, so freezing them was a promise we could not
+        # keep. Browsers kept it for us: a phone that had installed the site
+        # went on offering the icon it first downloaded, and would have for a
+        # year.
+        #
+        # Every reference this application writes now carries `?v=<tag>`,
+        # derived from the built files, which makes the promise true again --
+        # that exact URL really will never change. A request without a tag is
+        # someone's old bookmark or a hand-typed address, and gets an hour, so
+        # that a URL which *can* change is never frozen.
         resp = images.send(cfg, path, mime, vary_accept=False, immutable=False)
-        # An hour, and stated explicitly: with `immutable` off, the X-Sendfile
-        # path returns a bare response carrying no caching hint at all, and
-        # these files are fetched on every page. `public` because they are the
-        # only images served before anyone has signed in.
-        resp.headers["Cache-Control"] = "public, max-age=3600"
+        resp.headers["Cache-Control"] = (
+            "public, max-age=31536000, immutable" if request.args.get("v")
+            else "public, max-age=3600")
         return resp
 
     @app.route("/a/")
@@ -710,6 +714,9 @@ def _register_filters(app: Flask, cfg: Config) -> None:
     # Whether an apple-touch-icon exists to point at. Read once at startup:
     # the icons are written by `init`/`scan`, not while serving.
     app.jinja_env.globals["app_icons"] = bool(public_assets.icons(cfg))
+    # Once, at start-up: nothing rewrites the public files while the
+    # application is running, and every page puts this on its icon links.
+    app.jinja_env.globals["asset_tag"] = public_assets.asset_tag(cfg)
 
 
 def wsgi_app(config_path: str | Path | None = None) -> Flask:

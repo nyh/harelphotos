@@ -16,6 +16,7 @@ a path: the route serves `landing-640` or `landing-1280` and nothing else.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 from pathlib import Path
@@ -239,6 +240,39 @@ def icons(cfg: Config) -> list[int]:
     return [s for s in ICON_SIZES if (d / f"{ICON_STEM}-{s}.png").is_file()]
 
 
+def asset_tag(cfg: Config) -> str:
+    """A short token that changes whenever the generated public files do.
+
+    Appended to every `/public/` URL as `?v=...`, which turns a changed icon
+    into a URL the browser has never seen and therefore cannot have a stale
+    copy of. Shortening the cache lifetime was not enough on its own: an
+    Android phone installs a site by having Google mint a small APK containing
+    the icon, and both that and the browser's own copy went on showing an icon
+    that had already been replaced on the server -- verified by fetching the
+    file, which was correct, while the phone offered the old one.
+
+    Derived from the built files rather than the source, because these are
+    what is actually served, and computed once when the application starts:
+    nothing rewrites them while it is running.
+    """
+    d = public_dir(cfg)
+    h = hashlib.sha256()
+    try:
+        for name in sorted(os.listdir(d)):
+            if name.endswith(".tmp") or name == ICON_STAMP:
+                continue
+            st = (d / name).stat()
+            h.update(f"{name}:{st.st_size}:{st.st_mtime_ns}\n".encode())
+    except OSError:
+        return "0"
+    return h.hexdigest()[:10]
+
+
+def versioned(cfg: Config, url: str, tag: str | None = None) -> str:
+    """`/public/icon-192.png` -> `/public/icon-192.png?v=1a2b3c4d5e`."""
+    return f"{url}?v={tag if tag is not None else asset_tag(cfg)}"
+
+
 def manifest(cfg: Config) -> dict:
     """The web app manifest.
 
@@ -265,12 +299,16 @@ def manifest(cfg: Config) -> dict:
     # of icons for installing the site, and a browser told about a 32px one is
     # entitled to put it on a home screen.
     have = [s for s in icons(cfg) if s >= MANIFEST_MIN_ICON]
+    tag = asset_tag(cfg)
     if have:
         # Omitted entirely when there is none: an empty list is a manifest
         # error, whereas an absent key just means the browser picks something.
         data["icons"] = [
             {
-                "src": f"/public/{ICON_STEM}-{s}.png",
+                # Versioned like every other reference to these files. It is
+                # also what tells Android the manifest has changed at all,
+                # which is what triggers it to re-mint the installed app.
+                "src": f"/public/{ICON_STEM}-{s}.png?v={tag}",
                 "sizes": f"{s}x{s}",
                 "type": "image/png",
                 "purpose": "any",
@@ -293,9 +331,11 @@ def hero(cfg: Config) -> dict | None:
         ext = "jpeg"
     else:
         ext = "avif"
+    tag = asset_tag(cfg)
     return {
-        "src": f"/public/{STEM}-{max(have)}.{ext}",
-        "srcset": ", ".join(f"/public/{STEM}-{w}.{ext} {w}w" for w in sorted(have)),
+        "src": f"/public/{STEM}-{max(have)}.{ext}?v={tag}",
+        "srcset": ", ".join(f"/public/{STEM}-{w}.{ext}?v={tag} {w}w"
+                            for w in sorted(have)),
         # The width it is drawn at, so the page does not have to guess.
         "width": ws[0],
     }

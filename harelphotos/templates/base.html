@@ -22,11 +22,11 @@
     strip, 192 for the places that want something bigger (a bookmark tile, a
     new-tab thumbnail). Both keep their transparency, so the icon sits on a
     light or a dark tab strip without a box around it. -#}
-<link rel="icon" type="image/png" sizes="32x32" href="/public/icon-32.png">
-<link rel="icon" type="image/png" sizes="192x192" href="/public/icon-192.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/public/icon-32.png?v={{ asset_tag }}">
+<link rel="icon" type="image/png" sizes="192x192" href="/public/icon-192.png?v={{ asset_tag }}">
 {#- iOS wants its own tag, and its own opaque file: it composites an
     apple-touch-icon onto black rather than honouring alpha. -#}
-<link rel="apple-touch-icon" href="/public/icon-180.png">
+<link rel="apple-touch-icon" href="/public/icon-180.png?v={{ asset_tag }}">
 {%- endif %}
 </head>
 <body{% block bodyclass %}{% endblock %}>

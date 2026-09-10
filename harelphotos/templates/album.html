@@ -32,7 +32,7 @@
     {#- The icon beside the heading, as the old album had it. `alt` is empty on
         purpose: the heading right next to it already says what this is, so a
         screen reader announcing the name twice would only be noise. -#}
-    {%- if app_icons %}<img class="masthead-icon" src="/public/icon-192.png"
+    {%- if app_icons %}<img class="masthead-icon" src="/public/icon-192.png?v={{ asset_tag }}"
          width="192" height="192" alt="">{% endif %}
     {{- cfg.ui.heading }}
   </h1>

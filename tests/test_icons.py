@@ -138,20 +138,48 @@ def test_served_as_png_because_of_nosniff(site):
         assert r.headers["Content-Type"] == "image/png"
 
 
-def test_public_assets_are_not_cached_for_ever(site):
-    """These are fixed names whose contents change with the configuration.
+def test_only_a_versioned_url_may_be_frozen(site):
+    """`icon-192.png` is a fixed name whose contents change with the config.
 
-    A photo derivative may honestly be called immutable, because its URL
-    contains a fingerprint of the pixels. `icon-192.png` and `landing-640.avif`
-    do not: they are the same URL before and after the config is edited. They
-    were sent with `max-age=31536000, immutable` anyway, and browsers believed
-    it -- a phone that had installed the site went on showing the icon it
-    downloaded the first time, and would have for a year.
+    Freezing it for a year was a promise we could not keep, and browsers kept
+    it for us: a phone that had installed the site went on offering the icon it
+    first downloaded. Adding `?v=<tag>` makes the promise true for that exact
+    URL, so it may be frozen -- while a request with no tag, which is somebody's
+    old bookmark, must not be.
     """
     pa.build_icons(site)
-    cc = _client(site).get("/public/icon-192.png").headers["Cache-Control"]
-    assert "immutable" not in cc
-    assert "31536000" not in cc
+    c = _client(site)
+    tag = pa.asset_tag(site)
+
+    frozen = c.get(f"/public/icon-192.png?v={tag}").headers["Cache-Control"]
+    assert "immutable" in frozen and "31536000" in frozen
+
+    plain = c.get("/public/icon-192.png").headers["Cache-Control"]
+    assert "immutable" not in plain and "31536000" not in plain
+
+
+def test_changing_the_icon_changes_every_url(site, tmp_path):
+    """What actually reaches a phone that already has the old one.
+
+    Shortening the cache lifetime was not enough on its own: Android installs
+    a site by having a small APK minted with the icon inside it, and both that
+    and the browser went on showing an icon already replaced on the server.
+    A URL nobody has ever seen cannot be stale, and a manifest whose contents
+    changed is also what prompts Android to mint the app again.
+    """
+    pa.build_icons(site)
+    before = pa.asset_tag(site)
+    assert f"?v={before}" in _client(site).get("/a/").get_data(as_text=True)
+
+    changed = replace(site, ui=replace(
+        site.ui, icon=_logo(tmp_path / "blue.png", colour=(0, 128, 255, 255))))
+    pa.build_icons(changed)
+    after = pa.asset_tag(changed)
+    assert after != before
+
+    m = json.loads(_client(changed).get(
+        "/manifest.webmanifest").get_data(as_text=True))
+    assert all(f"?v={after}" in i["src"] for i in m["icons"])
 
 
 def test_the_manifest_lists_only_installable_sizes(site):
