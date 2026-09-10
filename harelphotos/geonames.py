@@ -57,6 +57,11 @@ LANDMARK_RADII_M = {
     # Things you have to be standing at. Worth having -- a dam or a mast you
     # walked up to is a good caption -- and worthless at any distance.
     "DAM": 120, "BDG": 150, "TOWR": 150, "LTHSE": 150,
+    # A shopping centre is a place a holiday actually spends an afternoon, and
+    # you are inside one or you are not. Found while looking at why a photo
+    # taken in a shop was captioned with a pond: the mall was 54 m away and not
+    # in the list at all.
+    "MALL": 250,
     "MNMT": 250, "MUS": 250, "THTR": 250,
     "OBS": 300, "AMTH": 300,
     "FLLS": 400,
@@ -69,7 +74,11 @@ LANDMARK_RADII_M = {
     "PK": 1000, "MT": 1500, "CAPE": 1500, "VLC": 2500,
 
     # Areas you are plausibly inside.
-    "BCH": 1500, "LK": 3000, "LGN": 3000,
+    # A pond you are standing at, not one across the neighbourhood. The
+    # recorded point is the centroid, which for a small pond is the pond and
+    # for a great lake is open water no photograph is taken from, so a wide
+    # radius here buys nothing and cost a shop photo its name.
+    "BCH": 1500, "LK": 500, "LGN": 500,
     "PRK": 5000, "AMUS": 5000, "RESN": 5000, "RESV": 5000, "ISL": 5000,
     "GLCR": 5000, "FRST": 5000, "CNYN": 5000, "DSRT": 5000, "PLAT": 5000,
 }

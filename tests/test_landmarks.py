@@ -359,3 +359,47 @@ def test_a_reserve_miles_off_does_not_displace_the_suburb_you_are_in(tmp_path):
     got = name_at(path, 42.3119, -71.226175)
     assert "Far Reserve" not in got, got
     assert got.startswith("Small Suburb")
+
+
+def test_a_pond_across_the_neighbourhood_is_not_where_you_are(tmp_path):
+    """A photo taken in a shop was captioned "Hammond Pond" -- a pond, 561 m
+    off, code LK, which had a three-kilometre radius.
+
+    A lake's recorded point is its centroid: for a small pond that is the pond,
+    and for a great lake it is open water no photograph is taken from. So a
+    wide radius buys nothing here and costs shop photos their name.
+    """
+    path = _world(
+        tmp_path,
+        [("Faraway", "US", "MA", 42.4000, -71.1762, 900)],
+        [("Hammond Pond", "US", "LK", 42.3263, -71.1762)],       # 561 m
+    )
+    assert "Hammond Pond" not in name_at(path, 42.3213, -71.1762278)
+    # Standing at the water, it is still the right answer.
+    assert name_at(path, 42.3260, -71.1762).startswith("Hammond Pond")
+
+
+def test_a_shopping_centre_is_worth_naming_from_inside_it(tmp_path):
+    """The right answer was sitting in the data all along: the mall was 54 m
+    from that shop photo and MALL was not in the allowlist at all."""
+    path = _world(
+        tmp_path,
+        [("Faraway", "US", "MA", 42.4000, -71.1762, 900)],
+        [("The Mall at Chestnut Hill", "US", "MALL", 42.3218, -71.1762)],
+    )
+    got = name_at(path, 42.3213, -71.1762278)                    # 54 m
+    assert got.startswith("The Mall at Chestnut Hill"), got
+    # From half a kilometre away it is somebody else's afternoon.
+    assert "Mall" not in name_at(path, 42.3263, -71.1762)
+
+
+def test_echo_bridge_from_the_bridge_itself(tmp_path):
+    """The other half of the bridge case. 150 m has to exclude the house at
+    297 m and still include a photo taken at the bridge."""
+    path = _world(
+        tmp_path,
+        [("Newton Upper Falls", "US", "MA", 42.3173, -71.2262, 9000)],
+        [("Echo Bridge", "US", "BDG", 42.3140, -71.2262)],
+    )
+    assert name_at(path, 42.3139, -71.2262).startswith("Echo Bridge")
+    assert "Echo Bridge" not in name_at(path, 42.3119, -71.226175)

@@ -346,10 +346,11 @@ harelphotos geocode --force      # apply them to photos already geocoded
 ```
 
 A landmark is only claimed when you are genuinely at one, with a radius that
-follows how physically big the thing is rather than how famous it is. A dam or
-a radio mast gets 120–150 m — worth having when you walked up to it, worthless
-at any distance — a museum 250 m, an archaeological site 800 m, a mountain
-1.5 km, an airport 4 km, a national park 5 km.
+follows how physically big the thing is rather than how famous it is. A dam, a
+bridge or a radio mast gets 120–150 m — worth having when you walked up to it,
+worthless at any distance — a shopping centre or a museum 250 m, a pond 500 m,
+an archaeological site 800 m, a mountain 1.5 km, an airport 2.5 km, a national
+park 5 km.
 
 Two rules on top of that, each of which exists because the plain version got
 something wrong:
