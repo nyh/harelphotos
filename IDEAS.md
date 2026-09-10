@@ -144,14 +144,10 @@ over twenty years from several cameras and backups certainly contains the same
 photograph in several places. `harelphotos check --duplicates` would be a
 report, not a delete button — the deleting should stay manual.
 
-### 13. Zoom on a photo
+### ~~13. Zoom on a photo~~ — done
 
-Pinch and double-tap to zoom, drag to pan, on a single photograph. The obvious
-thing to want from a photo viewer on a phone, and currently absent: the image is
-fitted to the screen and that is that.
-
-Not the same as the item below, which is about how many photographs fit on a
-screen rather than how much of one you can see.
+Pinch, double-tap and drag to pan, and the sharper copy fetched behind the
+gesture. Kept here only because the item below refers to it.
 
 ### 14. A thumbnail size control, like Picasa's
 
@@ -187,6 +183,94 @@ or the originals; needs a cap so nobody asks for 98,000 of them.
 It follows `prefers-color-scheme` today. A toggle would need a control, a
 preference stored per browser, and a decision about where the control lives —
 which is why it was not done for someone who said they would not use it.
+
+---
+
+## Responsiveness
+
+The album now feels close to an application on a phone, and every remaining
+complaint about it is about waiting. These are collected in the order they are
+worth doing, which is *not* the order they occur to you: the first is a line of
+configuration and the last is a rewrite.
+
+Measured against photos.harel.org.il, from a laptop on a good connection, so a
+phone on mobile data is two to four times worse:
+
+    one TCP round trip        ~105 ms
+    TLS established           ~226 ms
+    first byte of a tiny file ~332 ms
+
+Everything below follows from that number being large and the files being
+small. A 1280px AVIF of a real 12-megapixel photograph is **34 KB**. The
+sizes are not the problem and have not been for a while.
+
+### 18. Turn on HTTP/2
+
+`curl -w '%{http_version}'` says **1.1**, and the vhost never mentions
+otherwise. Over HTTP/1.1 a browser opens about six connections per origin, so
+an album page of fifty thumbnails fetches them in nine sequential batches, each
+costing a round trip — which is exactly why the pictures appear in waves rather
+than together. HTTP/2 multiplexes them onto one connection.
+
+`Protocols h2 http/1.1` in the TLS vhost, with `mod_http2` loaded. It is the
+cheapest item on this list by a wide margin and probably the largest single
+improvement, and it should be measured before anything else here is attempted,
+because it changes what the rest are worth.
+
+### 19. Prefetch the neighbouring *pages*, not only their images
+
+The next and previous photographs' images are already fetched ahead of time,
+but not their HTML — so every swipe still pays a full round trip for the page
+before the cached image can even be referenced. Paging is a page load, and a
+page load is a round trip the reader watches.
+
+`<link rel="prefetch">`, or the speculation-rules API, on the two neighbour
+URLs. The cost is real and worth measuring first: the server renders two extra
+pages for every photograph anyone looks at, on a machine chosen for being
+small. Widening the image prefetch from one neighbour to two belongs here too —
+swiping quickly outruns a one-deep window, which is precisely when the wait is
+noticed.
+
+### 20. Stop the thumbnails appearing one at a time
+
+Nadav's idea, and the honest answer is that it is two ideas.
+
+The *appearance* is easy: hold a row until its images have all decoded, or fade
+them in together, so a grid arrives as a grid rather than as popcorn. Tens of
+lines, no new files, no invalidation.
+
+The *cause* is item 18. Once the requests are multiplexed they largely arrive
+together anyway, and this may stop being annoying without anything else being
+done.
+
+The larger version — pack many thumbnails into one file and slice them out with
+`background-position` or `object-view-box` — is genuinely attractive and
+genuinely expensive. It buys one request instead of fifty and a grid that
+appears at once. It costs:
+
+- **Invalidation.** A pack is only valid for one set of photographs in one
+  order. Adding, deleting, hiding or reordering anything rebuilds it, and album
+  order depends on `.album.toml`, on `dirsort`, and on the overrides file.
+- **Lazy loading, which we would lose.** Today off-screen images are abandoned
+  mid-flight so the visible ones are not stuck behind them. A pack is
+  all-or-nothing, so a 5000-photo album would fetch every thumbnail in it
+  unless the packs are themselves chunked and lazily loaded — at which point
+  much of the simplicity is gone.
+- **Cache sharing.** A thumbnail fetched once is reused wherever it appears,
+  including as a cover on a parent page. Packs break that.
+- **Two ladders.** `srcset` offers 256 and 512; packs would need both.
+
+So: worth doing only if 18 and the cheap version of 20 are done and the grid
+still arrives badly. Recorded because it is the right instinct — the fifty
+requests really are the problem — and the cheaper fix for the same problem was
+sitting in the vhost all along.
+
+### 21. Serve the album page's first screenful without waiting for the index
+
+Not investigated, and listed so it is not forgotten: a page of five thousand
+photographs does five thousand rows of work before the first byte, and only the
+first thirty are looked at. Whether that actually costs anything is a question
+for a measurement, not for an opinion.
 
 ---
 
