@@ -2,10 +2,11 @@
 
 A private, self-hosted photo gallery over a directory tree you already have.
 
-You point it at your photos, it builds an index and a set of resized copies
-somewhere else, and it serves a fast, Google-Photos-shaped web gallery to the
-handful of people you invite. It runs comfortably on a small, slow machine, and
-a collection of a hundred thousand photographs is unremarkable for it.
+You point it at your photos and it builds an index and a set of resized copies
+somewhere else, then serves them as a fast, Google-Photos-shaped gallery you
+browse in an ordinary web browser. It runs comfortably on a small, slow
+machine, and a collection of a hundred thousand photographs is unremarkable
+for it.
 
 ## Who it is for
 
@@ -27,6 +28,15 @@ with your photographs mounted read-only.
 That combination is the point. The collection stays yours, in the shape you
 made it, readable by any other program, and a backup of it is still just a copy
 of your photographs.
+
+**People who want either a browser for their own photographs or a place to
+share them, and quite possibly both.** On your own machine it is one command
+and no login, so a directory tree you have been squinting at in a file manager
+for years becomes something you can actually look through. On an
+internet-connected server it becomes a private gallery for family and friends,
+reached over HTTPS, with an account each and photographs your relatives can see
+from a phone. The same software either way — the difference is a web server in
+front of it and a login gate turned on.
 
 ## What it does
 
