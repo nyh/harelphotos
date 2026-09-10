@@ -371,44 +371,282 @@
       e.preventDefault();
     });
 
-    // Swipe sideways to page, down to return to the album.
+    // Gestures on the photo. Unchanged: swipe sideways to page, swipe down to
+    // return to the album. Added: pinch to zoom, drag to pan while zoomed,
+    // double-tap to zoom in and out.
+    //
+    // The paging swipes belong to an un-zoomed photograph only. Once it is
+    // magnified the same movement is a pan, and taking it would send the
+    // reader to the next photograph every time they looked at a right-hand
+    // edge.
     //
     // Bound to the stage, not the image, so the letterboxed margins either
     // side of a photo count too -- on a wide screen with a tall photo those
     // are most of what your thumb can reach.
     //
-    // This did nothing at all until `touch-action: none` was set on the stage
-    // (see app.css): without it the browser claims a horizontal drag as a pan
-    // of its own, sends pointercancel, and the pointerup being listened for
-    // never arrives. The page does not scroll, so there is no gesture worth
-    // leaving to the browser.
+    // None of it worked at all until `touch-action: none` was set on the stage
+    // (see app.css): without it the browser claims a drag as a pan of its own,
+    // sends pointercancel, and the pointerup being listened for never arrives.
+    // That same line is why pinching did nothing either -- it turns off the
+    // browser's built-in zoom along with everything else, and an installed app
+    // has no page zoom to fall back on. Having taken the gesture we owe the
+    // reader an implementation of it.
     var stage = document.querySelector(".stage");
+    var img = document.getElementById("main");
     if (!stage || !window.PointerEvent) return;
-    var startX = 0, startY = 0, tracking = false;
+
+    var MAX_SCALE = 6;
+    var DOUBLE_TAP_SCALE = 2.5;
+    // Two rungs, because they cost wildly different amounts. `sizes` will have
+    // fetched something screen-sized -- often 1280 or less on a phone -- so the
+    // largest generated copy is a few hundred kilobytes that sharpens the
+    // picture straight away, and is worth taking almost as soon as anyone
+    // zooms. The original is the only thing sharper and costs megabytes, so it
+    // waits until somebody is clearly looking closely.
+    var LARGE_AT = 1.3;
+    var FULL_AT = 2.5;
+    // Not worth pulling a raw file this big down a phone connection to sharpen
+    // a photograph somebody is looking at for a few seconds.
+    var FULL_MAX_BYTES = 24 * 1024 * 1024;
+
+    var scale = 1, tx = 0, ty = 0;
+    var pointers = {};        // active pointers by id
+    var pinch = null;         // {dist, cx, cy, scale, tx, ty} at gesture start
+    var panning = false;
+    var startX = 0, startY = 0, movedX = 0, movedY = 0;
+    var lastTap = 0;
+
+    function zoomed() { return scale > 1.01; }
+
+    /* The rectangle the photograph itself occupies inside the element.
+     *
+     * `object-fit: contain` letterboxes it, so the element is not the picture:
+     * on a wide screen showing a tall photo most of the element is empty. Pan
+     * limits computed against the element would let the picture be dragged
+     * entirely off the screen and leave the reader looking at nothing. */
+    function pictureBox() {
+      var w = img.clientWidth, h = img.clientHeight;
+      var nw = img.naturalWidth, nh = img.naturalHeight;
+      if (!nw || !nh) return { w: w, h: h };
+      var s = Math.min(w / nw, h / nh);
+      return { w: nw * s, h: nh * s };
+    }
+
+    function clamp() {
+      var box = pictureBox();
+      // How far the scaled picture overflows the element, each way. With
+      // nothing to spare the picture stays centred, which is why this is
+      // max(0, ...) rather than an absolute value.
+      var mx = Math.max(0, (box.w * scale - img.clientWidth) / 2);
+      var my = Math.max(0, (box.h * scale - img.clientHeight) / 2);
+      tx = Math.min(mx, Math.max(-mx, tx));
+      ty = Math.min(my, Math.max(-my, ty));
+    }
+
+    function apply(animate) {
+      clamp();
+      img.style.transition = animate ? "transform 0.18s ease-out" : "";
+      img.style.transform = scale === 1 && !tx && !ty
+        ? "" : "translate(" + tx + "px," + ty + "px) scale(" + scale + ")";
+      stage.classList.toggle("zoomed", zoomed());
+      if (zoomed()) upgrade();
+    }
+
+    /* Fetch a sharper copy once the one on screen is being magnified.
+     *
+     * Loaded in the background and put in place only when it has arrived, so
+     * the photograph never blanks out in the middle of a gesture. Each rung is
+     * taken at most once, and a failure is not retried -- a zoom that is
+     * merely soft is a great deal better than one that stutters.
+     *
+     * `srcset` has to be removed along the way. Setting `src` alone changes
+     * nothing while a srcset is present: the browser picks from its
+     * candidates, and neither of these rungs is one of them. */
+    var rung = 0;                 // 0 = as delivered, 1 = largest copy, 2 = original
+    var fetching = false;
+
+    function swapTo(url, level) {
+      if (fetching || rung >= level || !url) return;
+      // Already showing it: `sizes` may well have chosen the largest copy by
+      // itself on a wide screen, and re-fetching it would be pure waste.
+      if (img.currentSrc && img.currentSrc.indexOf(url) >= 0) {
+        rung = level;
+        return;
+      }
+      fetching = true;
+      var next = new Image();
+      next.onload = function () {
+        fetching = false;
+        rung = level;
+        img.removeAttribute("srcset");
+        img.removeAttribute("sizes");
+        img.src = url;
+      };
+      next.onerror = function () { fetching = false; rung = level; };
+      if ("fetchPriority" in next) next.fetchPriority = "high";
+      next.src = url;
+    }
+
+    function upgrade() {
+      if (scale >= FULL_AT && nav.full) {
+        if (nav.fullBytes && nav.fullBytes > FULL_MAX_BYTES) return;
+        var conn = navigator.connection;
+        if (conn && conn.saveData) return;    // the reader asked us not to
+        swapTo(nav.full, 2);
+      } else if (scale >= LARGE_AT) {
+        swapTo(nav.large, 1);
+      }
+    }
+
+    /* Zoom about a point, so the pixel under the fingers stays under them. */
+    function zoomTo(next, cx, cy) {
+      next = Math.min(MAX_SCALE, Math.max(1, next));
+      var r = img.getBoundingClientRect();
+      // Where the anchor sits relative to the element's centre, in the
+      // untransformed coordinate space.
+      var ox = (cx - (r.left + r.width / 2) - tx) / scale;
+      var oy = (cy - (r.top + r.height / 2) - ty) / scale;
+      tx += ox * (scale - next);
+      ty += oy * (scale - next);
+      scale = next;
+      if (scale === 1) { tx = 0; ty = 0; }
+    }
+
+    function reset(animate) { scale = 1; tx = 0; ty = 0; apply(animate); }
+
+    function centre(a, b) {
+      return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    }
+    function spread(a, b) {
+      return Math.hypot(a.x - b.x, a.y - b.y);
+    }
+    function twoPointers() {
+      var ids = Object.keys(pointers);
+      return ids.length === 2 ? [pointers[ids[0]], pointers[ids[1]]] : null;
+    }
 
     stage.addEventListener("pointerdown", function (e) {
-      if (e.pointerType === "mouse") return;
-      tracking = true;
-      startX = e.clientX;
-      startY = e.clientY;
-      // Keep receiving the gesture even if the finger leaves the element.
+      pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+      var two = twoPointers();
+      if (two) {
+        // A second finger: stop whatever the first was doing and start a
+        // pinch from wherever the picture currently sits.
+        panning = false;
+        var c = centre(two[0], two[1]);
+        pinch = { dist: spread(two[0], two[1]) || 1, cx: c.x, cy: c.y,
+                  scale: scale, tx: tx, ty: ty };
+        return;
+      }
+      if (e.pointerType === "mouse" && !zoomed()) return;
+      startX = movedX = e.clientX;
+      startY = movedY = e.clientY;
+      panning = true;
       try { stage.setPointerCapture(e.pointerId); } catch (err) {}
     }, { passive: true });
 
-    stage.addEventListener("pointercancel", function () { tracking = false; },
-                           { passive: true });
+    stage.addEventListener("pointermove", function (e) {
+      if (!pointers[e.pointerId]) return;
+      pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+      var two = twoPointers();
+      if (two && pinch) {
+        var c = centre(two[0], two[1]);
+        scale = pinch.scale;
+        tx = pinch.tx;
+        ty = pinch.ty;
+        zoomTo(pinch.scale * (spread(two[0], two[1]) / pinch.dist),
+               pinch.cx, pinch.cy);
+        // Following the midpoint means the picture moves with the hand as
+        // well as growing under it, which is what makes it feel like paper.
+        tx += c.x - pinch.cx;
+        ty += c.y - pinch.cy;
+        apply(false);
+        return;
+      }
+      if (!panning) return;
+      if (zoomed()) {
+        tx += e.clientX - movedX;
+        ty += e.clientY - movedY;
+        apply(false);
+      }
+      movedX = e.clientX;
+      movedY = e.clientY;
+    }, { passive: true });
+
+    function endPointer(e) {
+      delete pointers[e.pointerId];
+      if (Object.keys(pointers).length < 2) pinch = null;
+      try { stage.releasePointerCapture(e.pointerId); } catch (err) {}
+    }
+
+    stage.addEventListener("pointercancel", function (e) {
+      panning = false;
+      endPointer(e);
+    }, { passive: true });
 
     stage.addEventListener("pointerup", function (e) {
-      if (!tracking) return;
-      tracking = false;
-      try { stage.releasePointerCapture(e.pointerId); } catch (err) {}
+      var wasPanning = panning;
       var dx = e.clientX - startX, dy = e.clientY - startY;
+      panning = false;
+      var hadTwo = !!twoPointers();
+      endPointer(e);
+      if (hadTwo) {
+        // Lifting one finger of a pinch: settle, and snap back rather than
+        // leaving the photograph at 1.02 with the pan handler still armed.
+        if (scale < 1.05) reset(true); else apply(true);
+        return;
+      }
+      if (!wasPanning) return;
+
+      var moved = Math.abs(dx) > 10 || Math.abs(dy) > 10;
+      if (!moved) {
+        var now = Date.now();
+        if (now - lastTap < 300) {
+          lastTap = 0;
+          if (zoomed()) reset(true);
+          else { zoomTo(DOUBLE_TAP_SCALE, e.clientX, e.clientY); apply(true); }
+        } else {
+          lastTap = now;
+        }
+        return;
+      }
+      // Paging gestures belong to an un-zoomed photograph. Zoomed in, the
+      // same movement is a pan, and stealing it would make the photo jump to
+      // the next one whenever somebody looked at its right-hand edge.
+      if (zoomed()) return;
+      if (e.pointerType === "mouse") return;
       if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
         go(dx < 0 ? nav.next : nav.prev);
       } else if (dy > 90 && Math.abs(dy) > Math.abs(dx)) {
         backToAlbum();
       }
     }, { passive: true });
+
+    // A mouse and a trackpad. Ctrl+wheel is what a trackpad pinch arrives as,
+    // and what every other image viewer uses; a bare wheel is left alone.
+    stage.addEventListener("wheel", function (e) {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      zoomTo(scale * (e.deltaY < 0 ? 1.12 : 1 / 1.12), e.clientX, e.clientY);
+      apply(false);
+    }, { passive: false });
+
+    stage.addEventListener("dblclick", function (e) {
+      e.preventDefault();
+      if (zoomed()) reset(true);
+      else { zoomTo(DOUBLE_TAP_SCALE, e.clientX, e.clientY); apply(true); }
+    });
+
+    // Escape closes the zoom before it leaves the photograph, which is what
+    // the key means everywhere else: undo the last thing you opened.
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && zoomed()) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        reset(true);
+      } else if (e.key === "0" && zoomed()) {
+        reset(true);
+      }
+    }, true);
   }
 
   if (document.readyState === "loading") {

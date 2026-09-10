@@ -266,9 +266,42 @@ the machine. Use `--login` (recommended), or `--insecure` if you really mean
 it — testing on a phone over your own LAN, say.
 
 What you can do: browse albums, follow subdirectories, click a photo to see it
-large, move between photos with the arrow keys or by swiping, press `i` for
-camera and exposure details, `d` to download the original, and `Esc` to go
-back to the album.
+large, move between photos with the arrow keys or by swiping, pinch or
+double-tap to zoom in on it, press `i` for camera and exposure details, `d` to
+download the original, and `Esc` to go back to the album. The full list is
+below.
+
+### Looking at one photograph: keys and gestures
+
+| | |
+|---|---|
+| **←** / **→** | previous and next photo |
+| **Esc** | back to the album, where you left it — or, if zoomed in, back out first |
+| **i** | camera, exposure, place and the rest |
+| **d** | download the original file |
+| **0** | zoom back out |
+| **double-click**, **Ctrl+wheel** | zoom in and out, around the pointer |
+| **swipe left / right** | previous and next photo |
+| **swipe down** | back to the album |
+| **pinch** | zoom, around the point between your fingers |
+| **drag** | pan, while zoomed in |
+| **double-tap** | zoom in, and again to zoom back out |
+
+Zoom happens immediately, on the picture already on the screen, and never
+waits for anything to be fetched. What is fetched is a sharper copy of it, in
+the background, in two steps: as soon as you zoom at all it takes the largest
+copy that was generated, which is usually a few hundred kilobytes and often
+larger than the screen-sized one your browser originally chose; and if you keep
+going past about 2.5× it fetches the original file, which is the only thing
+sharper and costs megabytes. Each arrives silently and replaces what is on
+screen when it is ready, so the picture sharpens a moment after the gesture
+rather than stalling during it. The original is skipped for a file over 24 MB,
+and skipped entirely if your browser is in data-saver mode.
+
+While a photo is zoomed, sideways and downward swipes stop paging and become
+panning, and the on-screen arrows get out of the way — otherwise examining the
+right-hand edge of a photograph would keep sending you to the next one. Zoom
+back out and they return.
 
 A photo's date and place are shown next to its filename, without opening
 anything: they are what you want to know while looking at a photo, whereas the

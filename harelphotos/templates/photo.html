@@ -110,11 +110,20 @@
 <script id="nav-data" type="application/json">
 {#- `prefetch` carries srcset/sizes rather than one URL, so the browser picks
     the size it would actually display, exactly as it does for the visible
-    image. Pinning a tier here would fetch a 1600px file onto a phone. -#}
+    image. Pinning a tier here would fetch a 1600px file onto a phone.
+
+    `large` and `full` are the two rungs zooming climbs. `large` is the biggest
+    copy that was generated -- on a phone `sizes` will have chosen something
+    smaller, so it is a few hundred kilobytes that sharpens the picture
+    straight away. `full` is the original, the only thing sharper still and
+    costing megabytes, so it is a last step and not a first one. -#}
 {{ {"prev": prev.page_url if prev else none,
     "next": next.page_url if next else none,
     "album": album_url,
     "download": "/orig/" ~ photo.url_relpath,
+    "large": (photo|img_src(photo.tiers|max)) if photo.tiers else none,
+    "full": "/orig/" ~ photo.url_relpath,
+    "fullBytes": photo.size or 0,
     "sizes": photo|view_sizes,
     "prefetch": [ (prev|srcset(all_tiers)) if prev and prev.tiers else none,
                   (next|srcset(all_tiers)) if next and next.tiers else none ]}|tojson }}

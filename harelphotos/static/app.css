@@ -286,7 +286,18 @@ h2.section:first-child { margin-block-start: 0.25rem; }
   inline-size: calc(100% - 1rem);
   block-size: calc(100% - 1rem);
   object-fit: contain;
+  /* Zoom is a transform on this element, applied from its centre so that the
+     arithmetic in app.js -- which measures the anchor point from the centre --
+     and the rendering agree. `will-change` keeps the picture on its own layer,
+     so a pinch moves it without repainting the page under it. */
+  transform-origin: center center;
+  will-change: transform;
 }
+
+/* While magnified the arrows are in the way: they sit over the picture at
+   exactly the edges a thumb reaches for when panning, and a tap that lands on
+   one pages away from the photograph being examined. */
+.stage.zoomed .nav { opacity: 0; pointer-events: none; }
 
 .nav {
   position: absolute;
