@@ -301,25 +301,34 @@ turned out to be softer than they first looked.
 
 ### 21. Page between photographs without loading a page
 
-Nadav's, and the one with the largest effect on how the viewer feels. Arrow or
-swipe swaps the image and the caption in place; nothing navigates; the address
-bar is kept honest with `history.replaceState`. Paging then costs what the
-image costs and nothing else.
+Nadav's, and the one with the largest effect on how the viewer feels.
 
-Measured, because the worry was about server load and traffic and neither turns
-out to be the objection:
+**The idea.** Arrow or swipe swaps the image and the caption in place. Nothing
+navigates, no HTML is fetched, and the address bar is kept honest with
+`history.replaceState` so that the URL still names the photograph on screen.
+
+**What has to come from somewhere.** Two things are on the page: the image, and
+the words around it -- the filename, the date, the place, the camera, the
+exposure, and which photographs are on either side. Today a page load brings
+both, the words baked into the HTML. Stop loading pages and the image is
+already handled (it is fetched, and prefetched, exactly as now), but the words
+need a source. That source is a small JSON document, and everything below about
+"the JSON" means that and nothing more.
+
+**What it costs, measured.** The worry was server load and traffic. Neither is
+the objection:
 
     per photograph paged to      today            client-side
     round trips                  1  (~330 ms)     0
-    bytes                        3.3 KB of HTML   ~0.7 KB amortised
+    bytes                        3.3 KB of HTML   ~0.7 KB of JSON, amortised
     server render                1.5 ms           ~1/50 of that
 
 A photo page renders in a millisecond and a half, so server load was never the
-problem. The JSON does not *add* to the traffic either -- it replaces the HTML,
-at about a fifth the size. The whole prize is the round trip, which is also the
-only part anybody can feel.
+problem. The JSON does not *add* to the traffic either -- it replaces the HTML
+that a page load would have brought, at about a fifth the size. The whole prize
+is the round trip, which is also the only part anybody can feel.
 
-Three things it should be built with:
+**How it should be built.** Three things:
 
 - **As progressive enhancement.** The server-rendered page stays exactly as it
   is: it is what a bookmark, a shared link and a browser without JavaScript
@@ -338,37 +347,39 @@ Three things it should be built with:
   in the background, exactly as the images already do. So paging really does
   cost what the image costs, for as long as anyone pages in one sitting.
 
-Considered and rejected: **embedding the metadata in the derived images
-themselves**, so that no separate fetch exists at all. AVIF is a HEIF container
-and has boxes for EXIF and XMP, so it can be written. Two problems, and the
-second decides it.
+**Considered and rejected: putting the words inside the images**, so that no
+JSON exists at all. AVIF is a HEIF container with boxes for EXIF and XMP, so it
+can physically be written. Two problems, and the second decides it.
 
-JavaScript cannot read those from an `<img>`, which hands back decoded pixels
-and not file bytes -- it would mean fetching the image a second time (a cache
-hit, at least) and parsing ISOBMFF box structure by hand, in a project with one
-script and no build step.
+JavaScript cannot read those boxes from an `<img>`, which hands back decoded
+pixels and not file bytes. It would mean fetching each image a second time (a
+cache hit, at least) and parsing ISOBMFF structure by hand, in a project with
+one script and no build step.
 
-And it couples metadata to pixels, which is precisely what this codebase is
-built not to do. `place` arrives from `geocode`, a separate pass run after the
-scan; prev and next depend on the album's sort order rather than on the
-photograph; `is_cover` lives in the overrides file and is changed by a button in
-the browser. None of them are properties of the file. `deriv_key` is
-deliberately built from the content signature and the encode recipe and nothing
-else, so that "a metadata tidy-up" never becomes a re-encode -- embedding would
-make a re-encode of the whole collection the price of a better landmark rule.
+Worse, it couples metadata to pixels, which is precisely what this codebase is
+built not to do. `place` arrives from `geocode`, a pass run after the scan;
+prev and next depend on the album's sort order rather than on the photograph;
+`is_cover` lives in the overrides file and is changed by a button in the
+browser. None of them are properties of the file. `deriv_key` is deliberately
+built from the content signature and the encode recipe and nothing else, so
+that a metadata tidy-up never becomes a re-encode -- and embedding would make
+re-encoding the whole collection the price of a better landmark rule.
 
-What it really costs is two renderers for one view, which have to agree.
+**What it really costs.** Two renderers for one view, which have to agree.
 Formatting server-side shrinks that a great deal but does not remove it, and it
 is the largest departure this project would have made from "a page view is a
-few indexed SQLite reads and a template render". The admin cover button is a
-POST form with a CSRF token and wants thinking about separately.
+few indexed SQLite reads and a template render". The admin cover button is the
+one part of the page that is not display -- a POST form with a CSRF token --
+and wants thinking about separately.
 
-`api_album` already exists and returns name, URL and aspect for prefetching;
-this is the same idea with enough in it to draw the page.
+**What already exists.** `api_album` returns name, URL and aspect for
+prefetching; this is the same endpoint with enough in it to draw a page. The
+photo page already carries a `nav-data` block, which is the inlined first
+window in miniature.
 
-Composes with everything already built: the swipe that follows the thumb
-becomes a real carousel, prefetching becomes trivial, and the zoom resets
-naturally between photographs.
+**What it composes with.** The swipe that follows the thumb becomes a real
+carousel, prefetching becomes trivial, and the zoom resets naturally between
+photographs.
 
 ### 22. Serve the album page's first screenful without waiting for the index
 
