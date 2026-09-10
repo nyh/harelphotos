@@ -49,7 +49,17 @@ body {
   background: var(--bg);
   color: var(--fg);
   font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  -webkit-text-size-adjust: 100%;
+  /* `100%` here -- "browser, never adjust my text" -- is in every CSS
+     boilerplate, for a real iOS Safari bug where text inflates on rotation.
+     That bug needs a page with no `width=device-width` viewport to bite, and
+     base.html has had one since the first commit, so we were paying for a fix
+     we did not need. What we were paying was Android's Accessibility "Text
+     scaling" setting, which Chrome applies through this same mechanism: a
+     reader who had asked their phone for larger text got ours at 15px anyway,
+     which is exactly why the site read smaller than everything else on the
+     device. `auto` is the initial value and simply gets out of the way. */
+  -webkit-text-size-adjust: auto;
+  text-size-adjust: auto;
 }
 
 a { color: inherit; text-decoration: none; }
@@ -318,9 +328,53 @@ h2.section:first-child { margin-block-start: 0.25rem; }
 .pager .where { color: var(--dim); }
 
 
+/* A screen held in the hand rather than sat in front of.
+ *
+ * Every size above was chosen at a desk, where 15px body text half a metre
+ * away is comfortable. The same 15px on a phone is not, and pixel density
+ * does not rescue it: a CSS pixel is a CSS pixel, and the phone is simply a
+ * smaller thing to read. The header suffered worst, because its meta line and
+ * user menu are 0.85rem of a 16px root -- 13.6px, on the one device where
+ * text most needs to be bigger than the body, not smaller.
+ *
+ * Scaling the root moves every `rem` in the stylesheet together, so the
+ * proportions that work on a desktop survive and only the size changes. The
+ * query asks about the *pointer* rather than the width, because a phone held
+ * sideways is still a phone: 600px-wide rules miss it entirely, which is why
+ * turning the phone used to help the cards but never the text.
+ *
+ * A percentage, not `18px`. 112.5% of the default 16px root is 18px, and 112.5%
+ * of the 20px root chosen by someone who asked their browser for larger text is
+ * 22.5px -- where a flat `18px` would have quietly overruled them and made the
+ * text SMALLER than they had asked for. Same reason `body` takes `1rem` rather
+ * than a pixel count.
+ */
+@media (pointer: coarse) {
+  :root { font-size: 112.5%; }
+  body { font-size: 1rem; }
+}
+
 @media (max-width: 600px) {
   .grid .tile { block-size: 120px; flex-basis: calc(var(--ar, 1) * 120px); }
-  .cards { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+
+  /* Two columns of album cards, never three. At a 140px minimum a 480px-wide
+     phone fitted a third column, giving 141px covers with a title beneath
+     them nobody could read; 150px holds the third column off until about
+     510px, by which point it is a tablet. */
+  .cards { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+
+  /* A desktop's 1rem margin is a rounding error; on a 400px screen it is a
+     twelfth of the width, and every pixel taken off the sides goes straight
+     into the covers. */
+  main {
+    padding-inline: max(0.5rem, env(safe-area-inset-left))
+                    max(0.5rem, env(safe-area-inset-right));
+  }
+
+  /* Bigger type in a bar that wraps to two or three lines would grow a sticky
+     header that is already costing the photographs their screen, so give back
+     in padding what the type takes. */
+  .topbar { padding-block: 0.5rem; gap: 0.25rem 0.75rem; }
 }
 
 /* A phone held sideways. The viewport is barely 390 px tall, so a top bar
