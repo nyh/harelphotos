@@ -411,64 +411,10 @@
     }, { passive: true });
   }
 
-  /* ------------------------------------------------------------ ?imgcheck=1
-   *
-   * A diagnostic for a bug that only happens on a real phone: after Chrome on
-   * Android reloads the page (pull down to refresh), some images stay blank
-   * until you touch them or rotate the device.
-   *
-   * Two very different causes look identical from the outside, and the fix for
-   * one is no use against the other:
-   *
-   *   never fetched   -- `loading="lazy"` decided the image was off-screen at
-   *                      the moment it looked (before the scroll position was
-   *                      restored) and never looked again. naturalWidth is 0,
-   *                      and only rises when something makes Chrome re-check.
-   *   fetched, never painted -- the bytes arrived and were decoded, but the
-   *                      element was not repainted. naturalWidth is already
-   *                      the real width while the screen shows nothing.
-   *
-   * So this panel just reports `complete` and `naturalWidth` for every image
-   * that is on screen, and keeps reporting: touch a blank one and watch which
-   * number moves. Append `?imgcheck=1` to any album URL -- a query string
-   * survives a reload, which a debugger attached over USB does not.
-   */
-  function imgcheck() {
-    if (window.location.search.indexOf("imgcheck") < 0) return;
-    var box = document.createElement("pre");
-    box.style.cssText = "position:fixed;left:0;bottom:0;z-index:99;margin:0;" +
-      "max-block-size:45vh;overflow:auto;background:#000;color:#0f0;" +
-      "font:11px/1.35 monospace;padding:.4rem;white-space:pre;" +
-      "max-inline-size:100vw;box-sizing:border-box";
-    box.addEventListener("click", function () { box.remove(); });
-    document.body.appendChild(box);
-
-    function report() {
-      var imgs = document.images, on = [], nblank = 0, nfetching = 0;
-      for (var i = 0; i < imgs.length; i++) {
-        var img = imgs[i], r = img.getBoundingClientRect();
-        if (r.bottom < 0 || r.top > window.innerHeight) continue;  // off screen
-        var nw = img.naturalWidth;
-        if (!nw) nblank++;
-        else if (!img.complete) nfetching++;
-        on.push("#" + i + " y=" + Math.round(r.top) +
-                " c=" + (img.complete ? 1 : 0) + " nw=" + nw +
-                (img.getAttribute("src") ? "" : " NOSRC") +
-                (img.dataset.src ? " PARKED" : ""));
-      }
-      box.textContent = "tap to dismiss · " + imgs.length + " imgs, " +
-        on.length + " on screen, " + nblank + " with nw=0, " +
-        nfetching + " loading\n" + on.join("\n");
-    }
-    report();
-    setInterval(report, 400);
-  }
-
-  function start() { initGrid(); initViewer(); imgcheck(); }
-
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", start);
+    document.addEventListener("DOMContentLoaded", function () { initGrid(); initViewer(); });
   } else {
-    start();
+    initGrid();
+    initViewer();
   }
 })();
