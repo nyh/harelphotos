@@ -21,6 +21,22 @@
 <main>
   {% if album.description %}<p class="blurb">{{ album.description }}</p>{% endif %}
 
+  {%- macro pager(p) -%}
+    {% if p.pages > 1 %}
+    <nav class="pager" aria-label="Album pages">
+      {% if p.page > 1 %}
+        <a href="?page={{ p.page - 1 }}" rel="prev">&#8249; Previous</a>
+      {% else %}<span class="off">&#8249; Previous</span>{% endif %}
+      <span class="where">photos {{ "{:,}".format(p.start + 1) }}–{{ "{:,}".format(p.end) }} of {{ "{:,}".format(p.total) }}</span>
+      {% if p.page < p.pages %}
+        <a href="?page={{ p.page + 1 }}" rel="next">Next &#8250;</a>
+      {% else %}<span class="off">Next &#8250;</span>{% endif %}
+    </nav>
+    {% endif %}
+  {%- endmacro %}
+
+  {{ pager(pager_data) }}
+
   {# Albums and photos are different kinds of thing, so they get different
      layouts. Headings only appear when there is more than one kind. #}
   {% if subalbums %}
@@ -82,6 +98,9 @@
   {% if not subalbums and not photos %}
     <p class="blurb">This album is empty.</p>
   {% endif %}
+
+  {#- Repeated at the foot, which is where you are when you want it. -#}
+  {{ pager(pager_data) }}
 </main>
 {{ chrome.footer(viewer) }}
 {% endblock %}

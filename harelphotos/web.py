@@ -144,6 +144,30 @@ def create_app(cfg: Config, *, require_login: bool = True) -> Flask:
     return app
 
 
+def _paginate(cfg: Config, total: int, raw_page: str | None) -> dict:
+    """Split a very large album into pages.
+
+    A directory of several thousand photos is one page of several megabytes and
+    tens of thousands of DOM nodes, which a phone feels. Most albums are far
+    below the limit and get a single page with no pager shown at all.
+    """
+    size = max(1, cfg.ui.album_page_size)
+    pages = max(1, -(-total // size))           # ceiling division
+    try:
+        page = int(raw_page) if raw_page else 1
+    except ValueError:
+        page = 1
+    page = min(max(1, page), pages)
+    return {
+        "page": page,
+        "pages": pages,
+        "size": size,
+        "total": total,
+        "start": (page - 1) * size,
+        "end": min(total, page * size),
+    }
+
+
 def _clean_path(raw: str) -> str:
     """Reject anything that is not a plain relative path.
 
@@ -306,11 +330,13 @@ def _register_routes(app: Flask, cfg: Config) -> None:
             abort(404)
         subalbums = g.index.subalbums(alb, g.viewer)
         photos = g.index.photos(alb, g.viewer)
+        pager = _paginate(cfg, len(photos), request.args.get("page"))
         return render_template(
             "album.html",
             album=alb,
             subalbums=subalbums,
-            photos=photos,
+            photos=photos[pager["start"]:pager["end"]],
+            pager_data=pager,
             crumbs=g.index.breadcrumbs(alb, g.viewer),
             cfg=cfg,
         )
@@ -323,10 +349,24 @@ def _register_routes(app: Flask, cfg: Config) -> None:
             abort(404)
         alb = g.index.album(pho.dir_path, g.viewer)
         prev_p, next_p = g.index.neighbours(pho, g.viewer)
+        # Which page of a paged album this photo sits on, so "back to the
+        # album" returns to the right one rather than always the first.
+        album_url = alb.url if alb else "/a/"
+        if alb is not None:
+            siblings = g.index.photos(alb, g.viewer)
+            size = max(1, cfg.ui.album_page_size)
+            if len(siblings) > size:
+                for i, sib in enumerate(siblings):
+                    if sib.id == pho.id:
+                        page = i // size + 1
+                        if page > 1:
+                            album_url = f"{album_url}?page={page}"
+                        break
         return render_template(
             "photo.html",
             photo=pho,
             album=alb,
+            album_url=album_url,
             prev=prev_p,
             next=next_p,
             crumbs=g.index.breadcrumbs(alb, g.viewer) + [alb] if alb else [],

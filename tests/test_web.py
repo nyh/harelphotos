@@ -750,3 +750,82 @@ def test_a_configured_hero_width_reaches_the_page(scanned, tmp_path):
     body = app.test_client().get("/login").get_data(as_text=True)
     assert "max-inline-size: 380px" in body
     assert "/public/landing-380." in body
+
+
+# ------------------------------------------------------- very large albums
+
+def _album_of(cfg, n, tmp_path):
+    """Index n photos in one directory, without deriving images for them."""
+    from harelphotos import db as db_mod, scanner
+
+    d = cfg.photo_root / "huge"
+    d.mkdir(parents=True, exist_ok=True)
+    for i in range(n):
+        fixtures.make_jpeg(d / f"p{i:04d}.jpg", size=(80, 60))
+    conn = db_mod.open_index(cfg.index_db)
+    scanner.scan(cfg, conn)
+    conn.close()
+
+
+def test_a_small_album_has_no_pager(client):
+    body = client.get("/a/2019/01/").get_data(as_text=True)
+    assert "pager" not in body
+
+
+def test_a_large_album_is_split_into_pages(scanned, tmp_path):
+    """A directory of thousands of photos is megabytes of HTML and tens of
+    thousands of DOM nodes, which a phone feels."""
+    from harelphotos.web import create_app
+
+    _album_of(scanned, 25, tmp_path)
+    object.__setattr__(scanned.ui, "album_page_size", 10)
+    app = create_app(scanned, require_login=False)
+    app.config.update(TESTING=True)
+    c = app.test_client()
+
+    first = c.get("/a/huge/").get_data(as_text=True)
+    assert first.count('class="tile"') == 10
+    assert "photos 1–10 of 25" in first
+    assert 'href="?page=2"' in first
+
+    last = c.get("/a/huge/?page=3").get_data(as_text=True)
+    assert last.count('class="tile"') == 5
+    assert "photos 21–25 of 25" in last
+
+
+def test_page_numbers_out_of_range_are_clamped_not_errors(scanned, tmp_path):
+    from harelphotos.web import create_app
+
+    _album_of(scanned, 25, tmp_path)
+    object.__setattr__(scanned.ui, "album_page_size", 10)
+    app = create_app(scanned, require_login=False)
+    app.config.update(TESTING=True)
+    c = app.test_client()
+    for bad in ("0", "-3", "99", "banana", ""):
+        r = c.get(f"/a/huge/?page={bad}")
+        assert r.status_code == 200, bad
+
+
+def test_a_photo_links_back_to_its_own_page_of_the_album(scanned, tmp_path):
+    """Otherwise leaving a photo from page 3 dumps you at the start of a
+    several-thousand-photo album."""
+    import json as _json
+
+    from harelphotos.web import create_app
+
+    _album_of(scanned, 25, tmp_path)
+    object.__setattr__(scanned.ui, "album_page_size", 10)
+    app = create_app(scanned, require_login=False)
+    app.config.update(TESTING=True)
+    c = app.test_client()
+
+    body = c.get("/p/huge/p0022.jpg").get_data(as_text=True)
+    nav = _json.loads(body.split('id="nav-data" type="application/json">')[1]
+                      .split("</script>")[0])
+    assert nav["album"].endswith("?page=3"), nav["album"]
+
+    # And a photo on the first page carries no page at all.
+    body = c.get("/p/huge/p0001.jpg").get_data(as_text=True)
+    nav = _json.loads(body.split('id="nav-data" type="application/json">')[1]
+                      .split("</script>")[0])
+    assert "?page=" not in nav["album"], nav["album"]

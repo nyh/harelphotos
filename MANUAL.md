@@ -756,6 +756,25 @@ idempotent and will not overwrite your config) or just restart the server.
 
 ---
 
+## Very large albums
+
+A directory with more than `[ui] album_page_size` photos (default 5000) is
+split into pages, with a Previous/Next bar at the top and bottom. Below that
+number nothing changes and no pager appears — which is every album for most
+people.
+
+The limit exists because the page is one HTML document listing every photo:
+about 750 bytes each, so 5000 photos is roughly 3.5 MB of HTML and 20,000 DOM
+nodes. It compresses to a few hundred kilobytes on the wire, but a phone still
+has to parse and lay all of it out. Lower `album_page_size` if your biggest
+albums feel sluggish.
+
+Paging does not interrupt browsing: the arrow keys move from the last photo of
+one page to the first of the next, and leaving a photo returns you to the page
+it was actually on, not to the beginning.
+
+---
+
 ## What is not indexed
 
 Only `.jpg` and `.jpeg` files (either case) are indexed. Everything else in the

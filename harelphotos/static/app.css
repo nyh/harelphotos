@@ -212,6 +212,11 @@ h2.section:first-child { margin-block-start: 0.25rem; }
   display: grid;
   place-items: center;
   min-block-size: 0;
+  /* Without this the browser treats a sideways drag as a pan of its own,
+     cancels the pointer sequence, and the swipe handler in app.js never sees
+     a pointerup -- which is why swiping did nothing at all. The photo page
+     does not scroll, so there is no gesture worth leaving to the browser. */
+  touch-action: none;
 }
 /* The photo fills the stage and `object-fit` letterboxes it inside.
  *
@@ -275,6 +280,28 @@ h2.section:first-child { margin-block-start: 0.25rem; }
 .info a { color: var(--accent); }
 
 .empty-page { padding: 4rem 1rem; text-align: center; }
+
+/* Only shown for an album too large for one page. */
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem 1.25rem;
+  margin-block: 1.25rem;
+  font-size: 0.9rem;
+}
+.pager a, .pager .off {
+  min-block-size: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding-inline: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.pager a:hover { border-color: var(--accent); text-decoration: none; }
+.pager .off { color: var(--dim); opacity: 0.5; }
+.pager .where { color: var(--dim); }
 
 @media (max-width: 600px) {
   .grid .tile { block-size: 120px; flex-basis: calc(var(--ar, 1) * 120px); }

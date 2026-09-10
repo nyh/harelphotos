@@ -309,6 +309,25 @@
       window.addEventListener("load", prefetchNeighbours);
     }
 
+    // The on-screen arrows must page the same way the keys do.
+    //
+    // They are real links, so clicking one pushed a history entry and Back
+    // went to the previous photo instead of the album -- the very thing
+    // location.replace() avoids for the arrow keys. Left as links on purpose:
+    // middle-click, ctrl-click and "open in new tab" keep working, and they
+    // still function with no JavaScript at all.
+    Array.prototype.forEach.call(
+      document.querySelectorAll(".stage a.nav"),
+      function (a) {
+        a.addEventListener("click", function (e) {
+          if (e.defaultPrevented || e.button !== 0) return;
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+          e.preventDefault();
+          go(a.getAttribute("href"));
+        });
+      }
+    );
+
     var info = document.getElementById("info");
     var toggle = document.getElementById("info-toggle");
     function toggleInfo() {
@@ -334,18 +353,37 @@
       e.preventDefault();
     });
 
-    // Horizontal swipe pages; a downward swipe returns to the album. Vertical
-    // scrolling is left alone.
-    var img = document.getElementById("main");
-    if (!img || !window.PointerEvent) return;
+    // Swipe sideways to page, down to return to the album.
+    //
+    // Bound to the stage, not the image, so the letterboxed margins either
+    // side of a photo count too -- on a wide screen with a tall photo those
+    // are most of what your thumb can reach.
+    //
+    // This did nothing at all until `touch-action: none` was set on the stage
+    // (see app.css): without it the browser claims a horizontal drag as a pan
+    // of its own, sends pointercancel, and the pointerup being listened for
+    // never arrives. The page does not scroll, so there is no gesture worth
+    // leaving to the browser.
+    var stage = document.querySelector(".stage");
+    if (!stage || !window.PointerEvent) return;
     var startX = 0, startY = 0, tracking = false;
-    img.addEventListener("pointerdown", function (e) {
+
+    stage.addEventListener("pointerdown", function (e) {
       if (e.pointerType === "mouse") return;
-      tracking = true; startX = e.clientX; startY = e.clientY;
+      tracking = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      // Keep receiving the gesture even if the finger leaves the element.
+      try { stage.setPointerCapture(e.pointerId); } catch (err) {}
     }, { passive: true });
-    img.addEventListener("pointerup", function (e) {
+
+    stage.addEventListener("pointercancel", function () { tracking = false; },
+                           { passive: true });
+
+    stage.addEventListener("pointerup", function (e) {
       if (!tracking) return;
       tracking = false;
+      try { stage.releasePointerCapture(e.pointerId); } catch (err) {}
       var dx = e.clientX - startX, dy = e.clientY - startY;
       if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
         go(dx < 0 ? nav.next : nav.prev);

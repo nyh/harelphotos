@@ -73,6 +73,25 @@ def _vk(key):
     return {"ArrowRight": 39, "ArrowLeft": 37, "Escape": 27}.get(key, 0)
 
 
+def swipe(b, x0, y0, x1, y1, steps=8):
+    """A real touch gesture. Needs Emulation.setTouchEmulationEnabled first.
+
+    Swipe was broken for as long as it existed and nobody noticed, because
+    nothing here could produce a touch: a mouse drag does not reproduce it,
+    since the bug was the browser claiming the gesture and sending
+    pointercancel instead of pointerup.
+    """
+    b.send("Input.dispatchTouchEvent", type="touchStart",
+           touchPoints=[{"x": x0, "y": y0}])
+    for i in range(1, steps + 1):
+        b.send("Input.dispatchTouchEvent", type="touchMove",
+               touchPoints=[{"x": x0 + (x1 - x0) * i / steps,
+                             "y": y0 + (y1 - y0) * i / steps}])
+        time.sleep(0.02)
+    b.send("Input.dispatchTouchEvent", type="touchEnd", touchPoints=[])
+    b.settle()
+
+
 def check(label, got, want):
     ok = got == want
     print(f"[{'  ok  ' if ok else ' FAIL '}] {label}: {got!r}" +
@@ -135,6 +154,16 @@ def main():
         failures += not check("paging added NO history entries",
                               b.eval("history.length"), depth_at_album + 1)
 
+        # The on-screen arrows must behave exactly like the keys. They are
+        # real links, so without interception each click pushed a history
+        # entry and Back went one photo back instead of to the album.
+        before = b.eval("history.length")
+        b.eval("(function(){var a=document.querySelector('.stage a.nav.next');"
+               "if(a)a.click();})()")
+        b.settle()
+        failures += not check("clicking the arrow added NO history entry",
+                              b.eval("history.length"), before)
+
         # Escape must land on the album, in one step.
         b.key("Escape")
         failures += not check("Escape returns to the album",
@@ -196,6 +225,33 @@ def main():
         b.goto(URL)
         failures += not check("following a link starts at the top",
                               b.eval("Math.round(window.scrollY)"), 0)
+
+        # Swipe, with genuine touch events on an emulated phone.
+        b.send("Emulation.setDeviceMetricsOverride", width=390, height=844,
+               deviceScaleFactor=2, mobile=True)
+        b.send("Emulation.setTouchEmulationEnabled", enabled=True, maxTouchPoints=5)
+        b.goto(URL)
+        b.eval("(function(){document.querySelector('#grid a').click();})()")
+        b.settle()
+        opened = b.eval("location.pathname")
+        depth = b.eval("history.length")
+
+        swipe(b, 320, 420, 60, 420)                    # left: forwards
+        moved = b.eval("location.pathname")
+        failures += not check("swipe left pages forward", moved != opened, True)
+
+        swipe(b, 60, 420, 320, 420)                    # right: backwards
+        failures += not check("swipe right pages back",
+                              b.eval("location.pathname"), opened)
+        failures += not check("swiping added no history entries",
+                              b.eval("history.length"), depth)
+
+        swipe(b, 200, 300, 200, 640)                   # down: to the album
+        failures += not check("swipe down returns to the album",
+                              b.eval("location.pathname"), album)
+
+        b.send("Emulation.setTouchEmulationEnabled", enabled=False)
+        b.send("Emulation.clearDeviceMetricsOverride")
 
         # A photo opened cold must not send you off the site.
         b.goto("about:blank")
