@@ -188,6 +188,37 @@ LANDMARK_INSIDE_M = 750
 SECTION_CODES = frozenset({"PPLX", "PPLL", "PPLS"})
 CITY_SLACK_M = 1500
 
+# A city swallows what is filed inside it.
+#
+# `cities500` is not only towns. "VA Boston Healthcare System, Brockton
+# Campus" is recorded as a populated place of 5,474, and GeoNames puts it in
+# downtown Boston though Brockton is thirty kilometres south -- so a photo by
+# the Charles was labelled with a hospital in the wrong city. Neighbourhoods do
+# the same thing more respectably.
+#
+# Population is the signal, but a bare "prefer the biggest" would name the
+# nearest metropolis from a village two counties away. So a place has to be
+# dominant *and* plausibly the one you are standing in: at least ten times the
+# population of the nearest, and no further away than its own extent, which is
+# estimated from that population at a typical urban density.
+#
+# Checked against the real dump: Boston has 119x the hospital's population and
+# 65x the North End's, so it wins both -- while Newton Upper Falls, 7,579
+# people, keeps its name against Newton's 88,817, which is only 11.7x.
+# Twenty, not ten. Newton has 11.7x the population of Newton Upper Falls and
+# should not swallow it -- that is a village with a name of its own, and it is
+# the right answer for a photo taken in it. Boston has 119x the misplaced
+# hospital record's and 65x the North End's, and should swallow both.
+POP_DOMINANCE = 20
+URBAN_DENSITY_PER_KM2 = 2000
+
+
+def urban_radius_m(pop: int) -> float:
+    """How far a place of this population plausibly extends."""
+    if pop <= 0:
+        return 0.0
+    return 1000.0 * math.sqrt(pop / (math.pi * URBAN_DENSITY_PER_KM2))
+
 REGION_COUNTRIES = frozenset({
     "US", "CA", "AU", "BR", "MX", "IN", "RU", "CN", "AR",
 })
@@ -537,6 +568,22 @@ class Geocoder:
                 key=lambda rd: rd[1],
             )
             best, best_dist = scored[0]
+
+            # A city large enough to contain whatever is nearer, and close
+            # enough that you are plausibly inside it.
+            floor = max(1, POP_DOMINANCE * _int(best["pop"]))
+            dominant = [rd for rd in scored
+                        if _int(rd[0]["pop"]) >= floor
+                        and rd[1] <= urban_radius_m(_int(rd[0]["pop"]))]
+            # How built-up this spot is, which is not the same question as
+            # what to call it: naming Boston rather than the hospital 300 m
+            # away must not make the surroundings look like open country.
+            urban = (best_dist, _int(best["pop"]))
+
+            if dominant:
+                row, dist = max(dominant, key=lambda rd: _int(rd[0]["pop"]))
+                return row, dist, urban
+
             if self._has_place_codes and self._is_vague(best):
                 city = next(
                     (rd for rd in scored
@@ -544,9 +591,9 @@ class Geocoder:
                     None,
                 )
                 if city is not None:
-                    return city
-            return best, best_dist
-        return None, None      # mid-ocean, or a coordinate far from anywhere
+                    return city[0], city[1], urban
+            return best, best_dist, urban
+        return None, None, (None, 0)   # mid-ocean, or far from anywhere
 
     @staticmethod
     def _is_vague(row) -> bool:
@@ -607,7 +654,8 @@ class Geocoder:
         key = (round(lat, CACHE_PRECISION), round(lon, CACHE_PRECISION))
         if key in self._landmark_cache:
             return self._landmark_cache[key]
-        found = self._pick(self._landmark_candidates(lat, lon, None))
+        _, _, urban = self._nearest(lat, lon)
+        found = self._pick(self._landmark_candidates(lat, lon, urban[0], urban[1]))
         name = found[0]["name"] if found else None
         self._landmark_cache[key] = name
         return name
@@ -617,16 +665,18 @@ class Geocoder:
         key = (round(lat, CACHE_PRECISION), round(lon, CACHE_PRECISION))
         if key in self._cache:
             return self._cache[key]
-        row, dist = self._nearest(lat, lon)
+        row, dist, urban = self._nearest(lat, lon)
         result = None
         if row is not None:
-            result = self._describe_row(row, dist, lat, lon)
+            result = self._describe_row(row, dist, lat, lon, urban)
         self._cache[key] = result
         return result
 
-    def _describe_row(self, row, dist: float, lat: float, lon: float):
+    def _describe_row(self, row, dist: float, lat: float, lon: float, urban=None):
         pop = _int(row["pop"])
-        candidates = self._landmark_candidates(lat, lon, town_dist=dist, town_pop=pop)
+        urban_dist, urban_pop = urban if urban else (dist, pop)
+        candidates = self._landmark_candidates(
+            lat, lon, town_dist=urban_dist, town_pop=urban_pop)
         name, keep_town = None, True
 
         airports = [c for c in candidates if c[0]["code"] == "AIRP"]

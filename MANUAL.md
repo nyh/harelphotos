@@ -420,14 +420,28 @@ have heard of.
 
 ### A city, not one of its neighbourhoods
 
-GeoNames files Boston's North End as a "section of a populated place" — 10,131
-inhabitants, and 288 m nearer to a photo in Christopher Columbus Park than
-Boston itself. A traveller means Boston, so where the closest place is a section
-of somewhere, or has no recorded population at all, a real city within another
-kilometre and a half is preferred.
+Two things stop the nearest "populated place" being a poor answer.
 
-A village with people in it is still where you are: the rule only reaches past
-places that are not municipalities in their own right.
+**Neighbourhoods.** GeoNames files Boston's North End as a *section* of a
+populated place — 10,131 inhabitants, 288 m nearer to a photo in Christopher
+Columbus Park than Boston itself. Where the closest place is a section, or has
+no recorded population at all, a real city within another kilometre and a half
+is preferred.
+
+**Things that are not towns at all.** `cities500` also contains, for instance,
+"VA Boston Healthcare System, Brockton Campus" — recorded as a populated place
+of 5,474, and placed by GeoNames in downtown Boston although Brockton is thirty
+kilometres south. So a photo by the Charles was labelled with a hospital in the
+wrong city.
+
+Population settles that, with a guard. A place has to be **twenty times** the
+population of the nearest one *and* no further away than its own extent, which
+is estimated from that population at a typical urban density — about 10 km for
+a city of 650,000, 400 m for a village of 900. Boston beats the hospital record
+by 119× and is 600 m away, so it wins; Newton keeps its hands off Newton Upper
+Falls, a village with a name of its own, because 88,817 is only 11.7× of 7,579.
+A distant metropolis never reaches out to a village, because it fails the
+extent test.
 
 ### A note on regions
 

@@ -479,9 +479,13 @@ def test_the_download_cache_is_reported_and_removable(tmp_path):
 # ------------------------------------------------ a city, not its neighbourhood
 
 def test_a_city_is_named_rather_than_one_of_its_neighbourhoods(tmp_path):
-    """A photo in Boston read "Christopher Columbus Park, North End". GeoNames
-    files the North End as a section of a populated place -- 10,131 people,
-    288 m nearer than Boston itself -- and a traveller means Boston.
+    """A photo in Boston read "Christopher Columbus Park, North End".
+
+    Disqualified for *being a neighbourhood*: GeoNames files it as a "section
+    of a populated place", so a real city within another kilometre and a half
+    is preferred, even though the North End is 288 m nearer and has 10,131
+    inhabitants. Boston also happens to have 65x its population, which is a
+    second and independent reason, but the section is the first.
 
     Distances and populations from the real US dump.
     """
@@ -501,24 +505,6 @@ def test_a_city_is_named_rather_than_one_of_its_neighbourhoods(tmp_path):
 
     got = name_at(path, 42.3589889, -71.0506944)
     assert got == "Boston, Massachusetts, United States", got
-
-
-def test_a_real_small_town_is_not_swallowed_by_a_nearby_city(tmp_path):
-    """The rule must not reach for the nearest metropolis: a village with
-    people in it is where you are."""
-    path = tmp_path / "geonames.sqlite"
-    conn = sqlite3.connect(path)
-    conn.executescript(geonames.SCHEMA)
-    conn.executemany("INSERT INTO places VALUES (?,?,?,?,?,?,?)", [
-        ("Little Village", "US", "MA", 42.3600, -71.0507, 900, "PPL"),
-        ("Big City", "US", "MA", 42.3680, -71.0507, 653_833, "PPLA"),
-    ])
-    conn.execute("INSERT INTO countries VALUES ('US','United States')")
-    conn.execute("INSERT INTO admin1 VALUES ('US.MA','Massachusetts')")
-    conn.commit(); conn.close()
-
-    got = name_at(path, 42.3589889, -71.0506944)
-    assert got.startswith("Little Village"), got
 
 
 def test_an_older_dataset_without_codes_still_works(tmp_path):
@@ -566,3 +552,89 @@ def test_rebuilding_places_keeps_the_landmarks(tmp_path):
     assert c.execute(
         "SELECT value FROM meta WHERE key='landmark_codes'").fetchone()[0] == "abc123"
     c.close()
+
+
+def _places(tmp_path, rows):
+    path = tmp_path / "geonames.sqlite"
+    conn = sqlite3.connect(path)
+    conn.executescript(geonames.SCHEMA)
+    conn.executescript(geonames.LANDMARK_SCHEMA)
+    conn.executemany("INSERT INTO places VALUES (?,?,?,?,?,?,?)", rows)
+    conn.execute("INSERT INTO countries VALUES ('US','United States')")
+    conn.execute("INSERT INTO admin1 VALUES ('US.MA','Massachusetts')")
+    conn.commit(); conn.close()
+    return path
+
+
+def test_a_hospital_filed_as_a_town_loses_to_the_city(tmp_path):
+    """cities500 is not only towns. "VA Boston Healthcare System, Brockton
+    Campus" is recorded as a populated place of 5,474 and GeoNames puts it in
+    downtown Boston, though Brockton is thirty kilometres south -- so a photo
+    by the Charles was labelled with a hospital in the wrong city.
+
+    Boston has 119x its population and the photo is well inside Boston.
+    """
+    path = _places(tmp_path, [
+        ("VA Boston Healthcare System, Brockton Campus",
+         "US", "MA", 42.3664, -71.0634, 5474, "PPL"),          # 297 m
+        ("Boston", "US", "MA", 42.3692, -71.0634, 653_833, "PPLA"),   # 610 m
+    ])
+    got = name_at(path, 42.3637556, -71.0634139)
+    assert "Healthcare" not in got, got
+    assert got == "Boston, Massachusetts, United States", got
+
+
+def test_a_village_keeps_its_name_against_its_own_town(tmp_path):
+    """Newton has 11.7x the population of Newton Upper Falls, which is a
+    village with a name of its own and the right answer for a photo in it.
+    Boston beats a misplaced hospital record by 119x. The threshold has to sit
+    between those, which is why it is twenty rather than ten."""
+    path = _places(tmp_path, [
+        ("Newton Upper Falls", "US", "MA", 42.3173, -71.2262, 7579, "PPL"),
+        ("Newton Highlands", "US", "MA", 42.3336, -71.2262, 9976, "PPL"),
+        ("Newton", "US", "MA", 42.3400, -71.2262, 88_817, "PPLA"),
+    ])
+    got = name_at(path, 42.3119, -71.226175)
+    assert got.startswith("Newton Upper Falls"), got
+
+
+def test_a_distant_metropolis_does_not_reach_out_to_a_village(tmp_path):
+    """Dominance is not enough on its own: a place also has to be near enough
+    that you are plausibly inside it, which is estimated from its population.
+
+    This is what stops a village being swallowed. An earlier version of this
+    test put the metropolis 1.2 km from the village and expected the village to
+    win, which was a bad premise -- 1.2 km from the middle of a city of 653,833
+    means you are in that city, and the "village" is one of its neighbourhoods.
+    """
+    path = _places(tmp_path, [
+        ("Tiny Village", "US", "MA", 42.3119, -71.2262, 400, "PPL"),
+        # 653,833 people extend about 10 km; this is 30 km away.
+        ("Far Metropolis", "US", "MA", 42.5814, -71.2262, 653_833, "PPLA"),
+    ])
+    got = name_at(path, 42.3119, -71.226175)
+    assert got.startswith("Tiny Village"), got
+
+
+def test_naming_the_city_does_not_make_the_surroundings_look_rural(tmp_path):
+    """The area-shrink asks how built-up the spot is, which is not the same
+    question as what to call it. Keying it off the chosen name brought the
+    historic district back: Newton's centre is 3 km away, so the surroundings
+    looked like open country while the photo was in a suburb."""
+    path = tmp_path / "geonames.sqlite"
+    conn = sqlite3.connect(path)
+    conn.executescript(geonames.SCHEMA)
+    conn.executescript(geonames.LANDMARK_SCHEMA)
+    conn.executemany("INSERT INTO places VALUES (?,?,?,?,?,?,?)", [
+        ("Newton Upper Falls", "US", "MA", 42.3173, -71.2262, 7579, "PPL"),
+        ("Newton", "US", "MA", 42.3400, -71.2262, 88_817, "PPLA"),
+    ])
+    conn.executemany("INSERT INTO landmarks VALUES (?,?,?,?,?)", [
+        ("Newton Upper Falls Historic District", "US", "PRK", 42.3157, -71.2262),
+    ])
+    conn.execute("INSERT INTO countries VALUES ('US','United States')")
+    conn.execute("INSERT INTO admin1 VALUES ('US.MA','Massachusetts')")
+    conn.commit(); conn.close()
+
+    got = name_at(path, 42.3119, -71.226175)
+    assert "Historic District" not in got, got
