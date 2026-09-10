@@ -65,6 +65,12 @@ nothing exposed. The first scan is the slow part — it reads every photograph
 and encodes four sizes of each — but it is interruptible, resumable, and does
 not repeat work on later runs.
 
+`serve` is a development server, bound to the loopback address and with the
+login gate off, which is right for looking at your own photographs on your own
+machine and wrong for anything else. To run it properly — behind Apache with
+TLS, as a systemd service, with accounts and invitations — see
+[`INSTALL.md`](INSTALL.md).
+
 Place names are a separate, optional step, because they mean downloading a
 dataset:
 
@@ -78,10 +84,8 @@ harelphotos geocode --force     # ...and use them
 
 Both are offline afterwards. No coordinates are ever sent anywhere.
 
-[`MANUAL.md`](MANUAL.md) is the guide to everything: the commands, the
-`.album.toml` settings, access control, place names, accounts.
-[`INSTALL.md`](INSTALL.md) covers putting it on a real server — Apache, TLS,
-systemd, Google sign-in.
+[`MANUAL.md`](MANUAL.md) is the guide to everything else: the commands, the
+`.album.toml` settings, access control, covers, hiding a directory, accounts.
 
 ## How it works, briefly
 
