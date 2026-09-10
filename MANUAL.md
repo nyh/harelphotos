@@ -347,6 +347,17 @@ harelphotos init --landmarks
 harelphotos geocode --force      # apply them to photos already geocoded
 ```
 
+The download stays in `<state_dir>/geonames-cache/`, about 430 MB, so
+rebuilding the table does not fetch it again. That is worth having while you
+are still deciding which landmarks you want and worth reclaiming afterwards:
+
+```sh
+harelphotos gc --downloads
+```
+
+Place names already resolved are unaffected; only a future
+`init --geonames`/`--landmarks` has to download again.
+
 The dump is filtered **when the table is built**, so an upgrade that adds a
 kind of landmark needs the table rebuilt, not merely another `geocode`: the
 rows were never stored. Re-run `init --landmarks` — the download is cached, so

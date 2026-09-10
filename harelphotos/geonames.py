@@ -243,7 +243,7 @@ def _fetch(name: str, cache_dir: Path) -> bytes:
 
 def build(db_path: Path, cache_dir: Path | None = None, progress=None) -> int:
     """Download the dataset and build geonames.sqlite. Returns place count."""
-    cache_dir = cache_dir or db_path.parent / "geonames-cache"
+    cache_dir = cache_dir or cache_path(db_path)
     cities_zip = _fetch(CITIES_FILE, cache_dir)
     countries = _fetch(COUNTRY_FILE, cache_dir).decode("utf-8", "replace")
     admin1 = _fetch(ADMIN1_FILE, cache_dir).decode("utf-8", "replace")
@@ -301,6 +301,25 @@ def build(db_path: Path, cache_dir: Path | None = None, progress=None) -> int:
     return len(rows)
 
 
+def cache_path(db_path: Path) -> Path:
+    """Where the downloaded dumps are kept.
+
+    Kept rather than discarded because the landmark table is filtered at build
+    time, so changing which kinds of thing are collected means rebuilding it --
+    and re-downloading 421 MB to do that would be absurd. It is also 421 MB
+    sitting there once you have stopped changing your mind, which is what
+    `gc --downloads` is for.
+    """
+    return db_path.parent / "geonames-cache"
+
+
+def cache_size(db_path: Path) -> int:
+    d = cache_path(db_path)
+    if not d.is_dir():
+        return 0
+    return sum(p.stat().st_size for p in d.rglob("*") if p.is_file())
+
+
 def build_landmarks(db_path: Path, cache_dir: Path | None = None, progress=None) -> int:
     """Add the landmark table to an existing geonames.sqlite.
 
@@ -313,7 +332,7 @@ def build_landmarks(db_path: Path, cache_dir: Path | None = None, progress=None)
     Streaming rather than reading it in: the machine this runs on has a
     gigabyte of memory.
     """
-    cache_dir = cache_dir or db_path.parent / "geonames-cache"
+    cache_dir = cache_dir or cache_path(db_path)
     if not db_path.exists():
         raise GeonamesError(
             f"{db_path} not found — run 'harelphotos init --geonames' first"

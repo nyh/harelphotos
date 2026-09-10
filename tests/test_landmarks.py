@@ -461,3 +461,16 @@ def test_broadcast_masts_are_not_landmarks(db):
     # The things a traveller does recognise are still there.
     for wanted in ("MNMT", "CSTL", "LTHSE", "DAM", "MALL", "AIRP"):
         assert wanted in geonames.LANDMARK_CODES, wanted
+
+
+def test_the_download_cache_is_reported_and_removable(tmp_path):
+    """421 MB is worth keeping while you are still deciding which landmarks
+    you want, and worth reclaiming afterwards."""
+    db = tmp_path / "state" / "geonames.sqlite"
+    cache = geonames.cache_path(db)
+    assert cache == tmp_path / "state" / "geonames-cache"
+    assert geonames.cache_size(db) == 0          # nothing downloaded yet
+
+    cache.mkdir(parents=True)
+    (cache / "allCountries.zip").write_bytes(b"x" * 5000)
+    assert geonames.cache_size(db) == 5000

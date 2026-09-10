@@ -52,6 +52,12 @@ def cmd_init(args: argparse.Namespace) -> int:
         n = geonames.build_landmarks(dest, progress=lambda m: print(f"  {m}"))
         print(f"kept {n:,} landmarks in {dest} "
               f"({dest.stat().st_size / 1e6:.0f} MB)")
+        cached = geonames.cache_size(dest)
+        if cached:
+            print(f"\nThe download is cached in {geonames.cache_path(dest)}\n"
+                  f"({cached / 1e6:.0f} MB), so rebuilding the table does not\n"
+                  f"fetch it again. Reclaim it with 'harelphotos gc --downloads'\n"
+                  f"once you have settled on which landmarks you want.")
         print("Run 'harelphotos geocode --force' to apply them to photos\n"
               "that already have a place name.")
         print("Data from GeoNames (https://www.geonames.org/), CC BY 4.0.")
@@ -562,6 +568,24 @@ def cmd_sync(args: argparse.Namespace) -> int:
 
 def cmd_gc(args: argparse.Namespace) -> int:
     cfg = _load_config(args)
+    if args.downloads:
+        # The place-name dumps. Not part of the derived tree, and not
+        # rebuildable from anything local -- removing them means the next
+        # `init --landmarks` downloads 421 MB again.
+        path = geonames.cache_path(cfg.state_dir / "geonames.sqlite")
+        size = geonames.cache_size(cfg.state_dir / "geonames.sqlite")
+        if not size:
+            print("no cached downloads")
+        elif args.dry_run:
+            print(f"would remove {path} ({size / 1e6:.0f} MB)")
+        else:
+            import shutil as _shutil
+
+            _shutil.rmtree(path, ignore_errors=True)
+            print(f"removed {path} ({size / 1e6:.0f} MB reclaimed)")
+            print("The place names already resolved are unaffected; only a\n"
+                  "future 'init --geonames/--landmarks' has to download again.")
+        return 0
     conn = db.open_index(cfg.index_db, read_only=True)
     r = maintenance.collect(cfg, conn, deep=args.deep, dry_run=args.dry_run)
     what = "would remove" if args.dry_run else "removed"
@@ -833,6 +857,8 @@ def build_parser() -> argparse.ArgumentParser:
     pgc = sub.add_parser("gc", help="remove derivatives with no matching photo")
     pgc.add_argument("--deep", action="store_true", help="walk the whole derived tree")
     pgc.add_argument("--dry-run", action="store_true", help="report, delete nothing")
+    pgc.add_argument("--downloads", action="store_true",
+                     help="remove the cached GeoNames downloads (~430 MB)")
     pgc.set_defaults(func=cmd_gc)
 
     pst = sub.add_parser("stats", help="counts and derived-tree size")
