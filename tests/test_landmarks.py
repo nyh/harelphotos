@@ -2,7 +2,7 @@
 
 **Getting the town right matters more than getting the landmark right.** A
 photograph labelled with the wrong city, or with a hospital record or a
-neighbourhood in place of one, is a bad answer; a correct city with a garden or
+neighborhood in place of one, is a bad answer; a correct city with a garden or
 a marker also mentioned is a slightly noisy one. So the tests below that assert
 a *town* -- Boston rather than "North End" or "VA Boston Healthcare System",
 Newton Upper Falls rather than Newton -- are the ones to keep working, and the
@@ -96,7 +96,7 @@ def test_a_landmark_kilometres_away_is_not_claimed(db):
 def test_a_city_photo_is_not_hijacked_by_a_park_it_is_merely_near(db):
     """A kilometre from the park, still in the city: the park has not earned
     a mention."""
-    got = name_at(db, 32.0100, 34.0000)      # ~900 m from the park's centre
+    got = name_at(db, 32.0100, 34.0000)      # ~900 m from the park's center
     assert "Central Park" not in got
     assert got.startswith("Bigtown"), got
 
@@ -133,7 +133,7 @@ def test_an_airport_gets_a_far_wider_radius_than_a_museum(db):
     """A kilometre from a museum is not at the museum; a kilometre from an
     airport is in the middle of one."""
     # 2.5 km, not more: an airport overrides the town outright, so a bigger
-    # circle around a city airport would swallow the neighbourhoods beside it.
+    # circle around a city airport would swallow the neighborhoods beside it.
     assert 2000 < geonames.LANDMARK_RADII_M["AIRP"] <= 3000
     assert geonames.LANDMARK_RADII_M["MUS"] < 1000
 
@@ -234,7 +234,7 @@ def test_a_park_out_in_the_open_keeps_its_generous_radius(tmp_path):
 
 def test_a_resort_beats_the_hamlet_inside_it(tmp_path):
     """Bay Lake, population 50, sits inside Walt Disney World 1.6 km nearer
-    than the resort's own centre. A tourist there means the resort."""
+    than the resort's own center. A tourist there means the resort."""
     path = _world(
         tmp_path,
         [("Bay Lake", "US", "FL", 28.3891, -81.5639, 50)],          # 429 m
@@ -350,7 +350,7 @@ def test_a_small_fairground_does_not_reach_across_a_city(tmp_path):
 
 
 def test_a_huge_resort_keeps_its_reach_because_its_neighbour_is_tiny(tmp_path):
-    """The same code, the opposite answer, and the neighbourhood is what tells
+    """The same code, the opposite answer, and the neighborhood is what tells
     them apart: Disney's nearest town is a company town of fifty people."""
     path = _world(
         tmp_path,
@@ -422,7 +422,7 @@ def test_a_table_built_with_an_older_code_list_says_so(tmp_path):
     """The table is filtered when it is built, so a feature code added later
     was never stored -- and re-running `geocode` cannot conjure rows the build
     discarded. That bit once: MALL was added to the allowlist and a photo taken
-    inside a shopping centre went on naming a pond."""
+    inside a shopping center went on naming a pond."""
     path = tmp_path / "geonames.sqlite"
     conn = sqlite3.connect(path)
     conn.executescript(geonames.SCHEMA)
@@ -470,7 +470,7 @@ def test_broadcast_masts_are_not_landmarks(db):
     famous is lost: the Eiffel Tower is filed as MNMT, and TOWR in France is
     235 old stone towers."""
     assert "TOWR" not in geonames.LANDMARK_CODES
-    # The things a traveller does recognise are still there.
+    # The things a traveller does recognize are still there.
     for wanted in ("MNMT", "CSTL", "LTHSE", "DAM", "MALL", "AIRP"):
         assert wanted in geonames.LANDMARK_CODES, wanted
 
@@ -488,12 +488,12 @@ def test_the_download_cache_is_reported_and_removable(tmp_path):
     assert geonames.cache_size(db) == 5000
 
 
-# ------------------------------------------------ a city, not its neighbourhood
+# ------------------------------------------------ a city, not its neighborhood
 
 def test_a_city_is_named_rather_than_one_of_its_neighbourhoods(tmp_path):
     """A photo in Boston read "Christopher Columbus Park, North End".
 
-    Disqualified for *being a neighbourhood*: GeoNames files it as a "section
+    Disqualified for *being a neighborhood*: GeoNames files it as a "section
     of a populated place", so a real city within another kilometre and a half
     is preferred, even though the North End is 288 m nearer and has 10,131
     inhabitants. Boston also happens to have 65x its population, which is a
@@ -617,7 +617,7 @@ def test_a_distant_metropolis_does_not_reach_out_to_a_village(tmp_path):
     This is what stops a village being swallowed. An earlier version of this
     test put the metropolis 1.2 km from the village and expected the village to
     win, which was a bad premise -- 1.2 km from the middle of a city of 653,833
-    means you are in that city, and the "village" is one of its neighbourhoods.
+    means you are in that city, and the "village" is one of its neighborhoods.
     """
     path = _places(tmp_path, [
         ("Tiny Village", "US", "MA", 42.3119, -71.2262, 400, "PPL"),
@@ -631,7 +631,7 @@ def test_a_distant_metropolis_does_not_reach_out_to_a_village(tmp_path):
 def test_naming_the_city_does_not_make_the_surroundings_look_rural(tmp_path):
     """The area-shrink asks how built-up the spot is, which is not the same
     question as what to call it. Keying it off the chosen name brought the
-    historic district back: Newton's centre is 3 km away, so the surroundings
+    historic district back: Newton's center is 3 km away, so the surroundings
     looked like open country while the photo was in a suburb."""
     path = tmp_path / "geonames.sqlite"
     conn = sqlite3.connect(path)

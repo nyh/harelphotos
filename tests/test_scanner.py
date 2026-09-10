@@ -202,7 +202,7 @@ def test_touching_every_file_re_reads_but_regenerates_nothing(tree):
 def test_changing_bytes_is_detected(tree):
     cfg, conn, photos = tree
     scanner.scan(cfg, conn)
-    fixtures.make_jpeg(photos / "2019" / "01" / "a.jpg", size=(80, 60), colour=(10, 200, 30))
+    fixtures.make_jpeg(photos / "2019" / "01" / "a.jpg", size=(80, 60), color=(10, 200, 30))
     stats = scanner.scan(cfg, conn)
     assert stats.photos_changed == 1
     row = conn.execute("SELECT * FROM photos WHERE name = 'a.jpg'").fetchone()

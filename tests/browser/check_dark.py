@@ -1,4 +1,4 @@
-"""Check both colour schemes in a real browser.
+"""Check both color schemes in a real browser.
 
     pip install websocket-client pillow      # neither is a runtime dependency
     harelphotos serve --port 5090

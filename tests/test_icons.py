@@ -24,14 +24,14 @@ from harelphotos.web import create_app
 from . import fixtures
 
 
-def _logo(path, size=48, colour=(231, 76, 60, 255)):
+def _logo(path, size=48, color=(231, 76, 60, 255)):
     """A square logo with transparent corners, like a real one."""
     im = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     for y in range(size):
         for x in range(size):
             # A blunt rounded rectangle: the corners stay fully transparent.
             if 4 <= x < size - 4 or 4 <= y < size - 4:
-                im.putpixel((x, y), colour)
+                im.putpixel((x, y), color)
     im.save(path)
     return path
 
@@ -66,12 +66,12 @@ def test_transparency_survives_except_for_ios(site):
     """The corners must stay transparent -- with one deliberate exception.
 
     `build_icons` used to convert to RGB before resizing, which discards the
-    alpha channel and leaves the stored colour behind. The stored colour under
+    alpha channel and leaves the stored color behind. The stored color under
     a transparent corner is black, so a logo with rounded corners became an
     opaque black tile with a picture in the middle.
 
     The 180 is flattened onto white on purpose: iOS composites an
-    apple-touch-icon onto black rather than honouring alpha, so a transparent
+    apple-touch-icon onto black rather than honoring alpha, so a transparent
     one would come out as that same black tile on an iPhone's home screen.
     """
     pa.build_icons(site)
@@ -95,7 +95,7 @@ def test_changing_the_icon_rebuilds_it(site, tmp_path):
     pa.build_icons(site)
     assert pa.build_icons(site) == []                  # nothing to redo
 
-    other = _logo(tmp_path / "blue.png", colour=(0, 128, 255, 255))
+    other = _logo(tmp_path / "blue.png", color=(0, 128, 255, 255))
     changed = replace(site, ui=replace(site.ui, icon=other))
     assert pa.build_icons(changed)                     # noticed
     middle = Image.open(pa.public_dir(changed) / "icon-192.png").convert("RGBA")
@@ -172,7 +172,7 @@ def test_changing_the_icon_changes_every_url(site, tmp_path):
     assert f"?v={before}" in _client(site).get("/a/").get_data(as_text=True)
 
     changed = replace(site, ui=replace(
-        site.ui, icon=_logo(tmp_path / "blue.png", colour=(0, 128, 255, 255))))
+        site.ui, icon=_logo(tmp_path / "blue.png", color=(0, 128, 255, 255))))
     pa.build_icons(changed)
     after = pa.asset_tag(changed)
     assert after != before

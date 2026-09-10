@@ -59,7 +59,7 @@ def cmd_init(args: argparse.Namespace) -> int:
                   f"({dest.stat().st_size / 1e6:.0f} MB)")
 
         if args.landmarks:
-            print("\nLandmarks name airports, parks, monuments, shopping centres\n"
+            print("\nLandmarks name airports, parks, monuments, shopping centers\n"
                   "and the like, on top of the town. This downloads GeoNames'\n"
                   "worldwide dump -- about 421 MB, cached so a rebuild does not\n"
                   "fetch it again -- and keeps the part of it that is a landmark:\n"
@@ -393,10 +393,10 @@ def cmd_geocode(args: argparse.Namespace) -> int:
     print(stats.summary())
     if stats.places_stale:
         # Without the feature code we cannot tell a city from one of its own
-        # neighbourhoods, and photographs in Boston come out labelled "North
+        # neighborhoods, and photographs in Boston come out labelled "North
         # End". Rebuilding keeps the landmarks; only the 14 MB is re-fetched.
         print("\nNOTE: the place dataset predates this version and cannot tell\n"
-              "      a city from one of its neighbourhoods. Re-run\n"
+              "      a city from one of its neighborhoods. Re-run\n"
               "      'harelphotos init --geonames' (14 MB; your landmarks are\n"
               "      kept), then geocode again.", file=sys.stderr)
     if stats.landmarks_stale:

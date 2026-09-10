@@ -299,7 +299,7 @@
       window.location.href = nav.album;
     }
 
-    // Fetch the neighbouring photos while this one is being looked at.
+    // Fetch the neighboring photos while this one is being looked at.
     //
     // Paging is a page load, so without this every arrow press waits a full
     // round trip for an image that could have been fetched during the seconds
@@ -435,7 +435,7 @@
     function clamp() {
       var box = pictureBox();
       // How far the scaled picture overflows the element, each way. With
-      // nothing to spare the picture stays centred, which is why this is
+      // nothing to spare the picture stays centered, which is why this is
       // max(0, ...) rather than an absolute value.
       var mx = Math.max(0, (box.w * scale - img.clientWidth) / 2);
       var my = Math.max(0, (box.h * scale - img.clientHeight) / 2);
@@ -502,7 +502,7 @@
     function zoomTo(next, cx, cy) {
       next = Math.min(MAX_SCALE, Math.max(1, next));
       var r = img.getBoundingClientRect();
-      // Where the anchor sits relative to the element's centre, in the
+      // Where the anchor sits relative to the element's center, in the
       // untransformed coordinate space.
       var ox = (cx - (r.left + r.width / 2) - tx) / scale;
       var oy = (cy - (r.top + r.height / 2) - ty) / scale;
@@ -514,7 +514,7 @@
 
     function reset(animate) { scale = 1; tx = 0; ty = 0; apply(animate); }
 
-    function centre(a, b) {
+    function center(a, b) {
       return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
     }
     function spread(a, b) {
@@ -532,7 +532,7 @@
         // A second finger: stop whatever the first was doing and start a
         // pinch from wherever the picture currently sits.
         panning = false;
-        var c = centre(two[0], two[1]);
+        var c = center(two[0], two[1]);
         pinch = { dist: spread(two[0], two[1]) || 1, cx: c.x, cy: c.y,
                   scale: scale, tx: tx, ty: ty };
         return;

@@ -32,12 +32,12 @@ def make_jpeg(
     size: tuple[int, int] = DEFAULT_SIZE,
     taken: str | None = None,
     orientation: int | None = None,
-    colour: tuple[int, int, int] = (120, 90, 60),
+    color: tuple[int, int, int] = (120, 90, 60),
     gps: tuple[float, float] | None = None,
 ) -> Path:
     """Write a tiny JPEG, optionally with EXIF."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    im = Image.new("RGB", size, colour)
+    im = Image.new("RGB", size, color)
     exif = im.getexif()
     if taken:
         exif[36867] = taken            # DateTimeOriginal lives in the Exif IFD

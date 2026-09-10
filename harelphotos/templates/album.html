@@ -79,7 +79,7 @@
                  height="{{ sub.cover.size_at(512)[1] }}"
                  {# No `decoding="async"`: see the note on the grid image below. #}
                  loading="lazy"
-                 style="background: {{ sub.cover.colour }}" alt="">{% endif %}
+                 style="background: {{ sub.cover.color }}" alt="">{% endif %}
           {% else %}
             <div class="card-blank" aria-hidden="true">🗀</div>
           {% endif %}
@@ -89,7 +89,7 @@
           <span class="card-sub">
             {{ "{:,}".format(sub.n_photos_rec) }} photo{{ '' if sub.n_photos_rec == 1 else 's' }}
             {#- The album's own header still shows its dates; this is only the
-                card in a listing, where on a date-organised tree it repeats the
+                card in a listing, where on a date-organized tree it repeats the
                 folder name and clutters the page (`[ui] dir_card_dates`). -#}
             {%- if cfg.ui.dir_card_dates and sub|date_span %} · {{ sub|date_span }}{% endif -%}
           </span>
@@ -120,13 +120,13 @@
                 images stayed blank until the card was touched or the phone
                 rotated -- at which point they appeared instantly, so the bytes
                 were decoded and in memory all along and only the paint was
-                missing. `async` grants exactly the licence to present an image
+                missing. `async` grants exactly the license to present an image
                 late, and the default `auto` leaves the choice to the browser
                 without promising it may skip a frame. It bought us nothing
                 measurable here: these images arrive long after first paint, so
                 there was never a decode blocking the main thread to avoid. #}
              loading="lazy"
-             style="background: {{ p.colour }}"
+             style="background: {{ p.color }}"
              alt="{{ p.title or p.name }}">
         {%- endif %}
       </a>

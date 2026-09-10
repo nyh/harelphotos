@@ -22,7 +22,7 @@
   --line: #e2e2e2;
   --card: #f6f6f6;
   --accent: #2d6cdf;
-  /* Text on an accent-coloured button. White fails on the lighter accent the
+  /* Text on an accent-colored button. White fails on the lighter accent the
      dark scheme uses -- 2.53:1, against the 4.5:1 that ordinary text needs --
      so the dark scheme puts dark text on it instead, at 6.79:1. */
   --on-accent: #ffffff;
@@ -173,7 +173,7 @@ h2.section:first-child { margin-block-start: 0.25rem; }
   color: var(--dim);
 }
 
-/* Fixed height, so one long album name cannot shove its neighbours out of
+/* Fixed height, so one long album name cannot shove its neighbors out of
  * alignment. */
 .card-text {
   display: flex;
@@ -286,8 +286,8 @@ h2.section:first-child { margin-block-start: 0.25rem; }
   inline-size: calc(100% - 1rem);
   block-size: calc(100% - 1rem);
   object-fit: contain;
-  /* Zoom is a transform on this element, applied from its centre so that the
-     arithmetic in app.js -- which measures the anchor point from the centre --
+  /* Zoom is a transform on this element, applied from its center so that the
+     arithmetic in app.js -- which measures the anchor point from the center --
      and the rendering agree. `will-change` keeps the picture on its own layer,
      so a pinch moves it without repainting the page under it. */
   transform-origin: center center;

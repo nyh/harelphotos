@@ -87,7 +87,7 @@ def fit(im: Image.Image, target: int) -> Image.Image:
 
 
 def dominant_colour(im: Image.Image) -> str:
-    """A single colour to sit behind a lazy-loading thumbnail."""
+    """A single color to sit behind a lazy-loading thumbnail."""
     try:
         r, g, b = im.convert("RGB").resize((1, 1), Image.LANCZOS).getpixel((0, 0))
         return f"#{r:02x}{g:02x}{b:02x}"
@@ -181,7 +181,7 @@ def save_atomic(im: Image.Image, path: Path, cfg: Config, tier: int) -> int:
 @dataclass
 class DeriveResult:
     tiers: list[int] = field(default_factory=list)
-    colour: str | None = None
+    color: str | None = None
     bytes_written: int = 0
     error: str | None = None
 
@@ -236,7 +236,7 @@ def derive(
             if only is not None and px not in only:
                 out.tiers.append(px)       # already on disk and still current
                 if px == tiers[-1]:
-                    out.colour = dominant_colour(shaped)
+                    out.color = dominant_colour(shaped)
                 continue
             dest = derived_path(cfg, px, relpath)
             written = save_atomic(shaped, dest, cfg, px)
@@ -248,13 +248,13 @@ def derive(
                 out.bytes_written += written
                 out.tiers.append(px)
             if px == tiers[-1]:
-                out.colour = dominant_colour(shaped)
+                out.color = dominant_colour(shaped)
     except Exception as e:
         out.error = f"cannot encode: {e}"
         return out
 
-    if out.colour is None:
-        out.colour = dominant_colour(cur)
+    if out.color is None:
+        out.color = dominant_colour(cur)
     return out
 
 

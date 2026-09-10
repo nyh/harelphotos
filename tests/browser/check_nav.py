@@ -196,7 +196,7 @@ def main():
               f"{restored}" + ("" if restored
                                else "  (opportunistic; the browser may decline)"))
 
-        # The neighbouring photo must be fetched while this one is on screen,
+        # The neighboring photo must be fetched while this one is on screen,
         # or every arrow press waits a full round trip for an image that could
         # have been loaded during the seconds you spent looking at the last one.
         b.goto(URL)

@@ -217,7 +217,7 @@ def _phase3_worker(job: tuple[int, str, str, "Config", set]) -> dict:
     return {
         "id": photo_id,
         "tiers": res.tiers,
-        "colour": res.colour,
+        "color": res.color,
         "bytes": res.bytes_written,
         "error": res.error,
     }
@@ -694,7 +694,7 @@ class Scanner:
                     (
                         derive.deriv_key(sigs.get(res["id"]), self.cfg),
                         json.dumps(res["tiers"]),
-                        res["colour"],
+                        res["color"],
                         res["id"],
                     ),
                 )

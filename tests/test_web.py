@@ -407,7 +407,7 @@ def test_a_photo_with_no_worthwhile_derivative_uses_its_original(tmp_path):
     """The case /i/orig/ exists for.
 
     A photo can end up with no derivatives legitimately: re-encoding something
-    very small can produce a *larger* file, which is then discarded in favour
+    very small can produce a *larger* file, which is then discarded in favor
     of the original. The distinguishing mark is that deriv_key is set — the
     scan did look at it and decided — unlike a pending photo, where it is NULL.
     """
@@ -434,7 +434,7 @@ def test_a_photo_with_no_worthwhile_derivative_uses_its_original(tmp_path):
 def test_a_filename_with_a_space_works_everywhere(client):
     """A space breaks `srcset`, where whitespace separates URL from descriptor.
 
-    One photo called "zPic 4.jpg" rendered as a grey box because of this, and
+    One photo called "zPic 4.jpg" rendered as a gray box because of this, and
     107 photos in the real collection have a space in the name.
     """
     import re
@@ -707,7 +707,7 @@ def test_the_landing_image_keeps_its_aspect_ratio(scanned, tmp_path):
 def test_icons_crop_rather_than_squash(scanned, tmp_path):
     """Square is unavoidable for an icon, but a squashed face is not.
 
-    The source is half red and half blue down the middle; a centre-crop keeps
+    The source is half red and half blue down the middle; a center-crop keeps
     both halves in the same proportion, a squash would too -- so this checks
     the geometry instead: a circle must stay circular.
     """
@@ -724,11 +724,11 @@ def test_icons_crop_rather_than_squash(scanned, tmp_path):
     public_assets.build_icons(scanned, force=True)
 
     with Image.open(public_assets.public_dir(scanned) / "icon-192.png") as out:
-        grey = out.convert("L")
+        gray = out.convert("L")
         # The bounding box of the dark pixels, not a chord through the middle:
-        # the circle is not centred in the source, so a row through the centre
+        # the circle is not centered in the source, so a row through the center
         # of the *output* would cut a short chord and look like distortion.
-        dark = grey.point(lambda v: 255 if v < 128 else 0)
+        dark = gray.point(lambda v: 255 if v < 128 else 0)
         box = dark.getbbox()
         assert box, "the circle vanished"
         wide, tall = box[2] - box[0], box[3] - box[1]
@@ -883,7 +883,7 @@ def test_a_photo_links_back_to_its_own_page_of_the_album(scanned, tmp_path):
 
 
 def test_subdirectory_cards_can_omit_the_date_range(scanned):
-    """On a tree already organised by date the card repeats the folder name,
+    """On a tree already organized by date the card repeats the folder name,
     and less accurately: one photo with a wrong clock widens the range."""
     from harelphotos.web import create_app
 

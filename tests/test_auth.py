@@ -492,7 +492,7 @@ def test_the_session_cookie_is_not_resent_on_every_response(client):
     touched the session, and the access check always does -- so the cookie
     value is part of the browser's cache key. Flask's default re-signs the
     cookie on every response, giving it a fresh value each time and
-    invalidating the entire grid. Invisible on localhost; seconds of grey
+    invalidating the entire grid. Invisible on localhost; seconds of gray
     placeholders over a real network on every back-navigation.
     """
     login(client)

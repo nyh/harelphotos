@@ -41,11 +41,11 @@ STEM = "landing"
 ICON_STEM = "icon"
 ICON_SIZES = (32, 180, 192, 512)
 
-# iOS composites an apple-touch-icon onto black instead of honouring its alpha
+# iOS composites an apple-touch-icon onto black instead of honoring its alpha
 # channel, so a logo with transparent corners becomes a black tile with a
 # picture in the middle. That one size is flattened onto white; every other
 # keeps its transparency, which is what lets the favicon sit on a light or a
-# dark tab strip and the heading emblem on either colour scheme.
+# dark tab strip and the heading emblem on either color scheme.
 OPAQUE_ICON_SIZES = frozenset({180})
 OPAQUE_ICON_BACKGROUND = (255, 255, 255)
 
@@ -142,7 +142,7 @@ def _icon_stamp(src: Path) -> str:
 def _resize_square(im: Image.Image, size: int) -> Image.Image:
     """Scale a square RGBA image.
 
-    LANCZOS both up and down. A 48px flat-colour logo blown up to 512 is soft,
+    LANCZOS both up and down. A 48px flat-color logo blown up to 512 is soft,
     but it is smooth, and the alternative -- NEAREST -- keeps the edges hard
     and turns every curve into a staircase, which looks worse at every size
     anyone actually sees. Android draws the 192 on a launcher; the 512 is for
@@ -150,18 +150,18 @@ def _resize_square(im: Image.Image, size: int) -> Image.Image:
 
     Resizing RGBA directly, and deliberately. A transparent pixel is
     (0, 0, 0, 0) -- black -- and resampling averages that black into its
-    neighbours, so the textbook advice is to bleed colour outwards first, or
-    to premultiply. Measured on this icon, the raw colour channel does darken
+    neighbors, so the textbook advice is to bleed color outwards first, or
+    to premultiply. Measured on this icon, the raw color channel does darken
     at the edge, from (231, 76, 60) to (187, 54, 41). It makes no visible
     difference: composited over white, the two methods differ by 2 units of
-    luminance out of 255, because the pixels whose colour was darkened are
+    luminance out of 255, because the pixels whose color was darkened are
     exactly the ones with almost no alpha. Fifty lines of per-pixel Python
     were written for this and thrown away; do not put them back without a
     picture that looks wrong.
 
     The one thing that really did matter is keeping the alpha channel at all.
     This used to `convert("RGB")` first, which discards it and leaves the
-    stored colour behind -- and the stored colour under a transparent corner
+    stored color behind -- and the stored color under a transparent corner
     is black, so a logo with rounded corners became an opaque black tile with
     a picture in the middle.
     """
@@ -171,7 +171,7 @@ def _resize_square(im: Image.Image, size: int) -> Image.Image:
 def build_icons(cfg: Config, force: bool = False) -> list[str]:
     """The album's icon in every size that gets asked for.
 
-    Centre-cropped rather than letterboxed if the source is not square: an
+    Center-cropped rather than letterboxed if the source is not square: an
     icon is displayed as a square whatever we do, and padding it just makes the
     picture smaller. With no source configured there is no icon at all, the
     manifest omits them and the pages omit the links, which browsers accept.

@@ -1,4 +1,4 @@
-"""Check the album/photo scroll behaviour in a real browser.
+"""Check the album/photo scroll behavior in a real browser.
 
 Not part of the pytest suite: it needs Chrome and takes half a minute. Run it
 by hand after touching app.js or the templates.
@@ -6,7 +6,7 @@ by hand after touching app.js or the templates.
     harelphotos serve --port 5090 &
     python tests/browser/check_scroll.py http://127.0.0.1:5090/a/some-album/
 
-It exists because this behaviour cannot be checked any other way, and two
+It exists because this behavior cannot be checked any other way, and two
 attempts to fix it by reasoning were both wrong: the first depended on
 document.referrer, which is always empty here because the site sends
 Referrer-Policy: no-referrer.

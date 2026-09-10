@@ -48,7 +48,7 @@ ALL_FILE = "allCountries.zip"          # 421 MB, 13.5 M rows; landmarks only
 LANDMARK_RADII_M = {
     # Travel. Large, and where a holiday actually passes through.
     # 2.5 km, not more: it now overrides the town outright, and a bigger
-    # circle around a city airport would swallow the neighbourhoods beside it.
+    # circle around a city airport would swallow the neighborhoods beside it.
     # Measured: 2.03 km from the middle of Boston Logan while in its terminal,
     # 1.77 km from Ben Gurion's while in that one.
     "AIRP": 2500, "PRT": 3000, "MAR": 1500, "RSTN": 400,
@@ -65,7 +65,7 @@ LANDMARK_RADII_M = {
     # work. Nothing famous is lost: the Eiffel Tower is filed as MNMT, and TOWR
     # in France is 235 old stone towers.
     "DAM": 120, "BDG": 150, "LTHSE": 150,
-    # A shopping centre is a place a holiday actually spends an afternoon, and
+    # A shopping center is a place a holiday actually spends an afternoon, and
     # you are inside one or you are not. Found while looking at why a photo
     # taken in a shop was captioned with a pond: the mall was 54 m away and not
     # in the list at all.
@@ -82,7 +82,7 @@ LANDMARK_RADII_M = {
     "PK": 1000, "MT": 1500, "CAPE": 1500, "VLC": 2500,
 
     # Areas you are plausibly inside.
-    # A pond you are standing at, not one across the neighbourhood. The
+    # A pond you are standing at, not one across the neighborhood. The
     # recorded point is the centroid, which for a small pond is the pond and
     # for a great lake is open water no photograph is taken from, so a wide
     # radius here buys nothing and cost a shop photo its name.
@@ -94,7 +94,7 @@ LANDMARK_CODES = frozenset(LANDMARK_RADII_M)
 
 # Area features whose generous radius only holds out in the open.
 #
-# GeoNames files a national park and a neighbourhood ballfield under the same
+# GeoNames files a national park and a neighborhood ballfield under the same
 # code, PRK, with nothing to tell them apart -- and in the United States it
 # files National Register "historic districts" there too. So a photo taken
 # indoors was captioned "Newton Upper Falls Historic District", 426 m away,
@@ -109,9 +109,9 @@ LANDMARK_CODES = frozenset(LANDMARK_RADII_M)
 # Florida. Nor AIRP, for the same reason -- that is the whole point of it.
 # AMUS belongs here for the same reason PRK does: it covers Walt Disney World,
 # a hundred square kilometres, and Tel Aviv's Luna Park, a hundred metres
-# across. What separates them is not the code but the neighbourhood -- so the
+# across. What separates them is not the code but the neighborhood -- so the
 # shrink applies only when a town of real size is close by. Disney's nearest
-# neighbour is a company town of fifty people; Luna Park's is a city of
+# neighbor is a company town of fifty people; Luna Park's is a city of
 # 432,000, and a fairground does not get to displace that city from two
 # kilometres away.
 AREA_SHRINK_CODES = frozenset({
@@ -127,12 +127,12 @@ AREA_SHRUNK_M = 250
 # photograph was taken: a tourist at Ben Gurion Airport is in the airport, not
 # in the moshav 200 m nearer, and a photograph at Walt Disney World is not in
 # Bay Lake, population 50, which happens to sit inside the resort 1.6 km closer
-# than the resort's own centre. So these beat a small town whatever the
+# than the resort's own center. So these beat a small town whatever the
 # distances say, as long as you are within their radius at all.
 DESTINATION_CODES = frozenset({"AIRP", "AMUS", "PRT"})
 
 # The known cost of the airport rule, accepted deliberately: a 2.5 km circle
-# around a city airport covers the neighbourhoods beside it, so a photo taken
+# around a city airport covers the neighborhoods beside it, so a photo taken
 # in the city near one is labelled with the airport. Reported and left alone --
 # being inside the airport is much the commoner case for a traveller, which is
 # the whole reason the rule exists.
@@ -149,7 +149,7 @@ def codes_fingerprint() -> str:
 
     The table is filtered at build time, so adding a feature code does nothing
     for a collection that already built one -- the rows were never kept. That
-    bit once already: a shopping centre was added to the list, and a photo
+    bit once already: a shopping center was added to the list, and a photo
     taken inside one went on naming a pond, because re-running `geocode` cannot
     conjure rows the build discarded.
     """
@@ -186,7 +186,7 @@ LANDMARK_INSIDE_M = 750
 # "Sedona, Arizona, United States" is how people actually say it, and the
 # country alone would be uselessly vague. So the region is printed only where
 # it does that work.
-# "Section of a populated place" -- a neighbourhood, not a town. GeoNames files
+# "Section of a populated place" -- a neighborhood, not a town. GeoNames files
 # Boston's North End as one, with 10,131 inhabitants, 288 m nearer than Boston
 # itself. A traveller means Boston: they have heard of it, and the city is what
 # places the photograph.
@@ -202,7 +202,7 @@ CITY_SLACK_M = 1500
 # `cities500` is not only towns. "VA Boston Healthcare System, Brockton
 # Campus" is recorded as a populated place of 5,474, and GeoNames puts it in
 # downtown Boston though Brockton is thirty kilometres south -- so a photo by
-# the Charles was labelled with a hospital in the wrong city. Neighbourhoods do
+# the Charles was labelled with a hospital in the wrong city. Neighborhoods do
 # the same thing more respectably.
 #
 # Population is the signal, but a bare "prefer the biggest" would name the
@@ -553,7 +553,7 @@ class Geocoder:
 
     def _nearest(self, lat: float, lon: float):
         """The place to name: normally the closest, but a city over one of its
-        own neighbourhoods.
+        own neighborhoods.
 
         GeoNames files Boston's North End as a "section of a populated place"
         with 10,131 inhabitants, 288 m nearer than Boston. A traveller means
@@ -606,7 +606,7 @@ class Geocoder:
 
     @staticmethod
     def _is_vague(row) -> bool:
-        """A neighbourhood, or something with no population recorded."""
+        """A neighborhood, or something with no population recorded."""
         try:
             code = row["code"]
         except (KeyError, IndexError):
@@ -691,7 +691,7 @@ class Geocoder:
         airports = [c for c in candidates if c[0]["code"] == "AIRP"]
         if airports:
             # An airport replaces the town whatever the town's size. A tourist
-            # inside one is in the airport, not in the neighbourhood of 15,741
+            # inside one is in the airport, not in the neighborhood of 15,741
             # people whose edge it happens to touch -- nor in the moshav of 971
             # that is 200 m nearer than the runway.
             name, keep_town = min(airports, key=lambda c: c[1])[0]["name"], False

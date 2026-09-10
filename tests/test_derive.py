@@ -80,7 +80,7 @@ def test_a_derivative_bigger_than_the_original_is_discarded(tmp_path):
     cfg = fixtures.make_config(tmp_path, photos)
     res = derive.derive(photos / "tiny.jpg", "tiny.jpg", cfg)
     assert res.error is None
-    assert res.colour is not None
+    assert res.color is not None
     original = (photos / "tiny.jpg").stat().st_size
     for tier in res.tiers:
         assert derive.derived_path(cfg, tier, "tiny.jpg").stat().st_size < original

@@ -74,7 +74,7 @@ def create_app(cfg: Config, *, require_login: bool = True) -> Flask:
         # re-downloaded each time it was displayed.
         #
         # On localhost that was invisible. Over HTTPS with real latency it was
-        # seconds of grey placeholders on every back-navigation.
+        # seconds of gray placeholders on every back-navigation.
         #
         # The cost is that the 30-day expiry no longer slides on each request:
         # it now runs from the moment of login. For a family album that is a
@@ -425,7 +425,7 @@ def _register_routes(app: Flask, cfg: Config) -> None:
         if pho is None:
             abort(404)
         alb = g.index.album(pho.dir_path, g.viewer)
-        prev_p, next_p = g.index.neighbours(pho, g.viewer)
+        prev_p, next_p = g.index.neighbors(pho, g.viewer)
         # Which page of a paged album this photo sits on, so "back to the
         # album" returns to the right one rather than always the first.
         album_url = alb.url if alb else "/a/"

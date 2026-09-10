@@ -135,7 +135,7 @@ def test_a_hand_written_album_file_still_works_and_is_untouched(project):
     path = project.photo_root / "trip" / album.ALBUM_FILE
     path.write_text(HANDWRITTEN, encoding="utf-8")
 
-    # The hand-written restriction is honoured with no override present.
+    # The hand-written restriction is honored with no override present.
     links = aclcmd.chain_with_sources(project, "trip")
     assert [l.allow for l in links] == [("nyh",)]
 

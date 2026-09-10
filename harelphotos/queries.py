@@ -29,7 +29,7 @@ def url_path(relpath: str) -> str:
     Necessary rather than cosmetic. A filename containing a space breaks
     `srcset` outright, because whitespace is what separates a candidate URL
     from its width descriptor there — so one photo called "zPic 4.jpg"
-    silently rendered as a grey box. `#`, `?` and `%` would each break
+    silently rendered as a gray box. `#`, `?` and `%` would each break
     something too.
     """
     return quote(relpath, safe="/")
@@ -75,7 +75,7 @@ class Photo:
     height: int | None
     taken: int | None
     mtime_ns: int
-    colour: str
+    color: str
     place: str | None
     place_dist: int | None
     tiers: list[int]
@@ -159,7 +159,7 @@ def _photo_from_row(r: sqlite3.Row) -> Photo:
         height=r["height"],
         taken=r["taken"],
         mtime_ns=r["mtime_ns"],
-        colour=r["color"] or "#888888",
+        color=r["color"] or "#888888",
         place=r["place"],
         place_dist=r["place_dist"],
         tiers=tiers,
@@ -364,7 +364,7 @@ class Index:
             return None
         return _photo_from_row(r)
 
-    def neighbours(self, photo: Photo, viewer: Viewer) -> tuple[Photo | None, Photo | None]:
+    def neighbors(self, photo: Photo, viewer: Viewer) -> tuple[Photo | None, Photo | None]:
         """The previous and next photo in the album's own order."""
         album = self.album(photo.dir_path, viewer)
         if album is None:

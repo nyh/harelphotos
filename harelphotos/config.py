@@ -96,7 +96,7 @@ class Ui:
     dirsort: str = "name"
     dir_card_aspect: str = "4/3"
     # Whether a subdirectory's card shows the dates of the photos inside it.
-    # Off suits a tree already organised by date: the card then repeats what
+    # Off suits a tree already organized by date: the card then repeats what
     # the folder name says, and says it less accurately, since a single photo
     # with a wrong clock widens the range.
     dir_card_dates: bool = True
@@ -168,7 +168,7 @@ class Config:
 
 
 def find_config(explicit: str | os.PathLike[str] | None = None) -> Path:
-    """Locate config.toml, honouring $HARELPHOTOS_CONFIG and the search order."""
+    """Locate config.toml, honoring $HARELPHOTOS_CONFIG and the search order."""
     if explicit is not None:
         p = Path(explicit)
         if not p.is_file():

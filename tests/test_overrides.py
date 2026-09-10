@@ -330,7 +330,7 @@ def test_the_button_offers_to_undo_on_the_photo_that_is_the_cover(project):
     # Now that photo offers the undo ...
     body = c.get("/p/trip/c.jpg").get_data(as_text=True)
     assert "undo" in body and "Make cover" not in body
-    # ... and its neighbours still offer to take its place.
+    # ... and its neighbors still offer to take its place.
     assert "Make cover" in c.get("/p/trip/a.jpg").get_data(as_text=True)
 
     r = c.post("/cover", data={"album": "trip", "clear": "1", "csrf": token})

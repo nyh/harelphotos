@@ -1,4 +1,4 @@
-"""End-to-end CLI behaviour for the M1 commands."""
+"""End-to-end CLI behavior for the M1 commands."""
 
 # Copyright (C) 2026 Nadav Har'El
 # SPDX-License-Identifier: AGPL-3.0-or-later
