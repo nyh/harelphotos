@@ -3,10 +3,16 @@
 {% block title %}{{ album.title }} — {{ cfg.ui.site_title }}{% endblock %}
 {% block body %}
 <header class="topbar">
+  {#- Not on the front page. There it is a trail of one, "Home", with nothing
+      before it to link back to and the album's real name spelled out in the
+      heading immediately below -- a label pointing at the page you are already
+      looking at. Everywhere deeper the trail is the way back up, so it stays. -#}
+  {% if album.path %}
   <nav class="crumbs" aria-label="Breadcrumb">
     {%- for c in crumbs %}<a href="{{ c.url }}">{{ c.title }}</a><span class="sep">/</span>{% endfor -%}
     <span class="here">{{ album.title }}</span>
   </nav>
+  {% endif %}
   <div class="meta">
     {%- if album.n_photos_rec %}{{ "{:,}".format(album.n_photos_rec) }} photos{% endif -%}
     {%- if album|date_span %} <span class="sep">·</span> {{ album|date_span }}{% endif -%}

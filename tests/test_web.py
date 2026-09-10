@@ -72,6 +72,10 @@ def test_site_name_heads_the_front_page_only(client):
     front = client.get("/a/").get_data(as_text=True)
     assert '<h1 class="masthead">' in front
     assert client.harelphotos_cfg.ui.heading in front
+    # And no breadcrumb, which on the front page is a trail of one naming the
+    # page you are already on, directly above a heading that names it better.
+    assert 'class="crumbs"' not in front
+    assert 'class="crumbs"' in client.get("/a/2019/01/").get_data(as_text=True)
     assert '<h1 class="masthead">' not in client.get(
         "/a/2019/01/").get_data(as_text=True)
     assert '<h1 class="masthead">' not in client.get(
