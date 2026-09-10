@@ -412,9 +412,29 @@
     var scale = 1, tx = 0, ty = 0;
     var pointers = {};        // active pointers by id
     var pinch = null;         // {dist, cx, cy, scale, tx, ty} at gesture start
-    var panning = false;
+    var panning = false, panActive = false;
     var startX = 0, startY = 0, movedX = 0, movedY = 0;
-    var lastTap = 0;
+    var lastTap = 0, lastTapX = 0, lastTapY = 0;
+
+    /* What separates a tap from a drag, in pixels and milliseconds.
+     *
+     * These began at 10px and 300ms, borrowed from a mouse, and double-tapping
+     * was reported as nearly impossible: a fingertip is a centimetre across and
+     * rolls as it lifts, so tap after tap was being judged a tiny drag. Worse,
+     * a "drag" did not even record the attempt, so one sloppy tap discarded the
+     * pair and the next tap started again from nothing.
+     *
+     * 18px is about a finger's wobble; 400ms is comfortably slower than anyone
+     * taps twice on purpose. The taps must also land near each other, or two
+     * unrelated taps at opposite corners would count. */
+    var TAP_SLOP = 18;
+    var TAP_MS = 400;
+    var TAP_NEAR = 60;
+
+    /* A dead zone before a pan begins, for the same reason: without it the
+     * wobble of a tap dragged the photograph a few pixels, which both looked
+     * like the picture twitching and guaranteed the tap was scored a drag. */
+    var PAN_SLOP = 8;
 
     function zoomed() { return scale > 1.01; }
 
@@ -504,8 +524,15 @@
       var r = img.getBoundingClientRect();
       // Where the anchor sits relative to the element's center, in the
       // untransformed coordinate space.
-      var ox = (cx - (r.left + r.width / 2) - tx) / scale;
-      var oy = (cy - (r.top + r.height / 2) - ty) / scale;
+      //
+      // No `- tx` here, however much it looks as though there should be.
+      // getBoundingClientRect reports the element as *drawn*, so its center is
+      // already the untransformed center plus the translation. Subtracting the
+      // translation again counted it twice, and the anchor came out wrong by
+      // tx/scale -- which is why a photograph that had been panned slid
+      // sideways as it was zoomed, while one still centered did not.
+      var ox = (cx - (r.left + r.width / 2)) / scale;
+      var oy = (cy - (r.top + r.height / 2)) / scale;
       tx += ox * (scale - next);
       ty += oy * (scale - next);
       scale = next;
@@ -541,6 +568,7 @@
       startX = movedX = e.clientX;
       startY = movedY = e.clientY;
       panning = true;
+      panActive = false;
       try { stage.setPointerCapture(e.pointerId); } catch (err) {}
     }, { passive: true });
 
@@ -572,6 +600,18 @@
       }
       if (!panning) return;
       if (zoomed()) {
+        // Nothing moves until the finger has clearly committed to a drag.
+        if (!panActive) {
+          if (Math.abs(e.clientX - startX) < PAN_SLOP &&
+              Math.abs(e.clientY - startY) < PAN_SLOP) {
+            // Keep the origin current, so the pan starts from where the finger
+            // is now rather than jumping by the slop it has already used up.
+            movedX = e.clientX;
+            movedY = e.clientY;
+            return;
+          }
+          panActive = true;
+        }
         tx += e.clientX - movedX;
         ty += e.clientY - movedY;
         apply(false);
@@ -605,18 +645,25 @@
       }
       if (!wasPanning) return;
 
-      var moved = Math.abs(dx) > 10 || Math.abs(dy) > 10;
+      var moved = Math.abs(dx) > TAP_SLOP || Math.abs(dy) > TAP_SLOP;
       if (!moved) {
         var now = Date.now();
-        if (now - lastTap < 300) {
+        var near = Math.abs(e.clientX - lastTapX) < TAP_NEAR &&
+                   Math.abs(e.clientY - lastTapY) < TAP_NEAR;
+        if (now - lastTap < TAP_MS && near) {
           lastTap = 0;
           if (zoomed()) reset(true);
           else { zoomTo(DOUBLE_TAP_SCALE, e.clientX, e.clientY); apply(true); }
         } else {
           lastTap = now;
+          lastTapX = e.clientX;
+          lastTapY = e.clientY;
         }
         return;
       }
+      // A real drag ends any half-finished double tap, so that a tap, a pan
+      // and a tap are not mistaken for one.
+      lastTap = 0;
       // Paging gestures belong to an un-zoomed photograph. Zoomed in, the
       // same movement is a pan, and stealing it would make the photo jump to
       // the next one whenever somebody looked at its right-hand edge.
