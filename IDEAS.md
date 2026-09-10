@@ -244,17 +244,23 @@ but not their HTML — so every swipe still pays a full round trip for the page
 before the cached image can even be referenced. Paging is a page load, and a
 page load is a round trip the reader watches.
 
-`<link rel="prefetch">`, or the speculation-rules API, on the two neighbour
-URLs. The cost is real and worth measuring first: the server renders two extra
-pages for every photograph anyone looks at, on a machine chosen for being
-small, and at most one of the two is ever used. Widening the image prefetch
-from one neighbour to two belongs here too — swiping quickly outruns a one-deep
-window, which is precisely when the wait is noticed.
+`<link rel="prefetch">`, or the speculation-rules API, on the neighbour URLs.
 
-This and item 21 solve the same problem and only one of them is needed. This
-one is a few lines and speculative; that one is an afternoon and exact. Doing
-this first is still sensible: it is cheap enough to try, and if it turns out to
-be enough, item 21 never has to be argued about.
+Cheaper than it first looks. Prefetching *both* neighbours would double the
+server's work, but paging in a direction only ever needs the one ahead: the one
+behind is where you just came from and is already in the browser's cache. So in
+steady use this costs one page render per photograph, exactly as now, and
+simply moves it off the path the reader waits on. Only a cold start and a
+change of direction waste anything, one page each.
+
+Widening the image prefetch from one neighbour to two belongs here as well —
+swiping quickly outruns a one-deep window, which is precisely when the wait is
+noticed.
+
+Do this before item 21, which addresses the same waiting far more elaborately.
+This is a few lines; if it is enough, the argument about 21 never has to be
+had — and if it is not, 21's case rests on how paging *feels* rather than on
+what it saves.
 
 ### 20. Stop the thumbnails appearing one at a time
 
@@ -320,27 +326,33 @@ already handled (it is fetched, and prefetched, exactly as now), but the words
 need a source. That source is a small JSON document, and everything below about
 "the JSON" means that and nothing more.
 
-**What it costs, measured.** The worry was server load and traffic. Neither is
-the objection -- but the comparison has to be against item 19 and not against
-today, because prefetching the HTML would also take the waiting to zero. Both
-get there; what differs is the price.
+**What it costs, measured.** The worry was server load and traffic, and neither
+is the objection -- but nor are they much of an argument *for* this, once the
+comparison is made against item 19 rather than against today.
 
-    per photograph paged to    today       with 19 (prefetch HTML)   this
-    round trip in the way      1 (~330ms)  0                         0
-    bytes fetched              3.3 KB      6.6 KB (both neighbors)   ~0.7 KB
-    server renders             1           2                         ~1/50
-    of which wasted            none        half -- one neighbor      none
+    per photograph, paging steadily   today       with 19    this
+    round trip in the way             1 (~330ms)  0          0
+    bytes fetched                     3.3 KB      3.3 KB     ~0.7 KB
+    server renders                    1           1          ~1/50
 
-A photo page renders in a millisecond and a half, so server load was never the
-problem in absolute terms. The difference is that prefetching HTML is
-*speculative*: two pages are rendered and fetched for every photograph looked
-at, and at most one is ever used. A window of metadata is fetched once and
-answers the next fifty moves in either direction, so nothing is wasted and
-nothing is guessed.
+Item 19 fetches one page per photograph, not two: paging in a direction only
+ever needs the one ahead, because the one behind is where you just came from
+and is already in the browser's cache. So it costs the same work as today and
+merely moves it off the path the reader is waiting on. Something is wasted only
+when a session starts cold, or when somebody reverses direction -- one page
+each time, and not once in between.
 
-That is the honest case for this over item 19. Not that it removes a round trip
--- item 19 does that for far less work -- but that it removes the same round
-trip without asking a small server to render two pages nobody may look at.
+So the efficiency case for this over item 19 is thin: four times less traffic
+and fifty times less rendering, of a page that renders in a millisecond and a
+half. On a family album that is not a reason to do anything.
+
+The real argument is what it makes possible rather than what it saves. Nothing
+is torn down between photographs, so a photograph can slide out while the next
+slides in, the zoom and the info panel keep their state, and the swipe that
+already follows the thumb becomes a carousel rather than a gesture that ends in
+a page load. Item 19 makes the waiting disappear; this makes the paging feel
+like one continuous thing. Those are different goals and it is worth being
+honest about which is being bought.
 
 **How it should be built.** Three things:
 
