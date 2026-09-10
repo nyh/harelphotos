@@ -374,6 +374,13 @@ def cmd_geocode(args: argparse.Namespace) -> int:
         sys.stderr.write("\r\033[K")
         sys.stderr.flush()
     print(stats.summary())
+    if stats.landmarks_stale:
+        # The table is filtered when it is built, so a code added since then
+        # was never stored and no amount of re-geocoding will find it.
+        print("\nNOTE: the landmark table was built with an older list of\n"
+              "      feature codes. Re-run 'harelphotos init --landmarks' to\n"
+              "      rebuild it (the download is cached), then geocode again.",
+              file=sys.stderr)
     conn.close()
     return 0
 

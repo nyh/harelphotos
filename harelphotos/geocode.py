@@ -26,6 +26,7 @@ class GeocodeStats:
     unresolved: int = 0
     distinct_lookups: int = 0
     elapsed: float = 0.0
+    landmarks_stale: bool = False
 
     def summary(self) -> str:
         if not self.considered:
@@ -53,6 +54,7 @@ def geocode(
         return stats
 
     gc = Geocoder(cfg.state_dir / "geonames.sqlite")
+    stats.landmarks_stale = gc.landmarks_stale
     started = time.monotonic()
     try:
         for n, row in enumerate(rows, 1):

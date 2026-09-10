@@ -403,3 +403,49 @@ def test_echo_bridge_from_the_bridge_itself(tmp_path):
     )
     assert name_at(path, 42.3139, -71.2262).startswith("Echo Bridge")
     assert "Echo Bridge" not in name_at(path, 42.3119, -71.226175)
+
+
+def test_a_table_built_with_an_older_code_list_says_so(tmp_path):
+    """The table is filtered when it is built, so a feature code added later
+    was never stored -- and re-running `geocode` cannot conjure rows the build
+    discarded. That bit once: MALL was added to the allowlist and a photo taken
+    inside a shopping centre went on naming a pond."""
+    path = tmp_path / "geonames.sqlite"
+    conn = sqlite3.connect(path)
+    conn.executescript(geonames.SCHEMA)
+    conn.executescript(geonames.LANDMARK_SCHEMA)
+    conn.execute("INSERT INTO places VALUES ('Town','US','MA',42.0,-71.0,900)")
+    conn.execute("INSERT INTO meta VALUES ('landmark_codes','deadbeef')")
+    conn.commit(); conn.close()
+
+    gc = geonames.Geocoder(path)
+    try:
+        assert gc.landmarks_stale is True
+    finally:
+        gc.close()
+
+    # And current, once it carries this version's fingerprint.
+    conn = sqlite3.connect(path)
+    conn.execute("UPDATE meta SET value = ? WHERE key = 'landmark_codes'",
+                 (geonames.codes_fingerprint(),))
+    conn.commit(); conn.close()
+    gc = geonames.Geocoder(path)
+    try:
+        assert gc.landmarks_stale is False
+    finally:
+        gc.close()
+
+
+def test_no_landmark_table_is_not_stale(tmp_path):
+    """Never built is not the same as out of date; `--landmarks` is opt-in."""
+    path = tmp_path / "geonames.sqlite"
+    conn = sqlite3.connect(path)
+    conn.executescript(geonames.SCHEMA)
+    conn.execute("INSERT INTO places VALUES ('Town','US','MA',42.0,-71.0,900)")
+    conn.commit(); conn.close()
+    gc = geonames.Geocoder(path)
+    try:
+        assert gc.has_landmarks is False
+        assert gc.landmarks_stale is False
+    finally:
+        gc.close()

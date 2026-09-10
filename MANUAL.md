@@ -345,6 +345,15 @@ harelphotos init --landmarks
 harelphotos geocode --force      # apply them to photos already geocoded
 ```
 
+The dump is filtered **when the table is built**, so an upgrade that adds a
+kind of landmark needs the table rebuilt, not merely another `geocode`: the
+rows were never stored. Re-run `init --landmarks` — the download is cached, so
+it only re-filters — and `geocode` will tell you when this applies:
+
+```
+NOTE: the landmark table was built with an older list of feature codes.
+```
+
 A landmark is only claimed when you are genuinely at one, with a radius that
 follows how physically big the thing is rather than how famous it is. A dam, a
 bridge or a radio mast gets 120–150 m — worth having when you walked up to it,

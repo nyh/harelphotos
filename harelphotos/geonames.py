@@ -129,6 +129,21 @@ DESTINATION_CODES = frozenset({"AIRP", "AMUS", "PRT"})
 # airport's terminal. There are 123,855 such rows in the United States alone.
 HISTORICAL_MARK = "(historical)"
 
+
+def codes_fingerprint() -> str:
+    """Identifies the allowlist a landmark table was filtered with.
+
+    The table is filtered at build time, so adding a feature code does nothing
+    for a collection that already built one -- the rows were never kept. That
+    bit once already: a shopping centre was added to the list, and a photo
+    taken inside one went on naming a pond, because re-running `geocode` cannot
+    conjure rows the build discarded.
+    """
+    import hashlib
+
+    joined = ",".join(sorted(LANDMARK_CODES))
+    return hashlib.blake2b(joined.encode(), digest_size=8).hexdigest()
+
 # Being inside a landmark's radius is not on its own enough to name it: a
 # nature reserve 4.6 km away is "within 5 km" and still not where you are, and
 # a park 200 m from the middle of Tel Aviv should not displace Tel Aviv.
@@ -324,6 +339,8 @@ def build_landmarks(db_path: Path, cache_dir: Path | None = None, progress=None)
         if batch:
             conn.executemany("INSERT INTO landmarks VALUES (?,?,?,?,?)", batch)
         conn.execute("INSERT OR REPLACE INTO meta VALUES ('landmarks', ?)", (str(kept),))
+        conn.execute("INSERT OR REPLACE INTO meta VALUES ('landmark_codes', ?)",
+                     (codes_fingerprint(),))
         conn.commit()
     finally:
         conn.close()
@@ -389,6 +406,14 @@ class Geocoder:
             self.conn.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='landmarks'"
             ).fetchone()
+        )
+        # Whether the table was filtered with the allowlist this version uses.
+        built = self.conn.execute(
+            "SELECT value FROM meta WHERE key = 'landmark_codes'"
+        ).fetchone()
+        self.landmarks_stale = bool(
+            self.has_landmarks
+            and (built is None or built["value"] != codes_fingerprint())
         )
 
     def close(self) -> None:
