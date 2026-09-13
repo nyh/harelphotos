@@ -121,6 +121,24 @@ AREA_SHRINK_CODES = frozenset({
 AREA_TOWN_NEAR_M = 2000
 AREA_SHRUNK_M = 250
 
+# Terrain that towns are built on, which needs the same shrink on a different
+# test.
+#
+# A photograph taken in Manof, a village of 862 on the side of Har Shekhanya,
+# came back as "Har Shekhanya, Israel". The village was 184 m away and the
+# summit 928 m, and the mountain's 1500 m radius swallowed it -- a hill with
+# three villages on it, naming itself instead of the one you are standing in.
+#
+# The rule above would have fixed it but for its population floor, and that
+# floor is right where it is: a hamlet of fifty inside a national park is a
+# detail of the wilderness and must not shrink it, or Walt Disney World loses
+# its name to Bay Lake. A mountain is the other way round. It is not somewhere
+# you go, it is the ground that is there, and a village on its flank is what
+# you are in whatever its size. So any populated place nearby shrinks these,
+# with no floor at all -- while a photograph genuinely out on the mountain,
+# with no village within two kilometres, still gets the mountain.
+TERRAIN_CODES = frozenset({"PK", "MT", "CAPE", "VLC"})
+
 # Places you are overwhelmingly likely to be *inside* rather than beside.
 #
 # A hamlet next to one of these is nominally closer and almost never where the
@@ -634,6 +652,8 @@ class Geocoder:
         # A *substantial* town nearby, not merely any hamlet.
         near_town = (town_dist is not None and town_dist <= AREA_TOWN_NEAR_M
                      and town_pop >= LANDMARK_TOWN_POP_FLOOR)
+        # For terrain, any village at all: see TERRAIN_CODES.
+        near_any_town = town_dist is not None and town_dist <= AREA_TOWN_NEAR_M
         out = []
         for r in rows:
             if HISTORICAL_MARK in r["name"]:
@@ -641,6 +661,8 @@ class Geocoder:
             dist = haversine(lat, lon, r["lat"], r["lon"])
             radius = LANDMARK_RADII_M.get(r["code"], 0)
             if near_town and r["code"] in AREA_SHRINK_CODES:
+                radius = min(radius, AREA_SHRUNK_M)
+            if near_any_town and r["code"] in TERRAIN_CODES:
                 radius = min(radius, AREA_SHRUNK_M)
             if dist <= radius:
                 out.append((r, dist, radius))

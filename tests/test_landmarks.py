@@ -650,3 +650,39 @@ def test_naming_the_city_does_not_make_the_surroundings_look_rural(tmp_path):
 
     got = name_at(path, 42.3119, -71.226175)
     assert "Historic District" not in got, got
+
+
+def test_a_village_on_a_mountain_keeps_its_own_name(tmp_path):
+    """Har Shekhanya has three villages on it, and a photo taken in one came
+    back named after the hill.
+
+    Manof, 862 people, sat 184 m from the camera; the recorded summit was
+    928 m away and its 1500 m radius swallowed the village whole. A mountain
+    is not somewhere you go, it is the ground that is there -- so the village
+    you are standing in is the answer, whatever its size.
+
+    Deliberately a village far below the population floor that governs the
+    other shrink: that floor is right for a national park, which must keep its
+    name against a hamlet inside it, and wrong for terrain.
+    """
+    path = _world(
+        tmp_path,
+        [("Manof", "IL", "03", 32.8506, 35.2352, 862)],             # 184 m
+        [("Har Shekhanya", "IL", "MT", 32.8600, 35.2400)],          # ~928 m
+    )
+    got = name_at(path, 32.8521917, 35.2363889)
+    assert got.startswith("Manof"), got
+    assert "Shekhanya" not in got
+
+
+def test_a_mountain_out_in_the_open_still_names_itself(tmp_path):
+    """The other half of the rule, and the reason it is a shrink rather than a
+    ban: with no village within two kilometres you really are on the mountain,
+    and the mountain is the only useful thing to say."""
+    path = _world(
+        tmp_path,
+        [("Distant Village", "IL", "03", 32.9000, 35.3000, 500)],   # ~10 km
+        [("Har Somewhere", "IL", "MT", 32.8600, 35.2400)],
+    )
+    got = name_at(path, 32.8521917, 35.2363889)
+    assert got.startswith("Har Somewhere"), got

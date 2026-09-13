@@ -492,6 +492,20 @@ full reach — its nearest neighbour is a company town of fifty people — while
 Tel Aviv's Luna Park, a hundred metres across, cannot reach across the city
 from two kilometres away.
 
+**A mountain is the ground, not a destination.** Peaks, mountains, capes and
+volcanoes shrink the same way, but on any village at all rather than a town of
+5,000 — because the population floor is exactly backwards for terrain. A hamlet
+inside a national park is a detail of the wilderness and must not shrink it; a
+village on a mountainside is where you are standing, and the mountain is merely
+what it is built on. A photo in Manof, 862 people, was captioned "Har
+Shekhanya" — a hill with three villages on it, naming itself rather than the
+one holding the camera.
+
+Standing on the summit still gets you the summit: the shrunk radius is 250 m,
+so Mount Tabor keeps its name from 72 m away even with a town of 6,000 just
+down the hill, and Masada and Hermon are unaffected, having no village within
+kilometres.
+
 **An airport outranks the town outright.** A tourist inside one is in the
 airport, not in the moshav 200 m nearer than the runway nor the neighbourhood
 of 15,741 whose edge it touches. Only airports get that: making every large
