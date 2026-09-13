@@ -205,6 +205,13 @@ LANDMARK_INSIDE_M = 750
 SECTION_CODES = frozenset({"PPLX", "PPLL", "PPLS"})
 CITY_SLACK_M = 1500
 
+# How much further a town may be and still be preferred for actually containing
+# the camera. See `_nearest`. Small on purpose: the whole rule exists for the
+# case where two towns are about equally far off and only one of them reaches
+# you, and it must never let a city several kilometres away take a photograph
+# from the village at the end of the road.
+CONTAINING_SLACK_M = 500
+
 # A city swallows what is filed inside it.
 #
 # `cities500` is not only towns. "VA Boston Healthcare System, Brockton
@@ -600,6 +607,34 @@ class Geocoder:
             if dominant:
                 row, dist = max(dominant, key=lambda rd: _int(rd[0]["pop"]))
                 return row, dist, urban
+
+            # Nearest is not the same as inside.
+            #
+            # A photograph between Nahf and Karmi'el was named Nahf, 1,543 m
+            # away, because Karmi'el's center is 1,670 m away -- 127 m further,
+            # out of a mile and a half. Nothing could override that: the
+            # dominance rule above is the only thing that beats nearest, and
+            # Karmi'el is 3.5 times Nahf where it wants twenty.
+            #
+            # But the camera was *outside* Nahf, whose 13,113 people reach
+            # about 1,445 m, and comfortably *inside* Karmi'el, whose 46,252
+            # reach about 2,713 m. You are in one town and merely near the
+            # other, which is exactly the question "which is closest" cannot
+            # ask. The same measure settles the landmark shrink further down.
+            #
+            # Kept deliberately timid, because "inside" is an estimate from a
+            # population and a single recorded point. It applies only when the
+            # nearest place does not contain the camera at all, and only to a
+            # place barely further off -- otherwise a city three kilometres
+            # away would claim a photograph taken at the edge of the village
+            # 300 m from the camera, which is plainly the village.
+            if best_dist > urban_radius_m(_int(best["pop"])):
+                inside = [rd for rd in scored
+                          if rd[1] <= best_dist + CONTAINING_SLACK_M
+                          and rd[1] <= urban_radius_m(_int(rd[0]["pop"]))]
+                if inside:
+                    row, dist = min(inside, key=lambda rd: rd[1])
+                    return row, dist, urban
 
             if self._has_place_codes and self._is_vague(best):
                 city = next(

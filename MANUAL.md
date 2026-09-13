@@ -512,6 +512,18 @@ so Mount Tabor keeps its name from 72 m away even with a town of 6,000 just
 down the hill, and Masada and Hermon are unaffected, having no village within
 kilometres.
 
+**The town you are inside beats the one you are merely nearest to.** A photo
+between Naḥf and Karmi'el was named Naḥf, whose centre was 127 m nearer out of
+a mile and a half. But 13,113 people reach about 1.4 km and 46,252 reach about
+2.7, so the camera was outside one town and comfortably inside the other — in
+Karmi'el, and merely near Naḥf.
+
+The rule is deliberately timid, because "inside" is estimated from a population
+and one recorded point. It applies only when the nearest place does not contain
+the camera at all, and only in favour of a town barely further off, so a city
+kilometres away can never take a photograph from the village at the end of the
+road.
+
 **An airport outranks the town outright.** A tourist inside one is in the
 airport, not in the moshav 200 m nearer than the runway nor the neighbourhood
 of 15,741 whose edge it touches. Only airports get that: making every large

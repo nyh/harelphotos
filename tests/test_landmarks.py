@@ -724,3 +724,49 @@ def test_the_hamlet_inside_a_resort_still_does_not_shrink_it(tmp_path):
     )
     got = name_at(path, 28.3852, -81.5639)
     assert got.startswith("Walt Disney World Resort"), got
+
+
+def test_the_town_you_are_inside_beats_the_one_you_are_merely_nearest(tmp_path):
+    """A photograph between Nahf and Karmi'el was named Nahf.
+
+    Nahf's center was 1,543 m away and Karmi'el's 1,670 m -- 127 m further,
+    out of a mile and a half -- and nothing could override that, because the
+    population rule is the only thing that beats nearest and Karmi'el is 3.5x
+    Nahf where it wants twenty.
+
+    But 13,113 people reach about 1,445 m and 46,252 reach about 2,713, so the
+    camera was outside one town and comfortably inside the other. You are in
+    Karmi'el and merely near Nahf, which is the question distance cannot ask.
+    """
+    path = _world(
+        tmp_path,
+        [("Nahf", "IL", "03", 32.9350, 35.3160, 13113),        # 1543 m
+         ("Karmiel", "IL", "03", 32.9200, 35.2905, 46252)],    # 1670 m
+        [],
+    )
+    got = name_at(path, 32.921538, 35.308403)
+    assert got.startswith("Karmiel"), got
+
+
+def test_a_distant_city_does_not_take_a_photo_from_the_village_beside_it(tmp_path):
+    """The guard on that rule, and the reason it is bounded rather than clever.
+
+    "Inside" is estimated from a population and one recorded point, so it is
+    allowed to overrule nearest only for a town barely further off. A village
+    kilometre away that the camera is just outside must keep the photograph
+    against a city three kilometres off whose estimated sprawl happens to
+    cover it.
+    Populations chosen so the older population rule stays out of it: a city
+    whose estimated sprawl reaches three kilometres has tens of thousands of
+    people, and against a hamlet that is twenty times over, so it would win by
+    dominance and tell us nothing about this rule. 90,000 against 5,000 is
+    18x, just under, which leaves the question to the rule being tested.
+    """
+    path = _world(
+        tmp_path,
+        [("Nearby Village", "IL", "03", 32.9000, 35.3000, 5000),   # 1000 m
+         ("Big City", "IL", "03", 32.9360, 35.3000, 90000)],       # 3000 m
+        [],
+    )
+    got = name_at(path, 32.9090, 35.3000)
+    assert got.startswith("Nearby Village"), got
