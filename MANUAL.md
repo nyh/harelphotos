@@ -282,7 +282,6 @@ below.
 | **0** | zoom back out |
 | **double-click**, **Ctrl+wheel** | zoom in and out, around the pointer |
 | **swipe left / right** | previous and next photo — the photo follows your thumb |
-| **swipe down** | back to the album |
 | **pinch** | zoom, around the point between your fingers |
 | **drag** | pan, while zoomed in |
 | **double-tap** | zoom in, and again to zoom back out |
@@ -313,7 +312,7 @@ show. In practice a 12-megapixel photograph reaches 1:1 at about 3.4× and stops
 at about 10×; a small scan stops at 3×, and nothing goes past 12×, by which
 point a thumb's width of panning crosses the whole picture.
 
-While a photo is zoomed, sideways and downward swipes stop paging and become
+While a photo is zoomed, sideways swipes stop paging and become
 panning, and the on-screen arrows get out of the way — otherwise examining the
 right-hand edge of a photograph would keep sending you to the next one. Zoom
 back out and they return.
@@ -370,7 +369,7 @@ photo's own GPS, turned into a place name by [`geocode`](#harelphotos-geocode);
 for photos with no GPS it falls back to `location` in the album's `.album.toml`,
 and `show_gps = false` in `config.toml` suppresses both.
 
-`Esc`, a downward swipe and the browser's Back button all return you to the
+`Esc` and the browser's Back button both return you to the
 album **exactly where you left it**, in one step, however many photos you
 paged through first. Following an ordinary link to an album always starts at
 the top, even one you were part-way down earlier — a link means the album, not

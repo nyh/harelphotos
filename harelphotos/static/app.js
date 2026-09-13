@@ -283,7 +283,7 @@
              window.history.length === mark.depth + 1;
     }
 
-    // Escape and a downward swipe return to the album.
+    // Escape and the Back button return to the album.
     //
     // history.back() where it is genuinely a step back, because that restores
     // the grid from the browser's back/forward cache: already laid out, images
@@ -371,9 +371,8 @@
       e.preventDefault();
     });
 
-    // Gestures on the photo. Unchanged: swipe sideways to page, swipe down to
-    // return to the album. Added: pinch to zoom, drag to pan while zoomed,
-    // double-tap to zoom in and out.
+    // Gestures on the photo: swipe sideways to page, pinch to zoom, drag to
+    // pan while zoomed, double-tap to zoom in and out.
     //
     // The paging swipes belong to an un-zoomed photograph only. Once it is
     // magnified the same movement is a pan, and taking it would send the
@@ -804,9 +803,11 @@
         return;
       }
 
-      if (dy > 90 && Math.abs(dy) > Math.abs(dx)) {
-        backToAlbum();
-      }
+      // A downward swipe used to return to the album, and does not any more.
+      // It is not a gesture anyone expects a photograph to have, and it was
+      // taking one that people do expect: pulling a page down to reload it.
+      // Escape and the Back button both still lead back, and both are things
+      // a reader reaches for deliberately.
     }, { passive: true });
 
     // A mouse and a trackpad. Ctrl+wheel is what a trackpad pinch arrives as,
