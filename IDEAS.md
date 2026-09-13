@@ -154,6 +154,62 @@ Related: item 10 names a whole album, which is the answer when a feature is so
 large its recorded point is nowhere near you. This is the answer when the
 feature is missing altogether.
 
+### 10b. Boundaries, not just centroids
+
+Every place in the dataset is one point and a population. Where towns abut —
+common in Israel, and anywhere a conurbation is many municipalities — nothing
+says which side of a border a photograph is on. Tel Aviv's Luna Park is named
+"Ramat Gan" because Ramat Gan's recorded centre is 2.7 km away and Tel Aviv's
+is 4.2, and `admin2`, `admin3` and `admin4` are empty for every Israeli row.
+
+**The obvious heuristic does not work, and the reason is worth keeping.** "When
+two towns both plausibly contain the camera, prefer the bigger" was tested
+against the real dumps:
+
+    Luna Park            nearest: Ramat Gan          bigger: Tel Aviv   <- want bigger
+    Newton Upper Falls   nearest: Newton Upper Falls bigger: Newton     <- want nearest
+
+Structurally identical, opposite right answers. No rule over centroids and
+populations can separate them, which is what makes this a data problem rather
+than a tuning problem.
+
+**Boundaries would fix one of those two and break the other.** Asked of
+OpenStreetMap, `admin_level=8` at Luna Park is *Tel-Aviv*, exactly right. At
+Newton Upper Falls it is *Newton*, and there is no boundary for the village at
+all — it is a named locality inside a city, not a municipality, so it has a
+centroid and a population and nothing else. Answering purely by boundary would
+therefore reintroduce the regression this project has been told twice not to
+have.
+
+So boundaries belong as a **tie-breaker, not a lookup**: keep choosing by
+centroid as now, and consult a boundary only when two towns are both plausible.
+That changes the ambiguous cases and leaves everything else exactly as it is.
+
+**Data.** Checked rather than remembered:
+
+- **geoBoundaries** (CC BY 4.0) stops too coarse. Israel's ADM2 is
+  *Subdistrict* and there is no ADM3; the United States' ADM2 is *Counties*,
+  and both Newtons are in Middlesex. Ruled out.
+- **OpenStreetMap** has what is wanted, at `admin_level=8`. Licence is ODbL,
+  whose share-alike applies to derived databases and wants reading properly
+  before shipping one. Getting it in bulk is the awkward part: the
+  distributions are `.osm.pbf`, which needs a protobuf parser — a fifth
+  dependency — and Overpass is for queries, not for downloading a planet.
+- **Who's On First** publishes per-country SQLite bundles of locality
+  polygons, mostly CC-0. Worth checking first if this is ever attempted; the
+  format would suit this project better than anything requiring a parser.
+
+**Implementation**, if the data question is solved: SQLite's R-Tree module is
+compiled into the standard library here — verified — so a bounding-box index
+plus ray casting in plain Python is enough, with no new dependency and no
+geometry library. Simplified polygons would shrink it, at the cost of accuracy
+exactly at the borders, which is the only place it is needed.
+
+Not small, and not obviously worth it for a family album: it buys the right
+municipality in dense conurbations and nothing else. Recorded because the
+question was asked and the answer took real digging, and because the two-case
+proof above is the thing to re-read before anyone tries a cheaper fix.
+
 ### 11. Fewer surprises in dense cities
 
 Known and deliberately unfixed: in a historic quarter something is always
