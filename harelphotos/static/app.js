@@ -44,20 +44,7 @@
     var width = grid.clientWidth;
     if (!width) return;
     var gap = parseInt(grid.dataset.gap, 10) || 4;
-    // 170, not 130, on a phone.
-    //
-    // 130 was chosen to fit a lot on a small screen and fits too much: measured
-    // against a real album on a 412px phone, rows came out 127px tall and a
-    // *portrait* thumbnail 95 CSS pixels wide -- under a centimetre, and the
-    // photographs in it unrecognisable. 170 gives 171px rows and 128px
-    // portraits, about two and a half photographs to a row instead of three
-    // and a half.
-    //
-    // It costs bytes, and knowingly: at this size a landscape tile on a dense
-    // phone wants about 674 device pixels, so it reaches past the 512 copy.
-    // That is what the 768 tier is for -- see `[sizes] thumb` in MANUAL.md.
-    // Without it the next size up is 1280, which is five times the file.
-    var target = width < 600 ? 170 : 180;
+    var target = width < 600 ? 130 : 180;
 
     function heightFor(n, sum) {
       return (width - gap * (n - 1)) / sum;
