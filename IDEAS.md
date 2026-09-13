@@ -253,10 +253,16 @@ because the layout already tells each image how wide it will actually be.
 Desktop only, most likely. On a phone the width decides the answer and there is
 little to choose.
 
-### 15. A keyboard help overlay
+### 15. A keyboard help overlay — *partly done*
 
-`i`, `d`, arrows, Escape — none of them are discoverable. `?` showing a small
-panel would fix that, and would be twenty lines.
+`i`, `d`, arrows, Escape — none of them were discoverable. Two of them now are:
+the overflow menu prints the letter beside "Photo information" and "Download
+original", hidden where the pointer is coarse and there is nothing to press
+them with, and MANUAL.md has a table of every key and gesture.
+
+What is still missing is the arrows, Escape and `0`, which have no menu item to
+sit beside. `?` showing a small panel would cover those, and would be twenty
+lines.
 
 ### 16. Multiple downloads
 
@@ -290,13 +296,33 @@ Everything below follows from that number being large and the files being
 small. A 1280px AVIF of a real 12-megapixel photograph is **34 KB**. The
 sizes are not the problem and have not been for a while.
 
-### 18. Turn on HTTP/2
+### ~~18. Turn on HTTP/2~~ — done, 2026-09-13
 
-`curl -w '%{http_version}'` says **1.1**, and the vhost never mentions
-otherwise. Over HTTP/1.1 a browser opens about six connections per origin, so
-an album page of fifty thumbnails fetches them in nine sequential batches, each
-costing a round trip — which is exactly why the pictures appear in waves rather
-than together. HTTP/2 multiplexes them onto one connection.
+Was: `curl -w '%{http_version}'` said **1.1** and the vhost never mentioned
+otherwise, so a browser opened about six connections per origin and fetched an
+album's thumbnails six at a time, each batch costing a round trip.
+
+Done. `Protocols h2 http/1.1` is in the shipped vhost behind an `IfModule`,
+`mod_http2` is in INSTALL.md's package list and in `check --env`, and the live
+server negotiates `h2` with HTTP/1.1 still working as a fallback.
+
+**Reported immediately as feeling much better**, which is the result that
+counts. The mechanism: the server costs about ten milliseconds per request and
+the distance — it is in another country — costs about 105, so an album's
+hundred-odd thumbnails over six connections was something like seventeen
+serialized round trips of pure waiting. One connection and one handshake
+removes nearly all of it.
+
+Benchmarking it from a third machine was less tidy than that, and is recorded
+because the tidy number would have been wrong. Forty thumbnails, twice: HTTP/2
+took 12.63 s and 12.65 s, HTTP/1.1 took 149.8 s and then 16.7 s. The honest
+reading is not "twelve times faster" but **"consistent where six connections
+are not"** — one bad moment costs a multiplexed connection little and costs six
+separate ones a great deal. The absolute figures are a slow path between two
+countries and say nothing about what anyone else sees.
+
+Everything below was written against the old behaviour and should be re-judged
+against the new one before any of it is attempted.
 
 `Protocols h2 http/1.1` in the TLS vhost, with `mod_http2` loaded. It is the
 cheapest item on this list by a wide margin and probably the largest single
@@ -356,8 +382,10 @@ The *appearance* is easy: hold a row until its images have all decoded, or fade
 them in together, so a grid arrives as a grid rather than as popcorn. Tens of
 lines, no new files, no invalidation.
 
-The *cause* is item 18. Once the requests are multiplexed they largely arrive
-together anyway, and this may stop being annoying without anything else being
+The *cause* was item 18, which is now done — so the first thing to do here is
+look again and see whether it still happens. Once the requests are multiplexed
+they largely arrive together anyway, and this may have stopped being annoying
+without anything else being
 done.
 
 The larger version — pack many thumbnails into one file and slice them out with
@@ -508,12 +536,17 @@ headers, which is all the negotiation looks at. A typical grid thumbnail is
 (An earlier measurement of this said 34 KB, because `curl` sends `Accept: */*`
 and gets the JPEG fallback. Worth knowing before measuring this again.)
 
-**What costs the time is per-image latency, not bytes.** On a warm connection,
-one round trip to the server is ~105 ms and the first byte of a 16 KB thumbnail
-arrives at ~350 ms -- so roughly 250 ms of it is the server. Over HTTP/1.1 and
-six connections, the images the page asks for on arrival are fetched in
-serialized batches of six, and that is the wait. Item 18 is therefore still the
-first thing to do and by a wide margin.
+**What costs the time is per-image latency, not bytes** -- and specifically the
+distance, since the server is in another country. On a connection that is
+already open, a thumbnail's first byte arrives 117 ms after the request against
+a round trip of about 105, so the server costs roughly ten milliseconds. (An
+earlier version of this entry said 250 ms of server time, arrived at by
+subtracting the round trip from a figure that still had the TLS handshake
+inside it. There was never a server-side problem.)
+
+Over HTTP/1.1 and six connections that meant an album's hundred-odd thumbnails
+in serialized batches, which was the wait. **Item 18 fixed it and is done.**
+Everything remaining here was written against the old behaviour.
 
 Three further things, found while looking:
 
