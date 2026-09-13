@@ -517,13 +517,21 @@ first thing to do and by a wide margin.
 
 Three further things, found while looking:
 
-**The ladder has a hole exactly where a phone lands.** Nothing exists between
-512 and 1280. A landscape tile on a screen at three device pixels per point
-needs about 585 of them, so it takes the 1280 file: **87 KB for a thumbnail**,
-five times the bytes for twice the pixels wanted. A tier around 768 or 896
-would cost one more encode per photograph and `deriv_key` deliberately excludes
-the tier list, so adding one re-encodes nothing that exists. Cheap, and it only
-helps dense phones.
+**The ladder has a hole between 512 and 1280, and at today's sizes nothing
+falls into it.** Measured on a real 412px phone at 2.625 device pixels per
+point: a portrait tile is 95 CSS px and wants 250 device px, a landscape one is
+191 and wants 500 — and both take the 512 copy, 16 KB. So 512 is the
+interesting size and the hole is theoretical.
+
+It stops being theoretical in two cases, neither of them present: a phone at a
+full 3x density, where a landscape tile wants 585 and jumps to the 1280 file at
+87 KB; or the grid thumbnails being made larger, which puts a landscape tile
+past 674. If either ever happens, a 768 tier is the answer and is cheap — the
+tier list is deliberately not part of the recipe fingerprint, so adding one
+costs a single extra encode per photograph and re-encodes nothing.
+
+Recorded because it was nearly acted on twice. Both times the reasoning was
+about a device nobody here owns.
 
 **`sendfile_header = "auto"` does nothing.** It is what `init` writes, and
 `images.py` acts on the literal `"X-Sendfile"` and treats everything else as
