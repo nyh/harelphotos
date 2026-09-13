@@ -45,9 +45,18 @@ Packages you are likely to need, all from EPEL:
 
 ```sh
 sudo dnf install epel-release
-sudo dnf install mod_ssl certbot python3-certbot-apache mod_xsendfile
+sudo dnf install mod_ssl certbot python3-certbot-apache mod_xsendfile mod_http2
 sudo systemctl restart httpd
 ```
+
+`mod_http2` is optional and is the single biggest thing you can do for an album
+page over a long link. Measured against a server a country away: one round trip
+is about 105 ms, and a thumbnail's first byte arrives 117 ms after the request
+on an open connection — so the server costs about ten milliseconds and the
+distance costs the rest. Over HTTP/1.1 a browser opens six connections and
+fetches an album's hundred-odd thumbnails six at a time, roughly seventeen
+round trips of waiting. HTTP/2 puts them all on one connection and sends the
+requests together. The vhost below turns it on if the module is there.
 
 `mod_xsendfile` is optional but worth it on a weak machine: it lets Apache send
 the image bytes itself once the application has done the access check, instead

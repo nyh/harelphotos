@@ -286,6 +286,10 @@ def _apache(r: Report, cfg: Config | None) -> None:
         ("headers_module", True, "cache and security headers"),
         ("ssl_module", True, "TLS"),
         ("xsendfile_module", False, "optional: lets Apache send image bytes itself"),
+        # Not required, and the largest single win available on a slow link:
+        # without it a browser fetches an album's thumbnails six at a time,
+        # each batch costing a round trip.
+        ("http2_module", False, "optional: 'Protocols h2 http/1.1' — big win on a slow link"),
     ):
         present = mod in out
         verdict = OK if present else (FAIL if needed else INFO)
