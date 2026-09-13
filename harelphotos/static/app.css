@@ -613,11 +613,36 @@ form.login button {
 
 /* --------------------------------------------------- chrome (11.3) */
 
-.usermenu { display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; }
+/* Pushed to the end of whatever line it lands on.
+ *
+ * `justify-content: space-between` spaces the bar's items across a line, but a
+ * line that wrapped holds only this, and it was laid out at the *start* — so
+ * on a phone in portrait the two icons ended up alone on the left, under a
+ * breadcrumb that had pushed them there. An automatic start margin keeps them
+ * at the end whether they share a line or have one to themselves. */
+.usermenu {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  margin-inline-start: auto;
+}
 
-/* The overflow menu: a `<details>` whose summary is drawn as an icon button
-   and whose panel hangs beneath it. */
-.menu { position: relative; }
+/* The overflow menu: a `<details>` whose summary is drawn as an icon button,
+   and whose panel hangs from the *bar* rather than from the button.
+ *
+ * Deliberately not `position: relative` here, which is the obvious thing and
+ * was wrong. Anchored to the button, the panel opens towards the start of the
+ * line from wherever the button happens to be — and the bar wraps, so on a
+ * phone in portrait the button lands at the beginning of a line of its own and
+ * the panel opened off the side of the screen, half of it unreachable.
+ *
+ * With no positioned ancestor nearer than `.topbar` — which is `sticky`, and
+ * carries a `backdrop-filter`, either of which makes it a containing block —
+ * the panel is placed against the bar instead. It then hangs below the bar and
+ * near its end whatever the button does, which is the only arrangement that
+ * cannot be pushed off the screen by a line break. */
+.menu { position: static; }
 .menu > summary {
   /* The disclosure triangle has to go in two ways, one of them still needed
      for older WebKit. */
@@ -629,11 +654,16 @@ form.login button {
 
 .menu-panel {
   position: absolute;
-  inset-block-start: calc(100% + 0.25rem);
-  /* Anchored to the end, because this sits at the end of the bar: opening it
-     towards the start keeps it on the screen where opening it outwards would
-     not. */
-  inset-inline-end: 0;
+  /* Both offsets are against `.topbar`: just below the whole bar, however many
+     lines it wrapped to, and inset from its end rather than from the button's.
+     A little short of the edge so it does not look welded to the corner. */
+  inset-block-start: 100%;
+  inset-inline-end: 0.75rem;
+  /* Never wider than the screen it has to fit on, whatever the minimum below
+     asks for. A phone at its smallest is around 320px; 12rem of a scaled-up
+     root is 240px, so this only bites in the extreme, which is exactly when it
+     needs to. */
+  max-inline-size: calc(100vw - 1.5rem);
   z-index: 30;
   min-inline-size: 12rem;
   padding: 0.35rem;
