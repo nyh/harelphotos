@@ -51,7 +51,7 @@ pytestmark = pytest.mark.skipif(
     reason="set HARELPHOTOS_GEONAMES_LIVE=1 (downloads ~80 MB, cached)",
 )
 
-COUNTRIES = ("IL", "US")
+COUNTRIES = ("IL", "US", "DE")
 
 
 def cache_dir() -> Path:
@@ -83,26 +83,35 @@ def db(tmp_path_factory):
     cache = cache_dir()
     path = tmp_path_factory.mktemp("live") / "geonames.sqlite"
 
-    # Places exactly as production builds them: cities500, countryInfo and the
-    # admin1 names, through geonames.build itself.
-    for name in (geonames.CITIES_FILE, geonames.COUNTRY_FILE, geonames.ADMIN1_FILE):
+    # The country names and region names production uses.
+    for name in (geonames.COUNTRY_FILE, geonames.ADMIN1_FILE):
         fetch(name, cache)
     geonames.build(path, cache_dir=cache)
 
-    # Landmarks from the per-country dumps rather than the 402 MB worldwide
-    # one, through production's own row filter.
+    # Places *and* landmarks from the per-country dumps rather than the 402 MB
+    # worldwide one, each through production's own row filter. Places are
+    # rebuilt rather than added to, because `build` above filled them from
+    # cities500 and this file exists to test what `--villages` gives.
     conn = sqlite3.connect(path)
     conn.executescript(geonames.LANDMARK_SCHEMA)
     conn.execute("DELETE FROM landmarks")
+    conn.execute("DELETE FROM places")
     for cc in COUNTRIES:
         zip_path = fetch(f"{cc}.zip", cache)
         with zipfile.ZipFile(zip_path) as z, z.open(f"{cc}.txt") as fh:
-            rows = []
+            places, marks = [], []
             for raw in fh:
-                row = geonames.landmark_row(raw.decode("utf-8", "replace").split("\t"))
+                f = raw.decode("utf-8", "replace").split("\t")
+                row = geonames.place_row(f)
                 if row is not None:
-                    rows.append(row)
-            conn.executemany("INSERT INTO landmarks VALUES (?,?,?,?,?)", rows)
+                    places.append(row)
+                row = geonames.landmark_row(f)
+                if row is not None:
+                    marks.append(row)
+            conn.executemany(
+                "INSERT INTO places (name, cc, admin1, lat, lon, pop, code) "
+                "VALUES (?,?,?,?,?,?,?)", places)
+            conn.executemany("INSERT INTO landmarks VALUES (?,?,?,?,?)", marks)
     conn.commit()
     conn.close()
     return path
@@ -138,34 +147,47 @@ CASES = [
      "not in cities500 at all, leaving the nearest *recorded* place large "
      "enough to take the branch where a landmark needs to be within 750 m"),
     ("a fairground you are not at", 32.1040, 34.8110,
-     "Ramat Gan, Israel",
-     "400 m from Luna Park is not at Luna Park; the shrink has to fire even "
-     "though every recorded town centre here is over 2 km off"),
+     "Tel Aviv, Israel",
+     "400 m from Luna Park is not at Luna Park, so the shrink has to fire -- "
+     "which needs the built-up test to ignore the neighborhood rows with no "
+     "population that sit nearer than any town"),
+    ("a fairground you are at", 32.10666, 34.81265,
+     "Tel Aviv Luna Park, Tel Aviv, Israel",
+     "and the city is Tel Aviv, which is where Luna Park is. Ramat Gan's "
+     "centre is 2.7 km away against Tel Aviv's 4.2, so nearest-wins said "
+     "Ramat Gan until the villages arrived"),
+
+    # ------------------------------------------------------- the Black Forest
+    #
+    # Three photographs from one apartment, which came back as three different
+    # places because the village they are in was not in the table at all.
+    ("an apartment in a village, 1", 47.857021, 7.9163261,
+     "Muggenbrunn, Germany", "was Köpfle, a hill 1.3 km off"),
+    ("an apartment in a village, 2", 47.8548144, 7.9212054,
+     "Muggenbrunn, Germany", "was Glashof Wald, a forest 3.7 km off"),
+    ("an apartment in a village, 3", 47.8547626, 7.9219531,
+     "Muggenbrunn, Germany",
+     "was Todtnau, 3.3 km off -- nine metres of GPS drift from the one above "
+     "flipped which distant town was nearest, and the two fell on opposite "
+     "sides of the population floor"),
+
+    # -------------------------------------------- and what must not come back
+    ("a city, not its neighborhood", 42.3589889, -71.0506944,
+     "Christopher Columbus Park, Boston, Massachusetts, United States",
+     "North End has a second row with no population, which villages let in"),
+    ("a village inside a city keeps its name", 42.3119, -71.226175,
+     "Newton Upper Falls, Massachusetts, United States",
+     "Newton is 11.7x its population, under the dominance threshold"),
 ]
 
-# Known wrong, and not fixable from this data. Asserted as far as it goes so
-# that the part which *is* right keeps working.
-#
-# Luna Park is in Tel Aviv. GeoNames puts Ramat Gan's centre 2.7 km from it and
-# Tel Aviv's 4.2 km, and leaves admin2, admin3 and admin4 empty for every
-# Israeli row -- so nothing in the dataset says which municipality a point is
-# in. Naming the nearer city is the best a point-and-population dataset can do;
-# municipal boundaries would settle it and GeoNames does not publish them.
-KNOWN_IMPERFECT = [
-    ("at Tel Aviv's Luna Park", 32.10666, 34.81265, "Tel Aviv Luna Park"),
-]
-
-
-@pytest.mark.parametrize("label,lat,lon,prefix", KNOWN_IMPERFECT,
-                         ids=[c[0].replace(" ", "_") for c in KNOWN_IMPERFECT])
-def test_the_landmark_is_right_even_where_the_town_cannot_be(db, label, lat, lon, prefix):
-    gc = geonames.Geocoder(db)
-    try:
-        found = gc.describe(lat, lon)
-    finally:
-        gc.close()
-    got = found[0] if found else None
-    assert got and got.startswith(prefix), f"{label}: {got!r}"
+# Luna Park used to be here, under "known wrong and not fixable from this
+# data": it is in Tel Aviv, and with only the towns in the table the nearest
+# centre was Ramat Gan's, 2.7 km against Tel Aviv's 4.2. Adding the villages
+# fixed it without anybody aiming at it. The neighborhood rows nearest the park
+# carry no population, which makes the dominance rule the one that decides, and
+# it picks the largest city whose extent reaches -- Tel Aviv. It cannot misfire
+# where the nearest place *has* a population: at Newton Upper Falls that puts
+# the threshold at 151,580 and Newton's 88,817 is nowhere near it.
 
 
 @pytest.mark.parametrize("label,lat,lon,expected,note", CASES,

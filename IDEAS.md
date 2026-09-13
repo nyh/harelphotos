@@ -154,7 +154,17 @@ Related: item 10 names a whole album, which is the answer when a feature is so
 large its recorded point is nowhere near you. This is the answer when the
 feature is missing altogether.
 
-### 10b. Boundaries, not just centroids
+### 10b. Boundaries, not just centroids — *less needed than it looked*
+
+**The case that prompted this was fixed by something else.** Luna Park now says
+"Tel Aviv Luna Park, Tel Aviv" rather than Ramat Gan, because the places table
+took in the villages and neighborhoods. Those rows carry no population, which
+hands the decision to the dominance rule, and that picks the largest city whose
+extent reaches the camera. What remains below is still true of the general
+problem and is kept for it — but the concrete example is gone, so anybody
+picking this up should first find a case that still hurts.
+
+
 
 Every place in the dataset is one point and a population. Where towns abut —
 common in Israel, and anywhere a conurbation is many municipalities — nothing

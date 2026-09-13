@@ -615,6 +615,34 @@ your machine.
 The data is from GeoNames under CC BY 4.0; attribute it if you publish
 anything derived from it.
 
+**`--villages`** builds the table from GeoNames' worldwide dump instead of its
+list of towns. Worth knowing what the default leaves out: `cities500` holds
+only places with five hundred *recorded* inhabitants, which is most of the
+world's population and a small minority of its settlements. Measured on the
+German dump, 9,957 places of 82,294 — so **88% of the country's villages are
+missing**, and in the countryside the nearest name the album holds can be
+kilometres away.
+
+Three photographs taken in one apartment in the Black Forest came back as a
+hill, a forest and a town. The village 160 m away, Muggenbrunn, had no recorded
+population and so was not in the table at all; the rules were choosing between
+things three kilometres off, and nine metres of GPS drift decided which. With
+`--villages` all three say "Muggenbrunn, Germany".
+
+```sh
+harelphotos init --geonames --villages
+harelphotos geocode --force          # the rules changed; re-derive every name
+```
+
+It costs a 421 MB download — the same file `--landmarks` uses, and cached, so
+doing both downloads once — and about 160 MB in the database, against 250 MB of
+landmarks. `harelphotos gc` reclaims the download.
+
+Nothing else changes. A village of no recorded population still loses to the
+city whose extent covers it, and a *section* of a town still loses to the town:
+checked against the real dumps, Boston keeps its photographs against the North
+End, and Newton Upper Falls keeps its own against Newton.
+
 ### `harelphotos config show`
 
 Print the effective configuration — the quickest way to confirm the file you

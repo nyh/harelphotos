@@ -333,33 +333,93 @@ def _fetch(name: str, cache_dir: Path) -> bytes:
     return data
 
 
-def build(db_path: Path, cache_dir: Path | None = None, progress=None) -> int:
-    """Download the dataset and build geonames.sqlite. Returns place count."""
+# Populated-place codes to leave out of the places table.
+#
+# Everything else in GeoNames' P class is somewhere people live, including the
+# codes for a section of a town -- those are wanted in the table, because
+# `_is_vague` and the city rules are what decide whether to *say* them, and
+# they cannot decide about a row that is not there.
+#
+# These three are not places you can be: historical, abandoned and destroyed.
+# Naming a photograph after a village that no longer exists is the same mistake
+# as the "(historical)" landmarks, which are dropped for the same reason.
+SKIP_PLACE_CODES = frozenset({"PPLH", "PPLW", "PPLQ"})
+
+
+def place_row(f: list[str]):
+    """One line of a GeoNames dump as a places row, or None to skip it.
+
+    Its own function for the same reason as `landmark_row`: so the live test
+    can build a table from the per-country dumps through exactly this filter.
+    """
+    if len(f) <= COL_POP or f[COL_FCLASS] != "P":
+        return None
+    if f[COL_FCODE] in SKIP_PLACE_CODES:
+        return None
+    try:
+        lat, lon = float(f[COL_LAT]), float(f[COL_LON])
+    except ValueError:
+        return None           # the dump does contain a few malformed rows
+    try:
+        pop = int(f[COL_POP] or 0)
+    except ValueError:
+        pop = 0
+    return (f[COL_NAME], f[COL_CC], f[COL_ADMIN1], lat, lon, pop, f[COL_FCODE])
+
+
+def build(db_path: Path, cache_dir: Path | None = None, progress=None,
+          villages: bool = False) -> int:
+    """Download the dataset and build geonames.sqlite. Returns place count.
+
+    Two datasets, and the difference is whether a village has a name.
+
+    By default `cities500`: 13 MB, a quarter of a million places, built in
+    about a second -- and only places with five hundred recorded inhabitants.
+    That is most of the world's population and a small minority of its
+    settlements. Measured on the German dump: 9,957 places of 82,294 are in it,
+    so **88% of the country's villages are missing**, and in the countryside the
+    nearest name we hold can be kilometres away. Three photographs taken in one
+    apartment in the Black Forest came back as a hill, a forest and a town,
+    because the village 160 m away -- Muggenbrunn, population unrecorded -- was
+    not in the table and the rules were choosing between things 3 km off.
+
+    With `villages=True` the same worldwide dump the landmarks come from, which
+    has everything: about two million places and 160 MB, against 250 MB of
+    landmarks. It is cached, so doing both costs one download.
+
+    Nothing else changes. A hamlet of no recorded population still loses to the
+    city whose extent covers it, and a *section* of a town still loses to the
+    town -- checked against the real dumps, where Boston keeps its photographs
+    against the North End and Newton Upper Falls keeps its own against Newton.
+    """
     cache_dir = cache_dir or cache_path(db_path)
-    cities_zip = _fetch(CITIES_FILE, cache_dir)
     countries = _fetch(COUNTRY_FILE, cache_dir).decode("utf-8", "replace")
     admin1 = _fetch(ADMIN1_FILE, cache_dir).decode("utf-8", "replace")
 
     if progress:
         progress("parsing")
-    with zipfile.ZipFile(io.BytesIO(cities_zip)) as z:
-        text = z.read("cities500.txt").decode("utf-8", "replace")
-
     rows = []
-    for line in text.splitlines():
-        f = line.split("\t")
-        if len(f) <= COL_POP:
-            continue
-        try:
-            lat, lon = float(f[COL_LAT]), float(f[COL_LON])
-        except ValueError:
-            continue          # the dump does contain a few malformed rows
-        try:
-            pop = int(f[COL_POP] or 0)
-        except ValueError:
-            pop = 0
-        rows.append((f[COL_NAME], f[COL_CC], f[COL_ADMIN1], lat, lon, pop,
-                     f[COL_FCODE]))
+    if villages:
+        # Streamed a line at a time: this file is 421 MB compressed and several
+        # gigabytes of text, and the machine it runs on has a gigabyte of RAM.
+        path = _fetch_to_file(ALL_FILE, cache_dir, progress=progress)
+        seen = 0
+        with zipfile.ZipFile(path) as z, z.open("allCountries.txt") as fh:
+            for raw in io.TextIOWrapper(fh, encoding="utf-8", errors="replace"):
+                seen += 1
+                if progress and seen % 2_000_000 == 0:
+                    progress(f"{seen // 1000:,}k rows read, {len(rows):,} places kept")
+                row = place_row(raw.split("\t"))
+                if row is not None:
+                    rows.append(row)
+    else:
+        cities_zip = _fetch(CITIES_FILE, cache_dir)
+        with zipfile.ZipFile(io.BytesIO(cities_zip)) as z:
+            text = z.read("cities500.txt").decode("utf-8", "replace")
+        for line in text.splitlines():
+            row = place_row(line.split("\t"))
+            if row is not None:
+                rows.append(row)
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = db_path.with_name(db_path.name + ".tmp")
@@ -385,7 +445,12 @@ def build(db_path: Path, cache_dir: Path | None = None, progress=None) -> int:
                 if len(p) > 1
             ],
         )
-        conn.execute("INSERT INTO meta VALUES ('source', ?)", (BASE_URL + CITIES_FILE,))
+        conn.execute("INSERT INTO meta VALUES ('source', ?)",
+                     (BASE_URL + (ALL_FILE if villages else CITIES_FILE),))
+        # Which dataset this was built from, so `check` can say whether the
+        # villages are in and a later rebuild can default to the same thing.
+        conn.execute("INSERT INTO meta VALUES ('villages', ?)",
+                     ("1" if villages else "0",))
         conn.execute("INSERT INTO meta VALUES ('places', ?)", (str(len(rows)),))
         conn.commit()
     finally:
@@ -640,7 +705,18 @@ class Geocoder:
             # How built-up this spot is, which is not the same question as
             # what to call it: naming Boston rather than the hospital 300 m
             # away must not make the surroundings look like open country.
-            urban = (best_dist, _int(best["pop"]))
+            #
+            # The nearest place with a *recorded population*, not simply the
+            # nearest. With villages in the table the nearest row is very often
+            # a neighborhood filed with no population at all, and a population
+            # of zero estimates an extent of zero -- so "are you inside a town"
+            # answered no in the middle of Tel Aviv, the area shrink never
+            # fired, and a fairground reclaimed photographs from 400 m away.
+            # A row with no population says nothing about how built-up anywhere
+            # is; the nearest one that has a number is the only evidence here.
+            with_pop = next((rd for rd in scored if _int(rd[0]["pop"]) > 0), None)
+            urban = ((with_pop[1], _int(with_pop[0]["pop"])) if with_pop
+                     else (best_dist, _int(best["pop"])))
 
             if dominant:
                 row, dist = max(dominant, key=lambda rd: _int(rd[0]["pop"]))

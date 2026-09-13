@@ -136,3 +136,65 @@ def test_geocode_reports_progress_on_every_row(tmp_path, monkeypatch):
     assert [d for d, _ in seen] == [1, 2, 3, 4, 5, 5], seen
     assert all(t == 5 for _, t in seen)
     assert stats.elapsed >= 0
+
+
+def test_place_row_keeps_villages_and_drops_the_departed():
+    """What `--villages` lets into the places table.
+
+    Everything in GeoNames' P class is somewhere people live, including the
+    codes for a section of a town -- those belong in the table, because
+    `_is_vague` and the city rules decide whether to *say* them and cannot
+    decide about a row that is not there.
+
+    Historical, abandoned and destroyed are the exception, for the same reason
+    "(historical)" landmarks are dropped: naming a photograph after a village
+    that is gone is worse than naming nothing.
+    """
+    def row(code, pop="0", cls="P"):
+        f = [""] * 19
+        f[geonames.COL_NAME] = "Somewhere"
+        f[geonames.COL_LAT], f[geonames.COL_LON] = "47.8", "7.9"
+        f[geonames.COL_CC], f[geonames.COL_ADMIN1] = "DE", "01"
+        f[geonames.COL_FCLASS], f[geonames.COL_FCODE] = cls, code
+        f[geonames.COL_POP] = pop
+        return geonames.place_row(f)
+
+    assert row("PPL") is not None                 # a village with no population
+    assert row("PPL", "5072") is not None
+    assert row("PPLA4") is not None               # a municipal subdivision
+    assert row("PPLX") is not None                # a section: kept, judged later
+    for gone in ("PPLH", "PPLQ", "PPLW"):
+        assert row(gone) is None, gone
+    assert row("MT", cls="T") is None             # not a populated place at all
+    assert geonames.place_row(["short", "row"]) is None
+
+
+def test_a_village_with_no_population_is_a_place(tmp_path):
+    """The Black Forest case, in miniature.
+
+    Three photographs taken in one apartment came back as a hill, a forest and
+    a town, because Muggenbrunn -- 160 m away, population unrecorded -- was not
+    in `cities500` and the rules were choosing between things three kilometres
+    off. Nine metres of GPS drift decided which of two distant towns was
+    nearest, and those two fell on opposite sides of the population floor.
+    """
+    path = tmp_path / "geonames.sqlite"
+    conn = sqlite3.connect(path)
+    conn.executescript(geonames.SCHEMA)
+    conn.executemany(
+        "INSERT INTO places (name, cc, admin1, lat, lon, pop, code) VALUES (?,?,?,?,?,?,?)",
+        [("Muggenbrunn", "DE", "01", 47.8558, 7.9182, 0, "PPL"),     # ~160 m
+         ("Todtnau", "DE", "01", 47.8290, 7.9410, 5072, "PPL"),      # ~3.3 km
+         ("Wieden", "DE", "01", 47.8430, 7.8830, 578, "PPL")],       # ~3.1 km
+    )
+    conn.execute("INSERT INTO countries VALUES ('DE','Germany')")
+    conn.commit(); conn.close()
+
+    gc = geonames.Geocoder(path)
+    try:
+        for lat, lon in ((47.857021, 7.9163261), (47.8548144, 7.9212054),
+                         (47.8547626, 7.9219531)):
+            got = gc.describe(lat, lon)
+            assert got and got[0].startswith("Muggenbrunn"), (lat, lon, got)
+    finally:
+        gc.close()

@@ -53,8 +53,18 @@ def cmd_init(args: argparse.Namespace) -> int:
         dest = cfg.state_dir / "geonames.sqlite"
 
         if args.geonames:
-            print(f"downloading the place-name dataset (~14 MB) to {dest} ...")
-            n = geonames.build(dest, progress=lambda msg: print(f"  {msg}"))
+            if args.villages:
+                print("\nWith villages: the worldwide dump rather than the list of\n"
+                      "towns, because `cities500` holds only places with five hundred\n"
+                      "recorded inhabitants -- 9,957 of Germany's 82,294, so 88% of\n"
+                      "its villages are missing and in the countryside the nearest\n"
+                      "name can be kilometres away. About 421 MB to download (cached,\n"
+                      "and shared with --landmarks), two million places, 160 MB once\n"
+                      "indexed.\n")
+            else:
+                print(f"downloading the place-name dataset (~14 MB) to {dest} ...")
+            n = geonames.build(dest, progress=lambda msg: print(f"  {msg}"),
+                               villages=args.villages)
             print(f"built {dest} with {n:,} places "
                   f"({dest.stat().st_size / 1e6:.0f} MB)")
 
@@ -620,7 +630,8 @@ def cmd_gc(args: argparse.Namespace) -> int:
                 _shutil.rmtree(path, ignore_errors=True)
                 print(f"removed {size / 1e6:.0f} MB of cached GeoNames downloads")
                 print("  (resolved place names are unaffected; a later "
-                      "'init --landmarks' re-downloads)")
+                      "'init --landmarks' or 'init --geonames --villages' "
+                      "re-downloads)")
     if not args.deep:
         print("(use --deep to also look for files with no matching photo)")
     conn.close()
@@ -796,6 +807,10 @@ def build_parser() -> argparse.ArgumentParser:
     pi.add_argument("--photo-root", help="directory holding your photos")
     pi.add_argument("--state-dir", help="where index.sqlite and derived/ go")
     pi.add_argument("--geonames", action="store_true", help="download the city dataset (M3)")
+    pi.add_argument("--villages", action="store_true",
+                    help="with --geonames: include villages and hamlets, not "
+                         "only towns of 500+ (a 421 MB download, shared with "
+                         "--landmarks)")
     pi.add_argument("--landmarks", action="store_true", help="also name airports, parks and monuments (a 421 MB download)")
     pi.set_defaults(func=cmd_init)
 
