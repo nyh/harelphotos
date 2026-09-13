@@ -396,38 +396,71 @@ def build(db_path: Path, cache_dir: Path | None = None, progress=None,
     countries = _fetch(COUNTRY_FILE, cache_dir).decode("utf-8", "replace")
     admin1 = _fetch(ADMIN1_FILE, cache_dir).decode("utf-8", "replace")
 
-    if progress:
-        progress("parsing")
-    rows = []
+    # The rows are streamed into the database in batches and never held in a
+    # list. Collecting them first cost more than a gigabyte for two million
+    # places -- a Python tuple of seven fields is a few hundred bytes once the
+    # strings are counted -- and the machine this runs on has one gigabyte in
+    # total. It was killed there.
     if villages:
-        # Streamed a line at a time: this file is 421 MB compressed and several
-        # gigabytes of text, and the machine it runs on has a gigabyte of RAM.
         path = _fetch_to_file(ALL_FILE, cache_dir, progress=progress)
-        seen = 0
-        with zipfile.ZipFile(path) as z, z.open("allCountries.txt") as fh:
-            for raw in io.TextIOWrapper(fh, encoding="utf-8", errors="replace"):
-                seen += 1
-                if progress and seen % 2_000_000 == 0:
-                    progress(f"{seen // 1000:,}k rows read, {len(rows):,} places kept")
-                row = place_row(raw.split("\t"))
-                if row is not None:
-                    rows.append(row)
+
+        def source():
+            with zipfile.ZipFile(path) as z, z.open("allCountries.txt") as fh:
+                for raw in io.TextIOWrapper(fh, encoding="utf-8", errors="replace"):
+                    yield raw
     else:
         cities_zip = _fetch(CITIES_FILE, cache_dir)
-        with zipfile.ZipFile(io.BytesIO(cities_zip)) as z:
-            text = z.read("cities500.txt").decode("utf-8", "replace")
-        for line in text.splitlines():
-            row = place_row(line.split("\t"))
-            if row is not None:
-                rows.append(row)
+
+        def source():
+            with zipfile.ZipFile(io.BytesIO(cities_zip)) as z, \
+                    z.open("cities500.txt") as fh:
+                for raw in io.TextIOWrapper(fh, encoding="utf-8", errors="replace"):
+                    yield raw
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = db_path.with_name(db_path.name + ".tmp")
     tmp.unlink(missing_ok=True)
     conn = sqlite3.connect(tmp)
+    kept = seen = 0
     try:
+        # This file is thrown away if anything goes wrong and renamed into
+        # place only when it is complete, so it needs neither a journal nor a
+        # flush per commit -- and both cost memory and time we do not have.
+        conn.execute("PRAGMA journal_mode = OFF")
+        conn.execute("PRAGMA synchronous = OFF")
+        conn.execute("PRAGMA cache_size = -8000")        # 8 MB, not the default
+        # Building the index at the end sorts two million rows. On disk, not
+        # in memory: the whole point of this exercise.
+        conn.execute("PRAGMA temp_store = FILE")
         conn.executescript(SCHEMA)
-        conn.executemany("INSERT INTO places VALUES (?,?,?,?,?,?,?)", rows)
+        # Built at the end instead. Maintaining it across two million inserts
+        # is slower and holds far more of the tree in memory than sorting once.
+        conn.execute("DROP INDEX places_ll")
+
+        if progress:
+            progress("parsing")
+        batch = []
+        for raw in source():
+            seen += 1
+            if progress and villages and seen % 2_000_000 == 0:
+                progress(f"{seen // 1000:,}k rows read, {kept:,} places kept")
+            row = place_row(raw.split("\t"))
+            if row is None:
+                continue
+            batch.append(row)
+            kept += 1
+            if len(batch) >= 20000:
+                conn.executemany("INSERT INTO places VALUES (?,?,?,?,?,?,?)", batch)
+                conn.commit()
+                batch = []
+        if batch:
+            conn.executemany("INSERT INTO places VALUES (?,?,?,?,?,?,?)", batch)
+        batch = None
+
+        if progress:
+            progress(f"indexing {kept:,} places")
+        conn.execute("CREATE INDEX places_ll ON places(lat, lon)")
+
         conn.executemany(
             "INSERT OR REPLACE INTO countries VALUES (?,?)",
             [
@@ -451,13 +484,13 @@ def build(db_path: Path, cache_dir: Path | None = None, progress=None,
         # villages are in and a later rebuild can default to the same thing.
         conn.execute("INSERT INTO meta VALUES ('villages', ?)",
                      ("1" if villages else "0",))
-        conn.execute("INSERT INTO meta VALUES ('places', ?)", (str(len(rows)),))
+        conn.execute("INSERT INTO meta VALUES ('places', ?)", (str(kept),))
         conn.commit()
     finally:
         conn.close()
     _carry_over_landmarks(db_path, tmp)
     tmp.replace(db_path)
-    return len(rows)
+    return kept
 
 
 def _carry_over_landmarks(old: Path, new: Path) -> int:
@@ -470,37 +503,48 @@ def _carry_over_landmarks(old: Path, new: Path) -> int:
     """
     if not old.exists():
         return 0
-    src = sqlite3.connect(f"file:{old}?mode=ro", uri=True)
+
+    # Copied inside SQLite, with the old file attached, rather than read into
+    # Python and written back. `fetchall()` on this table means two million
+    # rows as Python tuples -- comfortably more than a gigabyte, on a machine
+    # that has one -- and it ran on *every* `init --geonames`, villages or not.
+    # An INSERT ... SELECT across an attached database streams, and is faster
+    # besides.
+    dst = sqlite3.connect(new, uri=True)          # uri=True: the ATTACH below
     try:
-        have = src.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='landmarks'"
+        dst.executescript(LANDMARK_SCHEMA)
+        dst.execute("PRAGMA journal_mode = OFF")
+        dst.execute("PRAGMA synchronous = OFF")
+        dst.execute("ATTACH DATABASE ? AS old", (f"file:{old}?mode=ro",))
+        have = dst.execute(
+            "SELECT 1 FROM old.sqlite_master WHERE type='table' AND name='landmarks'"
         ).fetchone()
         if not have:
             return 0
-        rows = src.execute("SELECT name, cc, code, lat, lon FROM landmarks").fetchall()
-        fingerprint = src.execute(
-            "SELECT value FROM meta WHERE key = 'landmark_codes'"
+        dst.execute(
+            "INSERT INTO landmarks (name, cc, code, lat, lon) "
+            "SELECT name, cc, code, lat, lon FROM old.landmarks"
+        )
+        n = dst.execute("SELECT count(*) FROM landmarks").fetchone()[0]
+        dst.execute("INSERT OR REPLACE INTO meta VALUES ('landmarks', ?)", (str(n),))
+        fingerprint = dst.execute(
+            "SELECT value FROM old.meta WHERE key = 'landmark_codes'"
         ).fetchone()
-    except sqlite3.Error as e:
-        log.warning("could not carry the landmarks across: %s", e)
-        return 0
-    finally:
-        src.close()
-
-    dst = sqlite3.connect(new)
-    try:
-        dst.executescript(LANDMARK_SCHEMA)
-        dst.executemany("INSERT INTO landmarks VALUES (?,?,?,?,?)", rows)
-        dst.execute("INSERT OR REPLACE INTO meta VALUES ('landmarks', ?)",
-                    (str(len(rows)),))
         if fingerprint:
             dst.execute("INSERT OR REPLACE INTO meta VALUES ('landmark_codes', ?)",
                         (fingerprint[0],))
         dst.commit()
+    except sqlite3.Error as e:
+        log.warning("could not carry the landmarks across: %s", e)
+        return 0
     finally:
+        try:
+            dst.execute("DETACH DATABASE old")
+        except sqlite3.Error:
+            pass
         dst.close()
-    log.info("carried %d landmarks into the rebuilt dataset", len(rows))
-    return len(rows)
+    log.info("carried %d landmarks into the rebuilt dataset", n)
+    return n
 
 
 def cache_path(db_path: Path) -> Path:
