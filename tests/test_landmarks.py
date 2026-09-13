@@ -686,3 +686,41 @@ def test_a_mountain_out_in_the_open_still_names_itself(tmp_path):
     )
     got = name_at(path, 32.8521917, 35.2363889)
     assert got.startswith("Har Somewhere"), got
+
+
+def test_a_reserve_does_not_caption_a_restaurant_in_a_town(tmp_path):
+    """A photograph of a restaurant in Kaukab Abu el Hija came back named
+    after a nature reserve.
+
+    The town has 3,589 people and the shrink that should have applied wanted
+    5,000, so the reserve kept a five-kilometre radius and displaced the town
+    from 509 m away. The floor was the wrong instrument: the case it protects
+    is Bay Lake, fifty people, and no single number separates fifty from three
+    and a half thousand. What separates them is whether the camera is inside
+    the town at all -- Kaukab reaches about 756 m and the camera was 589 m in.
+    """
+    path = _world(
+        tmp_path,
+        [("Kaukab Abu el Hija", "IL", "03", 32.8395, 35.2432, 3589)],   # 589 m
+        [("Shmurat Me'arat Shekhanya", "IL", "RESN", 32.8412, 35.2450)],  # 509 m
+    )
+    got = name_at(path, 32.836843, 35.248091)
+    assert got.startswith("Kaukab"), got
+    assert "Shmurat" not in got
+
+
+def test_the_hamlet_inside_a_resort_still_does_not_shrink_it(tmp_path):
+    """The other side of that same change, which is what makes it safe.
+
+    Bay Lake is a smaller place than Kaukab by a factor of seventy, and the
+    camera was *further* from it -- 429 m from somewhere reaching about 90 m.
+    You are not in Bay Lake, so the resort keeps its name, and it keeps it
+    for a reason that does not need a threshold chosen by hand.
+    """
+    path = _world(
+        tmp_path,
+        [("Bay Lake", "US", "FL", 28.3891, -81.5639, 50)],
+        [("Walt Disney World Resort", "US", "AMUS", 28.4034, -81.5639)],
+    )
+    got = name_at(path, 28.3852, -81.5639)
+    assert got.startswith("Walt Disney World Resort"), got

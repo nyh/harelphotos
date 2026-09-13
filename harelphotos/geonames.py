@@ -100,44 +100,34 @@ LANDMARK_CODES = frozenset(LANDMARK_RADII_M)
 # indoors was captioned "Newton Upper Falls Historic District", 426 m away,
 # because it inherited a radius meant for Yellowstone.
 #
-# A town nearby is the signal that settles it: a wilderness five kilometres
-# across does not have a village 600 m from the middle of it. When there is a
-# town close by, these shrink to something you have to be inside.
+# Being inside a town is the signal that settles it: a wilderness five
+# kilometres across does not have you standing in a village in the middle of
+# it. Where the camera is within the nearest town's own extent, these shrink to
+# something you have to be inside. The test itself is at `near_town` below,
+# which explains why it is the town's extent and not its population.
 #
-# Deliberately not AMUS: a theme park is genuinely large and deliberately built
-# next to a town, so Walt Disney World would lose its name to Celebration,
-# Florida. Nor AIRP, for the same reason -- that is the whole point of it.
 # AMUS belongs here for the same reason PRK does: it covers Walt Disney World,
 # a hundred square kilometres, and Tel Aviv's Luna Park, a hundred metres
-# across. What separates them is not the code but the neighborhood -- so the
-# shrink applies only when a town of real size is close by. Disney's nearest
-# neighbor is a company town of fifty people; Luna Park's is a city of
-# 432,000, and a fairground does not get to displace that city from two
+# across. What separates them is not the code but the neighborhood. Disney's
+# nearest neighbor is Bay Lake, fifty people, which reaches about 90 m and was
+# 429 m from the camera -- so the resort keeps its name. Luna Park's is a city
+# of 432,000, and a fairground does not get to displace that city from two
 # kilometres away.
+# Mountains, peaks, capes and volcanoes are here for the same reason, arrived
+# at separately. A photograph taken in Manof, a village of 862 on the side of
+# Har Shekhanya, came back as "Har Shekhanya, Israel": the village 185 m away,
+# the recorded summit 929 m, and a 1500 m radius that swallowed it whole. A
+# mountain is not somewhere you go, it is the ground that is there, and a hill
+# with three villages on it should not name itself over the one holding the
+# camera. Standing on the summit still gets you the summit -- 250 m is
+# generous for that and Mount Tabor keeps its name from 72 m away.
 AREA_SHRINK_CODES = frozenset({
     "PRK", "AMUS", "RESN", "RESV", "FRST", "CNYN", "DSRT", "PLAT", "GLCR",
     "ISL", "LK", "LGN", "BCH",
+    "PK", "MT", "CAPE", "VLC",
 })
 AREA_TOWN_NEAR_M = 2000
 AREA_SHRUNK_M = 250
-
-# Terrain that towns are built on, which needs the same shrink on a different
-# test.
-#
-# A photograph taken in Manof, a village of 862 on the side of Har Shekhanya,
-# came back as "Har Shekhanya, Israel". The village was 184 m away and the
-# summit 928 m, and the mountain's 1500 m radius swallowed it -- a hill with
-# three villages on it, naming itself instead of the one you are standing in.
-#
-# The rule above would have fixed it but for its population floor, and that
-# floor is right where it is: a hamlet of fifty inside a national park is a
-# detail of the wilderness and must not shrink it, or Walt Disney World loses
-# its name to Bay Lake. A mountain is the other way round. It is not somewhere
-# you go, it is the ground that is there, and a village on its flank is what
-# you are in whatever its size. So any populated place nearby shrinks these,
-# with no floor at all -- while a photograph genuinely out on the mountain,
-# with no village within two kilometres, still gets the mountain.
-TERRAIN_CODES = frozenset({"PK", "MT", "CAPE", "VLC"})
 
 # Places you are overwhelmingly likely to be *inside* rather than beside.
 #
@@ -649,11 +639,30 @@ class Geocoder:
             "WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?",
             (lat - d, lat + d, lon - dlon, lon + dlon),
         ).fetchall()
-        # A *substantial* town nearby, not merely any hamlet.
-        near_town = (town_dist is not None and town_dist <= AREA_TOWN_NEAR_M
-                     and town_pop >= LANDMARK_TOWN_POP_FLOOR)
-        # For terrain, any village at all: see TERRAIN_CODES.
-        near_any_town = town_dist is not None and town_dist <= AREA_TOWN_NEAR_M
+        # Inside the nearest town, rather than merely beside a big one.
+        #
+        # This was a population floor of 5,000, and it asked the wrong
+        # question. A nature reserve captioned a restaurant in Kaukab Abu el
+        # Hija, a town of 3,589 -- which missed the floor by a whisker, so the
+        # reserve kept a five-kilometre radius and displaced the town from 509
+        # metres. Raising or lowering a single number cannot separate that from
+        # the case the floor exists for, Bay Lake inside Walt Disney World,
+        # because Bay Lake has *fifty* people and the two are a factor of
+        # seventy apart.
+        #
+        # A town's own extent is the honest measure, and it is already computed
+        # here for other purposes. Bay Lake reaches about 89 m and the camera
+        # was 429 m away, plainly outside it, so the resort keeps its name.
+        # Kaukab reaches about 756 m and the camera was 589 m away, plainly
+        # inside it, so the reserve shrinks. Manof reaches 370 m against 185.
+        # No threshold to tune, and it answers the question actually being
+        # asked, which is whether the photograph was taken in the town.
+        #
+        # Still capped: a metropolis extends kilometres, and a park out in its
+        # hinterland is not something you are standing in.
+        near_town = (town_dist is not None
+                     and town_dist <= min(AREA_TOWN_NEAR_M,
+                                          urban_radius_m(town_pop)))
         out = []
         for r in rows:
             if HISTORICAL_MARK in r["name"]:
@@ -661,8 +670,6 @@ class Geocoder:
             dist = haversine(lat, lon, r["lat"], r["lon"])
             radius = LANDMARK_RADII_M.get(r["code"], 0)
             if near_town and r["code"] in AREA_SHRINK_CODES:
-                radius = min(radius, AREA_SHRUNK_M)
-            if near_any_town and r["code"] in TERRAIN_CODES:
                 radius = min(radius, AREA_SHRUNK_M)
             if dist <= radius:
                 out.append((r, dist, radius))

@@ -485,19 +485,25 @@ fairground and — in the United States — a National Register "historic distri
 all share a code and a radius. A photo taken indoors was captioned with a
 historic district 426 m away, having inherited a radius meant for Yellowstone.
 
-A substantial town nearby is what separates them, because a five-kilometre
-wilderness does not have a city in it: where a town of 5,000 or more is within
-2 km, area features shrink to 250 m. That is why Walt Disney World keeps its
-full reach — its nearest neighbour is a company town of fifty people — while
-Tel Aviv's Luna Park, a hundred metres across, cannot reach across the city
-from two kilometres away.
+Being inside a town is what separates them, because a five-kilometre
+wilderness does not have you standing in a village in the middle of it: where
+the camera is within the nearest town's own extent — estimated from its
+population — area features shrink to 250 m.
+
+That test replaced a population floor of 5,000, which asked the wrong question.
+A nature reserve captioned a restaurant in a town of 3,589 people, missing the
+floor by a whisker and displacing the town from 509 m away. No single number
+could have fixed it, because the case the floor protects is Bay Lake inside
+Walt Disney World — and Bay Lake has *fifty* people. A town's extent separates
+them without a threshold: Bay Lake reaches about 90 m and the camera was 429 m
+off, so the resort keeps its name; the town of 3,589 reaches about 756 m and
+the camera was 589 m in, so the reserve shrinks. Tel Aviv's Luna Park, a
+hundred metres across, still cannot reach across the city from two kilometres
+away.
 
 **A mountain is the ground, not a destination.** Peaks, mountains, capes and
-volcanoes shrink the same way, but on any village at all rather than a town of
-5,000 — because the population floor is exactly backwards for terrain. A hamlet
-inside a national park is a detail of the wilderness and must not shrink it; a
-village on a mountainside is where you are standing, and the mountain is merely
-what it is built on. A photo in Manof, 862 people, was captioned "Har
+volcanoes shrink by the same rule. A mountain is not somewhere you go, it is
+what the village is built on: a photo in Manof, 862 people, was captioned "Har
 Shekhanya" — a hill with three villages on it, naming itself rather than the
 one holding the camera.
 
