@@ -903,7 +903,36 @@
     });
   }
 
-  function start() { initGrid(); initViewer(); initShare(); }
+  /* The overflow menu opens and closes by itself -- it is a `<details>`, and
+   * that is the whole reason for using one. These are the two things the
+   * element does not do, and which every reader expects of a menu: close when
+   * you press Escape, and close when you touch something else.
+   *
+   * The Escape listener runs in the capture phase and stops there, so that
+   * closing an open menu does not also reset a zoom or leave the photograph.
+   * Escape means "undo the last thing you opened", and the menu is it. */
+  function initMenu() {
+    var menu = document.querySelector("details.menu");
+    if (!menu) return;
+    document.addEventListener("click", function (e) {
+      if (menu.open && !menu.contains(e.target)) menu.open = false;
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && menu.open) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        menu.open = false;
+        var summary = menu.querySelector("summary");
+        if (summary) summary.focus();
+      }
+    }, true);
+  }
+
+  /* initMenu before initViewer, and the order is load-bearing: both listen for
+   * Escape in the capture phase, and capture listeners run in the order they
+   * were registered. Registered the other way round, Escape with a menu open
+   * over a zoomed photograph would reset the zoom and leave the menu up. */
+  function start() { initGrid(); initMenu(); initViewer(); initShare(); }
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", start);

@@ -614,7 +614,66 @@ form.login button {
 /* --------------------------------------------------- chrome (11.3) */
 
 .usermenu { display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; }
-.usermenu .source { font-size: 0.85rem; }
+
+/* The overflow menu: a `<details>` whose summary is drawn as an icon button
+   and whose panel hangs beneath it. */
+.menu { position: relative; }
+.menu > summary {
+  /* The disclosure triangle has to go in two ways, one of them still needed
+     for older WebKit. */
+  list-style: none;
+  cursor: pointer;
+}
+.menu > summary::-webkit-details-marker { display: none; }
+.menu[open] > summary { color: var(--fg); }
+
+.menu-panel {
+  position: absolute;
+  inset-block-start: calc(100% + 0.25rem);
+  /* Anchored to the end, because this sits at the end of the bar: opening it
+     towards the start keeps it on the screen where opening it outwards would
+     not. */
+  inset-inline-end: 0;
+  z-index: 30;
+  min-inline-size: 12rem;
+  padding: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.18);
+}
+
+.menu-who {
+  color: var(--dim);
+  padding: 0.4rem 0.6rem 0.5rem;
+  border-block-end: 1px solid var(--line);
+  margin-block-end: 0.35rem;
+  white-space: nowrap;
+}
+
+.menu-item {
+  font: inherit;
+  text-align: start;
+  color: var(--fg);
+  background: none;
+  border: 0;
+  border-radius: var(--radius);
+  /* A comfortable target, and the same one whether the item is a link or the
+     button inside the log-out form. */
+  min-block-size: 44px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-inline: 0.6rem;
+  inline-size: 100%;
+  cursor: pointer;
+}
+.menu-item:hover, .menu-item:focus-visible {
+  background: var(--card);
+  text-decoration: none;
+}
 @media (max-height: 520px) { .viewer .usermenu .source { display: none; } }
 .usermenu form, form.inline { display: inline; }
 /* Icons, drawn inline in _chrome.html.

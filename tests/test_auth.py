@@ -232,6 +232,13 @@ def test_every_page_names_who_you_are_and_offers_a_way_out(client):
         assert "Nadav" in body, url
         assert "Log out" in body, url
         assert url_for_logout(body), f"{url}: no form posting to /logout"
+        # They live in the overflow menu now, which is a `<details>` -- so the
+        # way out opens, and the form submits, with no JavaScript running at
+        # all. A scripted dropdown would have made logging out depend on a
+        # script loading, which is not a thing to gamble.
+        menu = body.split('<details class="menu">')[1].split("</details>")[0]
+        assert "Log out" in menu, f"{url}: log out is not inside the menu"
+        assert 'action="/logout"' in menu, f"{url}: the form is not in the menu"
 
 
 def url_for_logout(body: str) -> bool:

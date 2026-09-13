@@ -318,6 +318,22 @@ panning, and the on-screen arrows get out of the way — otherwise examining the
 right-hand edge of a photograph would keep sending you to the next one. Zoom
 back out and they return.
 
+### The top bar
+
+Two icons at the end of it, and no words: **share**, and a **⋮ menu** holding
+who you are signed in as, the way out, and a link to the source. They are there
+on every page, album or photograph.
+
+Spelled out, those three took most of the width of a phone's bar and sat next
+to a breadcrumb that was actually telling you something. In a menu they cost a
+single button, and the name — which answers a question nobody asks continuously
+but which matters once, on a shared tablet, when you want to know whose album
+you are about to log out of — can afford to be a whole sentence.
+
+The menu is a plain HTML disclosure, so it opens, closes and takes the keyboard
+without any JavaScript, and logging out works in a browser where scripts never
+ran. `Esc` closes it, as does touching anything else.
+
 ### Sharing a link
 
 The **share** button in the top bar sends a link to the page you are looking at
