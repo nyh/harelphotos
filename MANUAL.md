@@ -1220,6 +1220,22 @@ Only admins see the button, and only admins may post to it —
 
 ---
 
+**"Make cover, here and above"** does the same for every album above it in one
+go. A photograph three levels down is very often the one that should represent
+the month, the year *and* the whole collection, and saying so used to mean
+editing the overrides file by hand.
+
+Each album above records the same photograph by a path relative to itself —
+`x.jpg` for the album holding it, `deep/x.jpg` for the one above, and so on —
+which works because an album's cover is allowed to name a photo below it. That
+is the same mechanism that lets a directory holding nothing but subdirectories
+have a cover at all.
+
+Undoing it withdraws the photograph from the albums above, and **only** that
+photograph: an album somebody deliberately gave a different picture keeps it.
+Like the single-album version it takes effect on the next page view, not the
+next scan.
+
 ## `harelphotos acl` — who may see a directory
 
 Restrictions live in `.album.toml` files and you can edit them by hand. This

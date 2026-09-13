@@ -59,6 +59,37 @@
                 title="Show this photo on the album's card">Make cover</button>
         {%- endif %}
       </form>
+      {%- if has_ancestors %}
+      {#- The same thing for every album above this one.
+          A photograph three levels down is often the one that should represent
+          the month, the year and the whole collection, and setting each of
+          those by hand meant editing the overrides file -- which is what
+          prompted this. An album's cover may name a photo below it, so each
+          ancestor simply records the same photograph by a longer path. -#}
+      <form method="post" action="{{ url_for('set_cover') }}">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="album" value="{{ album.path }}">
+        <input type="hidden" name="ancestors" value="1">
+        <input type="hidden" name="next" value="{{ photo.page_url }}">
+        {%- if cover_above %}
+        <input type="hidden" name="clear" value="1">
+        {#- Sent while clearing too, unlike the form above: undoing has to know
+            *which* photograph to withdraw, so that an album above showing a
+            different one is recognised and left alone. -#}
+        <input type="hidden" name="photo" value="{{ photo.name }}">
+        <button type="submit" class="menu-item"
+                title="Stop using this photo above; albums that show something
+                       else are left alone"
+        >Cover above ✓ — undo</button>
+        {%- else %}
+        <input type="hidden" name="photo" value="{{ photo.name }}">
+        <button type="submit" class="menu-item"
+                title="Show this photo on this album's card and on every album
+                       above it"
+        >Make cover, here and above</button>
+        {%- endif %}
+      </form>
+      {%- endif %}
       {%- endif %}
     {% endcall %}
   </header>

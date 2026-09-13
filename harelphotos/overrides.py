@@ -184,19 +184,36 @@ def set_for(cfg: Config, relpath: str, **fields) -> Path:
     Written whole and renamed into place, so a reader never sees half a file
     and a crash mid-write cannot leave the settings truncated.
     """
+    return set_many(cfg, [(relpath, fields)])
+
+
+def set_many(cfg: Config, changes) -> Path:
+    """Change several albums' entries in one write.
+
+    `changes` is a sequence of (relpath, fields). Setting a photo as the cover
+    of an album and of every album above it is four or five entries in a tree
+    of any depth, and doing that through `set_for` would read and rewrite the
+    whole file once per level -- four chances for a crash to land between two
+    halves of one decision, and four times the work.
+
+    The file is small and this is fine. When it stops being fine it is the
+    whole arrangement that should change, not this function: a few hundred
+    picks in a TOML file re-read on every album page has an obvious ceiling.
+    """
     table = load(cfg)
-    key = key_for(relpath)
-    current = table.get(key, Override())
-    merged = Override(
-        cover=fields.get("cover", current.cover),
-        allow=fields.get("allow", current.allow),
-        allow_replace=fields.get("allow_replace", current.allow_replace),
-        hidden=fields.get("hidden", current.hidden),
-    )
-    if merged.empty:
-        table.pop(key, None)
-    else:
-        table[key] = merged
+    for relpath, fields in changes:
+        key = key_for(relpath)
+        current = table.get(key, Override())
+        merged = Override(
+            cover=fields.get("cover", current.cover),
+            allow=fields.get("allow", current.allow),
+            allow_replace=fields.get("allow_replace", current.allow_replace),
+            hidden=fields.get("hidden", current.hidden),
+        )
+        if merged.empty:
+            table.pop(key, None)
+        else:
+            table[key] = merged
 
     p = path_for(cfg)
     try:

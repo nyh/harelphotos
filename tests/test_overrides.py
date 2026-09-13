@@ -322,16 +322,19 @@ def test_the_button_offers_to_undo_on_the_photo_that_is_the_cover(project):
     page for something done once in a while."""
     c = client_as(project, "boss")
 
+    # Matched on the exact button text, not on the phrase: the menu also
+    # carries "Make cover, here and above", which sets this album and every
+    # one above it, and a loose match cannot tell the two apart.
     body = c.get("/p/trip/c.jpg").get_data(as_text=True)
-    assert "Make cover" in body and "undo" not in body
+    assert ">Make cover</button>" in body and "undo" not in body
     token = re.search(r'name="csrf" value="([^"]+)"', body).group(1)
     c.post("/cover", data={"album": "trip", "photo": "c.jpg", "csrf": token})
 
     # Now that photo offers the undo ...
     body = c.get("/p/trip/c.jpg").get_data(as_text=True)
-    assert "undo" in body and "Make cover" not in body
+    assert "undo" in body and ">Make cover</button>" not in body
     # ... and its neighbors still offer to take its place.
-    assert "Make cover" in c.get("/p/trip/a.jpg").get_data(as_text=True)
+    assert ">Make cover</button>" in c.get("/p/trip/a.jpg").get_data(as_text=True)
 
     r = c.post("/cover", data={"album": "trip", "clear": "1", "csrf": token})
     assert r.status_code == 302
@@ -345,3 +348,86 @@ def test_no_cover_control_appears_on_an_album_page(project):
     body = client_as(project, "boss").get("/a/trip/").get_data(as_text=True)
     assert "automatically" not in body
     assert "/cover" not in body
+
+
+def test_making_a_cover_all_the_way_up(project):
+    """One choice, every album above it.
+
+    A photograph three levels down is often the one that should represent the
+    month, the year and the collection, and before this the only way to say so
+    was to edit the overrides file by hand -- which is what prompted it.
+
+    Each ancestor records the same photograph by a path relative to itself,
+    because an album's cover is allowed to name a photo below it. That is also
+    the only way to give a cover to a directory holding nothing but
+    subdirectories, which every one of these is.
+    """
+    c = client_as(project, "boss")
+    body = c.get("/p/trip/junk/deep/x.jpg").get_data(as_text=True)
+    assert "Make cover, here and above" in body
+    token = re.search(r'name="csrf" value="([^"]+)"', body).group(1)
+
+    r = c.post("/cover", data={"album": "trip/junk/deep", "photo": "x.jpg",
+                               "ancestors": "1", "csrf": token})
+    assert r.status_code == 302
+    assert overrides.get(project, "trip/junk/deep").cover == "x.jpg"
+    assert overrides.get(project, "trip/junk").cover == "deep/x.jpg"
+    assert overrides.get(project, "trip").cover == "junk/deep/x.jpg"
+    assert overrides.get(project, "").cover == "trip/junk/deep/x.jpg"
+
+
+def test_the_new_cover_shows_without_a_rescan(project):
+    """The point of resolving covers at request time.
+
+    The index still holds whatever the scan decided; nothing here re-runs it,
+    and the albums above must show the new photograph on their next page view
+    rather than after the next scan.
+    """
+    c = client_as(project, "boss")
+    body = c.get("/p/trip/junk/deep/x.jpg").get_data(as_text=True)
+    token = re.search(r'name="csrf" value="([^"]+)"', body).group(1)
+    c.post("/cover", data={"album": "trip/junk/deep", "photo": "x.jpg",
+                           "ancestors": "1", "csrf": token})
+
+    conn, index = index_for(project)
+    try:
+        for path in ("trip/junk/deep", "trip/junk", "trip", ""):
+            alb = index.album(path, admin())
+            cover = index.cover_photo(alb, admin())
+            assert cover is not None and cover.name == "x.jpg", path
+    finally:
+        conn.close()
+
+
+def test_undoing_above_leaves_a_deliberate_choice_alone(project):
+    """Undo clears this photograph from the albums above -- and only this one.
+
+    An ancestor somebody chose a different picture for is a decision, and
+    walking over it while undoing something else would be the kind of surprise
+    that stops anybody trusting the button.
+    """
+    c = client_as(project, "boss")
+    body = c.get("/p/trip/junk/deep/x.jpg").get_data(as_text=True)
+    token = re.search(r'name="csrf" value="([^"]+)"', body).group(1)
+    c.post("/cover", data={"album": "trip/junk/deep", "photo": "x.jpg",
+                           "ancestors": "1", "csrf": token})
+    # Somebody then picks a different photograph for the top album.
+    c.post("/cover", data={"album": "trip", "photo": "a.jpg", "csrf": token})
+
+    body = c.get("/p/trip/junk/deep/x.jpg").get_data(as_text=True)
+    assert "Cover above ✓ — undo" in body, "still the cover of trip/junk"
+    c.post("/cover", data={"album": "trip/junk/deep", "clear": "1",
+                           "photo": "x.jpg", "ancestors": "1", "csrf": token})
+
+    assert overrides.get(project, "trip/junk/deep").cover is None
+    assert overrides.get(project, "trip/junk").cover is None
+    assert overrides.get(project, "").cover is None
+    assert overrides.get(project, "trip").cover == "a.jpg"   # left alone
+
+
+def test_the_offer_is_absent_where_there_is_nothing_above(project):
+    """A photograph in the top album has no ancestors to set."""
+    c = client_as(project, "boss")
+    body = c.get("/p/trip/a.jpg").get_data(as_text=True)
+    assert ">Make cover</button>" in body
+    assert "here and above" in body      # trip itself sits under the root

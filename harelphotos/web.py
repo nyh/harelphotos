@@ -348,13 +348,46 @@ def _register_routes(app: Flask, cfg: Config) -> None:
             if g.index.photo(f"{relpath}/{name}" if relpath else name,
                              g.viewer) is None:
                 abort(404)
+        # "and every album above it", which is the useful thing for a photo
+        # buried three levels down: the year and the month should show it too,
+        # and setting each by hand meant editing the overrides file.
+        #
+        # An album's cover may name a photo below it -- that is what makes this
+        # possible at all -- so each ancestor gets the same photograph written
+        # as a path relative to itself: `IMG.jpg` for the album holding it,
+        # `02/IMG.jpg` for the year above, `2022/02/IMG.jpg` for the root.
+        full = f"{relpath}/{name}" if relpath and not clear else name
+        changes = [(relpath, {"cover": None if clear else name})]
+        if request.form.get("ancestors"):
+            # Undoing needs the photograph's name as much as setting does, to
+            # tell an album still showing this one from an album showing
+            # something else. The clearing form therefore sends it, and it is
+            # checked here rather than trusted, since the not-clearing branch
+            # above only validates its own.
+            which = (request.form.get("photo") or "").strip("/")
+            if not which or ".." in which.split("/"):
+                abort(404)
+            parts = relpath.split("/") if relpath else []
+            for i in range(len(parts)):
+                ancestor = "/".join(parts[:i])
+                below = "/".join(parts[i:])
+                if clear:
+                    # Only where this photograph is the cover. An ancestor
+                    # somebody chose a different picture for is a deliberate
+                    # decision and undoing this must not walk over it.
+                    if overrides.get(cfg, ancestor).cover != f"{below}/{which}":
+                        continue
+                    changes.append((ancestor, {"cover": None}))
+                else:
+                    changes.append((ancestor, {"cover": f"{below}/{which}"}))
         try:
-            overrides.set_for(cfg, relpath, cover=None if clear else name)
+            overrides.set_many(cfg, changes)
         except overrides.OverrideError as e:
             log.warning("cannot record a cover pick: %s", e)
             abort(500)
-        log.info("cover for %s set to %s by %s",
-                 relpath or "/", "auto" if clear else name, g.viewer.token)
+        log.info("cover for %s set to %s by %s%s",
+                 relpath or "/", "auto" if clear else full, g.viewer.token,
+                 f" (and {len(changes) - 1} above)" if len(changes) > 1 else "")
         return redirect(auth.safe_next(request.form.get("next")) or alb.url)
 
     @app.route("/logout", methods=("POST",))
@@ -481,6 +514,13 @@ def _register_routes(app: Flask, cfg: Config) -> None:
             # can offer to undo instead of repeating what is already true.
             is_cover=(alb is not None
                       and overrides.get(cfg, alb.path).cover == pho.name),
+            # Whether this photograph is already the cover of anything above,
+            # which decides whether the menu offers to set that or to undo it.
+            # Any ancestor counts: after undoing one by hand the offer should
+            # still be to clear the rest, not to set them again.
+            cover_above=(alb is not None and _is_cover_above(cfg, alb.path, pho.name)),
+            # Only worth offering where there *is* an above.
+            has_ancestors=bool(alb is not None and alb.path),
             prev=prev_p,
             next=next_p,
             crumbs=g.index.breadcrumbs(alb, g.viewer) + [alb] if alb else [],
@@ -554,6 +594,20 @@ def _register_routes(app: Flask, cfg: Config) -> None:
     @app.errorhandler(404)
     def not_found(_):
         return render_template("404.html", cfg=cfg), 404
+
+
+def _is_cover_above(cfg: Config, relpath: str, name: str) -> bool:
+    """Is this photograph the cover of any album above the one holding it?
+
+    Each ancestor records it as a path relative to itself, so the string being
+    looked for differs at every level.
+    """
+    parts = relpath.split("/") if relpath else []
+    for i in range(len(parts)):
+        below = "/".join(parts[i:])
+        if overrides.get(cfg, "/".join(parts[:i])).cover == f"{below}/{name}":
+            return True
+    return False
 
 
 def _render_landing(cfg: Config, next_url: str | None = None, error: str | None = None):
