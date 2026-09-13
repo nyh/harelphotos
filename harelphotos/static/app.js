@@ -847,10 +847,67 @@
     }, true);
   }
 
+  /* Sharing a link to the page you are looking at.
+   *
+   * Installed to a home screen the site runs with no address bar -- which is
+   * most of the point of installing it, and which takes away the only way
+   * anyone had to copy a link and send it to somebody. This puts that back.
+   *
+   * `navigator.share` hands the phone's own share sheet the current URL, which
+   * is what every other application on the device does and so needs no
+   * explaining. Where there is no share sheet a desktop browser almost always
+   * has a clipboard, and a link on the clipboard is the same job done quietly.
+   *
+   * The button ships hidden and is revealed here, so a browser with neither
+   * capability shows no control rather than one that does nothing. Both APIs
+   * want a secure context, so over plain HTTP on a development machine there
+   * is legitimately nothing to offer.
+   */
+  function initShare() {
+    var button = document.getElementById("share");
+    if (!button) return;
+    var canShare = typeof navigator.share === "function";
+    var canCopy = !!(navigator.clipboard && navigator.clipboard.writeText);
+    if (!canShare && !canCopy) return;
+    button.hidden = false;
+
+    function toast(text) {
+      var el = document.createElement("div");
+      el.className = "toast";
+      el.setAttribute("role", "status");
+      el.textContent = text;
+      document.body.appendChild(el);
+      // Two frames: the element has to be in the document at opacity 0 before
+      // the class that raises it, or there is no transition to watch.
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () { el.classList.add("show"); });
+      });
+      setTimeout(function () {
+        el.classList.remove("show");
+        setTimeout(function () { el.remove(); }, 300);
+      }, 1600);
+    }
+
+    button.addEventListener("click", function () {
+      var url = window.location.href;
+      if (canShare) {
+        // A rejected promise is the reader dismissing the sheet. That is not
+        // an error, and must not fall through to copying instead.
+        navigator.share({ title: document.title, url: url }).catch(function () {});
+        return;
+      }
+      navigator.clipboard.writeText(url).then(
+        function () { toast("Link copied"); },
+        function () { toast("Could not copy the link"); }
+      );
+    });
+  }
+
+  function start() { initGrid(); initViewer(); initShare(); }
+
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", function () { initGrid(); initViewer(); });
+    document.addEventListener("DOMContentLoaded", start);
   } else {
-    initGrid();
-    initViewer();
+    start();
   }
 })();

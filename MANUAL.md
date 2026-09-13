@@ -318,6 +318,24 @@ panning, and the on-screen arrows get out of the way — otherwise examining the
 right-hand edge of a photograph would keep sending you to the next one. Zoom
 back out and they return.
 
+### Sharing a link
+
+The **share** button in the top bar sends a link to the page you are looking at
+— a photograph or an album — to your phone's usual share sheet, so it can go to
+a message, an email or anywhere else. On a desktop, where there is no share
+sheet, it copies the link to the clipboard and says so.
+
+It exists mainly for the installed application. Added to a home screen the site
+runs without an address bar, which is most of the reason to install it and also
+removes the only way there was to copy a link out. The button appears only in
+browsers that can do one or the other, so it is never a control that does
+nothing, and both need HTTPS — running locally over plain HTTP there is
+genuinely nothing to offer and it stays hidden.
+
+A shared link is not a way around the login. Whoever opens it still needs an
+account and still has to be allowed to see that directory; without both they
+get the login page and then a 404, exactly as if they had typed the address.
+
 A photo's date and place are shown next to its filename, without opening
 anything: they are what you want to know while looking at a photo, whereas the
 camera settings are for when you go looking. On a narrow screen they wrap onto
@@ -920,10 +938,16 @@ The three that only matter on a server:
   the access check has passed, instead of copying them through Python. Needs
   `mod_xsendfile` and a matching `XSendFilePath`.
 
-Under `[ui]`, **`source_url`** is the link shown in the page footer. The AGPL's
-section 13 asks that anyone running a *modified* version offer its source to
-the people reaching it over the network, so point this at your own repository
-if you have changed the code. Unmodified, the default is already right.
+Under `[ui]`, **`source_url`** is where the branch icon in the top bar leads.
+The AGPL's section 13 asks that anyone running a *modified* version offer its
+source to the people reaching it over the network, so point this at your own
+repository if you have changed the code. Unmodified, the default is already
+right.
+
+The icon is a git branch rather than any host's logo, deliberately: this
+setting can point at GitHub, GitLab, Codeberg or somebody's own server, and a
+particular company's mark would be both wrong on most of those and a trademark
+used outside its licence on the rest.
 
 Under `[ui]`, **`dir_card_dates = false`** removes the date range printed under
 each subdirectory's card in a listing. Worth turning off on a tree already

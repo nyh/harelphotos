@@ -617,6 +617,61 @@ form.login button {
 .usermenu .source { font-size: 0.85rem; }
 @media (max-height: 520px) { .viewer .usermenu .source { display: none; } }
 .usermenu form, form.inline { display: inline; }
+/* Icons, drawn inline in _chrome.html.
+ *
+ * Sized in `em` so they follow the type scale rather than being a fixed number
+ * of pixels: 1.25em is about 19px beside desktop body text and about 22px
+ * beside a phone's, which is the same relationship a capital letter has.
+ * `currentColor` is what lets one drawing serve both color schemes. */
+.icon {
+  inline-size: 1.25em;
+  block-size: 1.25em;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* A control that is only an icon still has to be a comfortable thing to hit:
+   44px is the usual floor for a fingertip, and the icon sits in the middle of
+   it. No border or background -- these live in a row of text, and boxing them
+   would make the bar busier than the words they replaced. */
+.iconbutton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 44px;
+  min-block-size: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dim);
+  cursor: pointer;
+}
+.iconbutton:hover, .iconbutton:focus-visible { color: var(--fg); }
+
+/* Confirmation for the one case with nothing else to show for itself: a
+   desktop browser with no share sheet, where the link went to the clipboard
+   and absolutely nothing appeared to happen. */
+.toast {
+  position: fixed;
+  inset-block-end: 1.5rem;
+  inset-inline: 0;
+  margin-inline: auto;
+  inline-size: fit-content;
+  z-index: 20;
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--radius);
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 0.85rem;
+  opacity: 0;
+  transition: opacity 0.15s ease-out;
+}
+.toast.show { opacity: 0.92; }
+
 button.linklike {
   font: inherit;
   color: var(--accent);

@@ -1,21 +1,76 @@
+{# Icons, drawn here rather than fetched.
+
+   Inline SVG beats an icon file on every count that matters at this size: no
+   request at all, not even a cached one; `currentColor` means they follow the
+   text in light and dark without a second copy; and being sized in `em` they
+   grow with the phone's larger type scale instead of staying a fixed number of
+   pixels that looks right on one device. The few hundred bytes they add to
+   each page compress to almost nothing and arrive with HTML that was being
+   sent anyway.
+
+   Drawn by hand, in the common line-icon idiom -- a 24x24 box, 2px strokes,
+   round caps -- so there is no icon library's licence to honour and no
+   trademark to be careful with. Add new ones here; `.icon` in app.css does the
+   sizing for all of them. #}
+{% macro icon(name) %}
+<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+  {%- if name == "share" %}
+  {#- The three connected nodes Android uses, which is what its own share sheet
+      is labelled with, so it should need no explaining. -#}
+  <circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/>
+  <circle cx="18" cy="19" r="2.6"/>
+  <line x1="8.3" y1="10.7" x2="15.7" y2="6.3"/>
+  <line x1="8.3" y1="13.3" x2="15.7" y2="17.7"/>
+  {%- elif name == "source" %}
+  {#- A branch, not a host's logo. `[ui] source_url` is configurable and the
+      README tells people to point it at their own repository, so a GitHub mark
+      would sit on links that go to GitLab, to Codeberg or to somebody's own
+      cgit -- and that mark is GitHub's trademark, licensed for linking to
+      GitHub. A branch is true wherever the source actually lives. -#}
+  <circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/>
+  <circle cx="18" cy="9" r="2.5"/>
+  <line x1="6" y1="8.5" x2="6" y2="15.5"/>
+  <path d="M18 11.5v1a4 4 0 0 1-4 4H8.5"/>
+  {%- endif %}
+</svg>
+{%- endmacro %}
+
 {# Shared chrome: who you are, and a way out. On every logged-in page, so
    there is never a page you cannot leave from (DESIGN.md 11.3). #}
 {% macro user_menu(viewer) %}
-  {% if viewer and viewer.token %}
   <div class="usermenu">
+    {#- Sharing, which an installed application otherwise cannot do at all:
+        opened from the home screen there is no address bar to copy a link out
+        of, and that is most of the reason to install it. The button asks the
+        phone for its own share sheet and falls back to the clipboard where
+        there is no such thing. It ships hidden and app.js reveals it once it
+        knows one of the two works, so it is never a control that does nothing.
+
+        Outside the signed-in test below on purpose: a link is worth sharing
+        whether or not the site is asking anyone to log in, and running without
+        the gate is a supported way to use this. -#}
+    <button type="button" id="share" class="iconbutton" hidden
+            title="Share a link to this page" aria-label="Share">
+      {{- icon("share") -}}
+    </button>
+    {%- if viewer and viewer.token %}
     <span class="dim">{{ viewer.name or viewer.token }}</span>
     <form method="post" action="{{ url_for('logout') }}">
       <input type="hidden" name="csrf" value="{{ csrf_token() }}">
       <button type="submit" class="linklike">Log out</button>
     </form>
+    {%- endif %}
     {%- if cfg.ui.source_url %}
-    {#- AGPL section 13 again: offered on every page a signed-in viewer sees,
-        not only on the one they passed through to get here. -#}
-    <a class="dim source" href="{{ cfg.ui.source_url }}" rel="noopener"
-       title="Source code for this site">Source</a>
+    {#- AGPL section 13 again: offered on every page a viewer sees, not only on
+        the one they passed through to get here. An icon rather than the word
+        "Source", because the bar is short of room and this is the least
+        interesting thing in it -- but still a real link with a real accessible
+        name, so nothing is lost to anyone who cannot see the drawing. -#}
+    <a class="dim iconbutton" href="{{ cfg.ui.source_url }}" rel="noopener"
+       title="Source code for this site" aria-label="Source code for this site"
+      >{{- icon("source") -}}</a>
     {%- endif %}
   </div>
-  {% endif %}
 {% endmacro %}
 
 {# No footer for a logged-in viewer any more: the bar at the top of every page
