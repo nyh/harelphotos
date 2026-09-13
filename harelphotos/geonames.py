@@ -73,7 +73,23 @@ LANDMARK_RADII_M = {
     "MNMT": 250, "MUS": 250, "THTR": 250,
     "OBS": 300, "AMTH": 300,
     "FLLS": 400,
-    "CSTL": 500, "PAL": 500, "RUIN": 500,
+    # A ruin belongs with the dam, not with the castle. "Horbat Tsohara"
+    # captioned a photograph 346 m away in Karmi'el, with a second ruin 335 m
+    # off in the other direction -- and Israel files 1,111 of these against
+    # 1,820 populated places, very nearly one per town. The names are the
+    # giveaway: Khirbat Summaqa, Umm ed Dananir, Khirbat Sukeik. They are
+    # scatters of stone in a field, and at 500 m a large share of outdoor
+    # photographs in the country acquire one.
+    #
+    # Nothing famous is lost, which is what settles it, exactly as with the
+    # masts. Caesarea, Megiddo, Bet She'an and Masada are all filed as
+    # populated places; the curated archaeological code is ANS, 176 rows
+    # against RUIN's 1,111, and it keeps its 800 m.
+    #
+    # Not dropped, though, because a ruin you have walked up to is a good
+    # caption where a mast never is. At 120 m you are standing on it.
+    "RUIN": 120,
+    "CSTL": 500, "PAL": 500,
     "ZOO": 600, "PYR": 600,
     "ANS": 800, "HSTS": 800,
 

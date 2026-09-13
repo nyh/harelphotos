@@ -770,3 +770,37 @@ def test_a_distant_city_does_not_take_a_photo_from_the_village_beside_it(tmp_pat
     )
     got = name_at(path, 32.9090, 35.3000)
     assert got.startswith("Nearby Village"), got
+
+
+def test_an_anonymous_ruin_does_not_caption_a_photo_in_a_town(tmp_path):
+    """"H̱orbat Tsohara, Karmi'el" -- a scatter of stone 346 m away, with a
+    second ruin 335 m off in the other direction.
+
+    Israel files 1,111 of these against 1,820 populated places, very nearly one
+    per town, and their names give them away: Khirbat Summaqa, Umm ed Dananir,
+    Khirbat Sukeik. At 500 m a large share of outdoor photographs in the
+    country acquired one. Nothing famous is lost by pulling that in, which is
+    what settles it: Caesarea, Megiddo, Bet She'an and Masada are all filed as
+    populated places, and the curated archaeological code is ANS.
+    """
+    path = _world(
+        tmp_path,
+        [("Karmiel", "IL", "03", 32.9250, 35.2920, 46252)],        # 972 m
+        [("H̱orbat Tsohara", "IL", "RUIN", 32.9200, 35.3010),      # 346 m
+         ("H̱orbat Kenes", "IL", "RUIN", 32.9155, 35.2960)],       # 335 m
+    )
+    got = name_at(path, 32.918251, 35.297912)
+    assert "H̱orbat" not in got, got
+    assert got.startswith("Karmiel"), got
+
+
+def test_a_ruin_you_are_standing_on_is_still_worth_saying(tmp_path):
+    """The reason it was shrunk rather than dropped, unlike the masts. Walking
+    up to a ruin and photographing it is exactly when its name is wanted."""
+    path = _world(
+        tmp_path,
+        [("Karmiel", "IL", "03", 32.9250, 35.2920, 46252)],
+        [("H̱orbat Tsohara", "IL", "RUIN", 32.9183, 35.2980)],     # ~20 m
+    )
+    got = name_at(path, 32.918251, 35.297912)
+    assert got.startswith("H̱orbat Tsohara"), got
