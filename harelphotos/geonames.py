@@ -515,6 +515,12 @@ def _carry_over_landmarks(old: Path, new: Path) -> int:
         dst.executescript(LANDMARK_SCHEMA)
         dst.execute("PRAGMA journal_mode = OFF")
         dst.execute("PRAGMA synchronous = OFF")
+        dst.execute("PRAGMA temp_store = FILE")
+        # Index afterwards, as the places table does and for the same reason:
+        # two million rows into an already-indexed table took 4.5 s against
+        # 1.8 s for inserting and then sorting once. Proportionally worse on a
+        # slow machine, where this was the step that looked stuck.
+        dst.execute("DROP INDEX IF EXISTS landmarks_ll")
         dst.execute("ATTACH DATABASE ? AS old", (f"file:{old}?mode=ro",))
         have = dst.execute(
             "SELECT 1 FROM old.sqlite_master WHERE type='table' AND name='landmarks'"
@@ -525,6 +531,7 @@ def _carry_over_landmarks(old: Path, new: Path) -> int:
             "INSERT INTO landmarks (name, cc, code, lat, lon) "
             "SELECT name, cc, code, lat, lon FROM old.landmarks"
         )
+        dst.execute("CREATE INDEX IF NOT EXISTS landmarks_ll ON landmarks(lat, lon)")
         n = dst.execute("SELECT count(*) FROM landmarks").fetchone()[0]
         dst.execute("INSERT OR REPLACE INTO meta VALUES ('landmarks', ?)", (str(n),))
         fingerprint = dst.execute(
