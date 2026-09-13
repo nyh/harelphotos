@@ -320,15 +320,25 @@ back out and they return.
 
 ### The top bar
 
-Two icons at the end of it, and no words: **share**, and a **⋮ menu** holding
-who you are signed in as, the way out, and a link to the source. They are there
-on every page, album or photograph.
+Two icons at the end of it, and no words: **share**, and a **⋮ menu**. They are
+there on every page, album or photograph.
 
-Spelled out, those three took most of the width of a phone's bar and sat next
-to a breadcrumb that was actually telling you something. In a menu they cost a
-single button, and the name — which answers a question nobody asks continuously
-but which matters once, on a shared tablet, when you want to know whose album
-you are about to log out of — can afford to be a whole sentence.
+The menu holds everything else, in groups:
+
+- **What this page can do.** On a photograph: photo information, download the
+  original, and — for an administrator — make this the album's cover. Album
+  pages have none of these, so the group is simply absent.
+- **Who you are, and the way out.** "Signed in as …" and Log out.
+- **Source code**, which the AGPL asks be offered on every page.
+
+Spelled out in the bar, those were four or five words of chrome above a
+photograph, on the page whose whole purpose is the photograph — and on a phone
+they wrapped the bar onto three lines. In a menu they cost one button, and the
+name, which answers a question nobody asks continuously but which matters once
+on a shared tablet, can afford to be a whole sentence.
+
+The keyboard is unaffected: `i` and `d` do not care where the controls are
+drawn, and the menu shows those letters beside the items they belong to.
 
 The menu is a plain HTML disclosure, so it opens, closes and takes the keyboard
 without any JavaScript, and logging out works in a browser where scripts never

@@ -238,21 +238,6 @@ h2.section:first-child { margin-block-start: 0.25rem; }
 .photo-page .viewer { flex: 1; min-block-size: 0; }
 .viewer-bar { background: var(--bg); }
 
-.actions { display: flex; gap: 0.5rem; align-items: center; }
-.actions button, .actions .button {
-  font: inherit;
-  color: var(--fg);
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 0.4rem 0.7rem;
-  cursor: pointer;
-  min-block-size: 44px;         /* touch target */
-  display: inline-flex;
-  align-items: center;
-}
-.actions .button:hover, .actions button:hover { border-color: var(--accent); text-decoration: none; }
-
 .stage {
   position: relative;
   flex: 1;
@@ -472,11 +457,6 @@ h2.section:first-child { margin-block-start: 0.25rem; }
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .viewer .actions button, .viewer .actions .button {
-    min-block-size: 36px;
-    padding: 0.25rem 0.5rem;
-    font-size: 0.9rem;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -675,13 +655,37 @@ form.login button {
   box-shadow: 0 6px 24px rgb(0 0 0 / 0.18);
 }
 
+/* A rule between groups, never above the first and never below the last.
+   Written as a relationship rather than on the groups themselves, so a group
+   the page does not render -- no actions on an album, no name with the login
+   gate off -- takes its separator away with it instead of leaving one hanging
+   over nothing. */
+.menu-group + .menu-group {
+  border-block-start: 1px solid var(--line);
+  margin-block-start: 0.35rem;
+  padding-block-start: 0.35rem;
+}
+
 .menu-who {
+  display: block;
   color: var(--dim);
-  padding: 0.4rem 0.6rem 0.5rem;
-  border-block-end: 1px solid var(--line);
-  margin-block-end: 0.35rem;
+  padding: 0.4rem 0.6rem 0.2rem;
   white-space: nowrap;
 }
+
+/* The keyboard shortcut, shown beside the item it belongs to: the menu is
+   where someone goes looking for what a page can do, so it is the one place
+   worth mentioning that there is a faster way. Pushed to the end, and hidden
+   where there is no keyboard to press it with. */
+.menu-key {
+  margin-inline-start: auto;
+  padding-inline: 0.4em;
+  color: var(--dim);
+  font-size: 0.85em;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+@media (pointer: coarse) { .menu-key { display: none; } }
 
 .menu-item {
   font: inherit;

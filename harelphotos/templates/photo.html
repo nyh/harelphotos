@@ -26,37 +26,41 @@
       </div>
       {%- endif %}
     </div>
-    <div class="actions">
-      <button type="button" id="info-toggle" aria-expanded="false"
-              aria-controls="info" title="Photo information (i)">Info</button>
-      <a class="button" href="/orig/{{ photo.url_relpath }}" download
-         title="Download the original file (d)">Download original</a>
+    {#- Everything this page can do lives in the one menu. As a row of buttons
+        it was three or four words of chrome above a photograph, on the page
+        whose entire purpose is the photograph -- and on a phone it wrapped the
+        bar to three lines. The keyboard keeps its shortcuts either way: `i`
+        and `d` do not care where the controls are drawn. -#}
+    {% call chrome.user_menu(viewer) %}
+      <button type="button" id="info-toggle" class="menu-item" aria-expanded="false"
+              aria-controls="info">Photo information<span class="menu-key">i</span></button>
+      <a class="menu-item" href="/orig/{{ photo.url_relpath }}" download
+        >Download original<span class="menu-key">d</span></a>
       {%- if viewer and viewer.is_admin and album %}
       {#- Admins only: this changes what everyone sees. A form rather than a
           link, so no amount of prefetching or link-scanning can trigger it.
-          The same button undoes it when you are looking at the photo that is
+          The same item undoes it when you are looking at the photo that is
           currently the cover -- which is where you would go to change your
           mind, and saves putting a permanent "choose automatically" control on
           every album page for something done once in a while. -#}
-      <form method="post" action="{{ url_for('set_cover') }}" class="inline">
+      <form method="post" action="{{ url_for('set_cover') }}">
         <input type="hidden" name="csrf" value="{{ csrf_token() }}">
         <input type="hidden" name="album" value="{{ album.path }}">
         {%- if is_cover %}
         <input type="hidden" name="clear" value="1">
         <input type="hidden" name="next" value="{{ photo.page_url }}">
-        <button type="submit" class="button"
+        <button type="submit" class="menu-item"
                 title="Go back to choosing this album's cover automatically"
         >Cover ✓ — undo</button>
         {%- else %}
         <input type="hidden" name="photo" value="{{ photo.name }}">
         <input type="hidden" name="next" value="{{ photo.page_url }}">
-        <button type="submit" class="button"
+        <button type="submit" class="menu-item"
                 title="Show this photo on the album's card">Make cover</button>
         {%- endif %}
       </form>
       {%- endif %}
-      {{ chrome.user_menu(viewer) }}
-    </div>
+    {% endcall %}
   </header>
 
   <div class="stage">

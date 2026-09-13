@@ -915,7 +915,13 @@
     var menu = document.querySelector("details.menu");
     if (!menu) return;
     document.addEventListener("click", function (e) {
-      if (menu.open && !menu.contains(e.target)) menu.open = false;
+      if (!menu.open) return;
+      // Outside: dismissed. Inside and on an item: used, which also means
+      // done -- "Photo information" opens a panel this menu would otherwise
+      // be sitting on top of. The summary is excluded, being the thing that
+      // toggles the menu in the first place.
+      var item = e.target.closest ? e.target.closest(".menu-item") : null;
+      if (!menu.contains(e.target) || item) menu.open = false;
     });
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && menu.open) {

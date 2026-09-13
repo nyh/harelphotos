@@ -76,24 +76,45 @@
     <details class="menu">
       <summary class="iconbutton" title="Menu" aria-label="Menu"
         >{{- icon("more") -}}</summary>
+      {#- Three groups, separated by a rule between each: what this page can do,
+          who you are and how to leave, and the source. The separators are drawn
+          by `.menu-group + .menu-group` rather than written here, so a group
+          that is absent -- no page actions on an album, no name when the login
+          gate is off -- takes its rule with it and never leaves a line floating
+          above nothing. -#}
       <div class="menu-panel">
+        {%- if caller %}
+        {#- Whatever the page puts here: Info, Download, Make cover. Passed in
+            with `{% call %}` rather than known about, because this macro is
+            shared with the album pages, which have none of them. -#}
+        <div class="menu-group">{{ caller() }}</div>
+        {%- endif %}
         {%- if viewer and viewer.token %}
-        {#- The name is here rather than in the bar because it answers a
-            question nobody asks continuously, but which matters a great deal
-            once: on a shared tablet it is the only way to tell whose album you
-            are logging out of. -#}
-        <span class="menu-who">Signed in as <b>{{ viewer.name or viewer.token }}</b></span>
-        <form method="post" action="{{ url_for('logout') }}">
-          <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-          <button type="submit" class="menu-item">Log out</button>
-        </form>
+        {#- The name sits with the way out, not apart from it: they are one
+            thought -- this is who you are, and this is how to stop being them
+            -- and a rule between them read as though they were unrelated.
+
+            It is here rather than in the bar because it answers a question
+            nobody asks continuously, but which matters a great deal once: on a
+            shared tablet it is the only way to tell whose album you are about
+            to log out of. -#}
+        <div class="menu-group">
+          <span class="menu-who">Signed in as <b>{{ viewer.name or viewer.token }}</b></span>
+          <form method="post" action="{{ url_for('logout') }}">
+            <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+            <button type="submit" class="menu-item">Log out</button>
+          </form>
+        </div>
         {%- endif %}
         {%- if cfg.ui.source_url %}
         {#- AGPL section 13: offered on every page a viewer sees, not only the
-            one they passed through to get here. Being in a menu it can afford
-            a word again, which is clearer than any drawing. -#}
-        <a class="menu-item" href="{{ cfg.ui.source_url }}" rel="noopener"
-          >{{ icon("source") }} Source code</a>
+            one they passed through to get here. No icon beside it -- in a menu
+            the words are the label, and a drawing next to them is decoration
+            competing with the only thing that explains what the link is. -#}
+        <div class="menu-group">
+          <a class="menu-item" href="{{ cfg.ui.source_url }}" rel="noopener"
+            >Source code</a>
+        </div>
         {%- endif %}
       </div>
     </details>
