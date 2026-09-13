@@ -253,7 +253,15 @@ h2.section:first-child { margin-block-start: 0.25rem; }
      application has no page zoom to fall back on either: for a while this line
      was the reason zooming a photograph did nothing at all. app.js implements
      pinch, drag and double-tap because of it. Do not remove one without the
-     other. */
+     other.
+
+     It also costs pull-to-refresh on this page, and that is a known and
+     accepted trade. `pan-y` here would give the browser vertical gestures back
+     and restore it, but the browser may then read two fingers as a vertical
+     pan and cancel the pointer sequence -- breaking the pinch, which took
+     several attempts to get right. Reloading a photograph is rare and Escape
+     and Back both lead out of it, so the trade was made deliberately rather
+     than overlooked. */
   touch-action: none;
 }
 /* The photo fills the stage and `object-fit` letterboxes it inside.
