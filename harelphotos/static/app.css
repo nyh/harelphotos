@@ -418,7 +418,9 @@ h2.section:first-child { margin-block-start: 0.25rem; }
 }
 
 @media (max-width: 600px) {
-  .grid .tile { block-size: 120px; flex-basis: calc(var(--ar, 1) * 120px); }
+  /* The no-JS fallback and the first paint, kept near the height app.js
+     will settle on so the grid does not visibly resize under the reader. */
+  .grid .tile { block-size: 160px; flex-basis: calc(var(--ar, 1) * 160px); }
 
   /* Two columns of album cards, never three. At a 140px minimum a 480px-wide
      phone fitted a third column, giving 141px covers with a title beneath
