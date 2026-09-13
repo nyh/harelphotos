@@ -124,11 +124,12 @@ LANDMARK_CODES = frozenset(LANDMARK_RADII_M)
 #
 # AMUS belongs here for the same reason PRK does: it covers Walt Disney World,
 # a hundred square kilometres, and Tel Aviv's Luna Park, a hundred metres
-# across. What separates them is not the code but the neighborhood. Disney's
-# nearest neighbor is Bay Lake, fifty people, which reaches about 90 m and was
-# 429 m from the camera -- so the resort keeps its name. Luna Park's is a city
-# of 432,000, and a fairground does not get to displace that city from two
-# kilometres away.
+# across. What separates them is not the code but the neighborhood. Measured
+# against the real dumps: Disney's nearest *recorded* town is Celebration,
+# seven kilometres off and reaching about 1.3 km, so nothing shrinks and the
+# resort keeps its five kilometres. At Luna Park the camera is inside Ramat
+# Gan, so the fairground shrinks to 250 m -- which still names it when you are
+# on it, and no longer when you are 400 m away.
 # Mountains, peaks, capes and volcanoes are here for the same reason, arrived
 # at separately. A photograph taken in Manof, a village of 862 on the side of
 # Har Shekhanya, came back as "Har Shekhanya, Israel": the village 185 m away,
@@ -142,7 +143,15 @@ AREA_SHRINK_CODES = frozenset({
     "ISL", "LK", "LGN", "BCH",
     "PK", "MT", "CAPE", "VLC",
 })
-AREA_TOWN_NEAR_M = 2000
+# The cap exists because an estimated extent gets silly for a metropolis: half
+# a million people reach nine kilometres on paper, and a national park that far
+# out of town is not something you are standing in. 2 km was too tight, though,
+# and the real dumps said so -- at Tel Aviv's Luna Park every recorded town
+# centre is 2.4 km away or more, because a dense conurbation is many
+# municipalities each reduced to one point, so nothing shrank and a fairground
+# claimed photographs from 400 m. 3 km covers that without reaching into
+# anyone's hinterland.
+AREA_TOWN_NEAR_M = 3000
 AREA_SHRUNK_M = 250
 
 # Places you are overwhelmingly likely to be *inside* rather than beside.
@@ -448,6 +457,25 @@ def cache_size(db_path: Path) -> int:
     return sum(p.stat().st_size for p in d.rglob("*") if p.is_file())
 
 
+def landmark_row(f: list[str]):
+    """One line of a GeoNames dump as a landmarks row, or None to skip it.
+
+    Its own function so that the live test can assemble a table from the
+    *per-country* dumps -- one megabyte for Israel, sixty-eight for the United
+    States, against four hundred for the worldwide file -- through exactly the
+    filter production uses rather than a paraphrase of it that could drift.
+    """
+    if len(f) <= COL_FCODE or f[COL_FCODE] not in LANDMARK_CODES:
+        return None
+    if HISTORICAL_MARK in f[COL_NAME]:
+        return None                   # demolished, drained, or renamed away
+    try:
+        lat, lon = float(f[COL_LAT]), float(f[COL_LON])
+    except ValueError:
+        return None                   # the dump does contain malformed rows
+    return (f[COL_NAME], f[COL_CC], f[COL_FCODE], lat, lon)
+
+
 def build_landmarks(db_path: Path, cache_dir: Path | None = None, progress=None) -> int:
     """Add the landmark table to an existing geonames.sqlite.
 
@@ -479,16 +507,10 @@ def build_landmarks(db_path: Path, cache_dir: Path | None = None, progress=None)
                     seen += 1
                     if progress and seen % 1_000_000 == 0:
                         progress(f"{seen // 1000:,}k rows read, {kept:,} landmarks kept")
-                    f = raw.split("\t")
-                    if len(f) <= COL_FCODE or f[COL_FCODE] not in LANDMARK_CODES:
+                    row = landmark_row(raw.split("\t"))
+                    if row is None:
                         continue
-                    if HISTORICAL_MARK in f[COL_NAME]:
-                        continue      # demolished, drained, or renamed away
-                    try:
-                        lat, lon = float(f[COL_LAT]), float(f[COL_LON])
-                    except ValueError:
-                        continue      # the dump does contain malformed rows
-                    batch.append((f[COL_NAME], f[COL_CC], f[COL_FCODE], lat, lon))
+                    batch.append(row)
                     kept += 1
                     if len(batch) >= 20000:
                         conn.executemany("INSERT INTO landmarks VALUES (?,?,?,?,?)", batch)
@@ -769,11 +791,32 @@ class Geocoder:
         name, keep_town = None, True
 
         airports = [c for c in candidates if c[0]["code"] == "AIRP"]
-        if airports:
-            # An airport replaces the town whatever the town's size. A tourist
-            # inside one is in the airport, not in the neighborhood of 15,741
-            # people whose edge it happens to touch -- nor in the moshav of 971
-            # that is 200 m nearer than the runway.
+        others = [c for c in candidates
+                  if c[0]["code"] in DESTINATION_CODES and c[0]["code"] != "AIRP"]
+        if not airports and others:
+            # A resort or a port also outranks a town of any size -- but it
+            # keeps the town, where an airport does not.
+            #
+            # Dropping it outright put "Tel Aviv Luna Park" on a photograph
+            # taken in Tel Aviv, which is the regression this rule caused the
+            # first time it was tried. A fairground in a city is "Luna Park,
+            # Tel Aviv"; an airport is never "Ben Gurion Airport, Tsafriyya",
+            # because nobody associates the one with the other.
+            #
+            # What separates them is whether the camera is in the town at all.
+            # At Disney the nearest recorded place is Celebration, seven
+            # kilometres off and reaching about 1.3 km, so it adds nothing and
+            # goes. In Tel Aviv the camera is well inside the city, so it
+            # stays. The same measure as everywhere else here.
+            name = min(others, key=lambda c: c[1])[0]["name"]
+            keep_town = dist <= urban_radius_m(pop)
+        elif airports:
+            # An airport replaces the town whatever the town's size, and
+            # whether or not you are inside it. A tourist inside one is in the
+            # airport, not in the neighborhood of 15,741 people whose edge it
+            # happens to touch -- nor in the moshav of 971 that is 200 m
+            # nearer than the runway. "Ben Gurion Airport, Tsafriyya" is worse
+            # than either half on its own.
             name, keep_town = min(airports, key=lambda c: c[1])[0]["name"], False
         elif pop < LANDMARK_TOWN_POP_FLOOR:
             # A hamlet, a moshav, a suburb: the landmark is the useful half and
