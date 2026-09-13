@@ -294,6 +294,17 @@ def _apache(r: Report, cfg: Config | None) -> None:
 
     if cfg and cfg.sendfile_header == "X-Sendfile" and "xsendfile_module" not in out:
         r.add(FAIL, "sendfile_header", "set to X-Sendfile but mod_xsendfile is not loaded")
+    # "auto" is the value `init` writes and it does nothing at all: the image
+    # route acts on the literal "X-Sendfile" and treats everything else as
+    # "none", so a server with the module loaded and the default config sends
+    # every thumbnail through Python. Nothing else says so, and the name
+    # promises the opposite -- which is exactly the kind of setting that stays
+    # wrong for a year.
+    if cfg and cfg.sendfile_header == "auto" and "xsendfile_module" in out:
+        r.add(WARN, "sendfile_header",
+              'is "auto", which means the same as "none": every image is sent '
+              'by Python. mod_xsendfile is loaded — set it to "X-Sendfile" '
+              "and Apache will send the bytes instead")
 
 
 def _selinux(r: Report, cfg: Config | None) -> None:

@@ -493,7 +493,53 @@ window in miniature.
 carousel, prefetching becomes trivial, and the zoom resets naturally between
 photographs.
 
-### 22. Serve the album page's first screenful without waiting for the index
+### 22. The album page, measured
+
+Reported as slow: `/a/2021/08/`, 312 photographs. Measured against the live
+server while signed in, rather than guessed at.
+
+**The image sizes are right, and that was the worry.** A browser really does
+get AVIF -- checked by sending Chrome's, Firefox's and Safari's own `Accept`
+headers, which is all the negotiation looks at. A typical grid thumbnail is
+**15.8 KB**. The tiers, for one real photograph:
+
+    256   5.8 KB     512   15.8 KB     1280   87 KB     1600   133 KB
+
+(An earlier measurement of this said 34 KB, because `curl` sends `Accept: */*`
+and gets the JPEG fallback. Worth knowing before measuring this again.)
+
+**What costs the time is per-image latency, not bytes.** On a warm connection,
+one round trip to the server is ~105 ms and the first byte of a 16 KB thumbnail
+arrives at ~350 ms -- so roughly 250 ms of it is the server. Over HTTP/1.1 and
+six connections, the images the page asks for on arrival are fetched in
+serialized batches of six, and that is the wait. Item 18 is therefore still the
+first thing to do and by a wide margin.
+
+Three further things, found while looking:
+
+**The ladder has a hole exactly where a phone lands.** Nothing exists between
+512 and 1280. A landscape tile on a screen at three device pixels per point
+needs about 585 of them, so it takes the 1280 file: **87 KB for a thumbnail**,
+five times the bytes for twice the pixels wanted. A tier around 768 or 896
+would cost one more encode per photograph and `deriv_key` deliberately excludes
+the tier list, so adding one re-encodes nothing that exists. Cheap, and it only
+helps dense phones.
+
+**`sendfile_header = "auto"` does nothing.** It is what `init` writes, and
+`images.py` acts on the literal `"X-Sendfile"` and treats everything else as
+`"none"` -- so the default configuration sends every thumbnail through Python
+even where `mod_xsendfile` is loaded and ready. The name promises detection and
+there is none. `check --env` now says so when the module is present; whether
+the setting should instead *mean* something is a separate question.
+
+**The lazy-load window may be too wide for a 312-photo page.** `limitLoading`
+uses `rootMargin: "200% 0px"` -- two viewports of slack in each direction --
+which on a tall album is a great many thumbnails requested before anybody has
+scrolled. It was chosen so scrolling never waits, which is right, but it was
+not chosen against a page this long. Worth measuring how many images a first
+paint actually asks for before changing it.
+
+### 23. Serve the album page's first screenful without waiting for the index
 
 Not investigated, and listed so it is not forgotten: a page of five thousand
 photographs does five thousand rows of work before the first byte, and only the
