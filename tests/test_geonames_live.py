@@ -171,6 +171,14 @@ CASES = [
      "flipped which distant town was nearest, and the two fell on opposite "
      "sides of the population floor"),
 
+    ("inside a great park beside a village, 1", 48.2674837, 7.7223956,
+     "Europa-Park, Germany", "814 m from Rust's center"),
+    ("inside a great park beside a village, 2", 48.2671905, 7.7234762,
+     "Europa-Park, Germany",
+     "80 m from the one above and 732 m from Rust's center, whose estimated "
+     "extent is 755 -- so the two sat either side of it and came back "
+     "\"Europa-Park\" and \"Rust\""),
+
     # -------------------------------------------- and what must not come back
     ("a city, not its neighborhood", 42.3589889, -71.0506944,
      "Christopher Columbus Park, Boston, Massachusetts, United States",

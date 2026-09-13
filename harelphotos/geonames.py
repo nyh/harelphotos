@@ -869,7 +869,28 @@ class Geocoder:
                 continue          # demolished, drained, or renamed away
             dist = haversine(lat, lon, r["lat"], r["lon"])
             radius = LANDMARK_RADII_M.get(r["code"], 0)
-            if near_town and r["code"] in AREA_SHRINK_CODES:
+            shrink = near_town and r["code"] in AREA_SHRINK_CODES
+            # A destination keeps its reach beside a small town.
+            #
+            # Europa-Park is Disney-sized and built next to Rust, population
+            # 3,577, whose estimated extent is 755 m. Two photographs taken 80 m
+            # apart inside the park sat at 814 m and 732 m from Rust's center --
+            # one either side of that line -- and came back "Europa-Park" and
+            # "Rust". Both were in the park; the Euro-Tower was 60 m away.
+            #
+            # The shrink exists for the opposite shape: Tel Aviv's Luna Park,
+            # a hundred metres across, must not claim photographs from two
+            # kilometres inside a city of 170,000. What separates the two is
+            # not the distance, which is nearly identical, nor the code, which
+            # is the same -- it is the town. A great park beside a village is
+            # the thing you came to see; a fairground inside a city is not the
+            # city. So a destination is only cut down to size where the town
+            # is one, and everything else -- reserves, forests, mountains --
+            # shrinks on the extent test as before.
+            if shrink and r["code"] in DESTINATION_CODES \
+                    and town_pop < LANDMARK_TOWN_POP_FLOOR:
+                shrink = False
+            if shrink:
                 radius = min(radius, AREA_SHRUNK_M)
             if dist <= radius:
                 out.append((r, dist, radius))
@@ -930,13 +951,22 @@ class Geocoder:
             # Tel Aviv"; an airport is never "Ben Gurion Airport, Tsafriyya",
             # because nobody associates the one with the other.
             #
-            # What separates them is whether the camera is in the town at all.
-            # At Disney the nearest recorded place is Celebration, seven
-            # kilometres off and reaching about 1.3 km, so it adds nothing and
-            # goes. In Tel Aviv the camera is well inside the city, so it
-            # stays. The same measure as everywhere else here.
+            # What separates them is whether the town is one you would mention.
+            # The same test that decides whether a town cuts a destination down
+            # to size, and for the same reason: a place too small to make a
+            # great park stop being the answer is too small to be worth saying
+            # alongside it. Being inside it is required as well, so that a city
+            # five kilometres off does not get named from inside a resort.
+            #
+            # Tied together deliberately. Two photographs 80 m apart inside
+            # Europa-Park sat either side of Rust's estimated 755 m extent and
+            # came back "Europa-Park" and "Europa-Park, Rust" -- both right,
+            # and still two labels for one place. Rust has 3,577 people, so
+            # neither names it now. Tel Aviv, at 432,000, is named alongside
+            # Luna Park as before.
             name = min(others, key=lambda c: c[1])[0]["name"]
-            keep_town = dist <= urban_radius_m(pop)
+            keep_town = (pop >= LANDMARK_TOWN_POP_FLOOR
+                         and dist <= urban_radius_m(pop))
         elif airports:
             # An airport replaces the town whatever the town's size, and
             # whether or not you are inside it. A tourist inside one is in the
