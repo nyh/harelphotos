@@ -124,6 +124,36 @@ is the natural home, and it would answer the one landmark limitation that
 cannot be fixed with better rules — a feature so large that its recorded point
 is tens of kilometres from where anyone stands.
 
+### 10a. Landmarks of your own
+
+GeoNames does not know the Haifa Zoo. It is not filed under the wrong code or
+sitting 3 km away — the only `ZOO` in the entire country is the Dolphin Reef in
+Eilat, and there is no park record within 5 km of the zoo either. A photograph
+taken inside it says "Haifa", which is correct and is the best the data allows.
+
+No rule can fix a missing row, and this will keep happening: a zoo, a favourite
+beach, a grandparent's village, anything local enough that nobody added it. So
+a file of one's own, merged into the landmark table when it is built:
+
+    [[landmark]]
+    name   = "Haifa Zoo"
+    lat    = 32.8062
+    lon    = 34.9865
+    radius = 250
+
+Loaded at `init --landmarks` beside the downloaded rows so it takes part in the
+same rules rather than bypassing them — joining a city rather than replacing
+it, losing to an airport, shrinking near a town if given an area code. A code
+could be optional, defaulting to something small and built.
+
+Worth doing because it is the escape hatch for a whole class rather than one
+zoo, and because the alternative — submitting corrections upstream to GeoNames
+— is right, public-spirited, and takes months.
+
+Related: item 10 names a whole album, which is the answer when a feature is so
+large its recorded point is nowhere near you. This is the answer when the
+feature is missing altogether.
+
 ### 11. Fewer surprises in dense cities
 
 Known and deliberately unfixed: in a historic quarter something is always
