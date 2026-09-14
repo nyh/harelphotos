@@ -198,18 +198,26 @@ def album_thumbs(s: Session, album: str) -> tuple[list[str], list[str]]:
             u = cand.rsplit(" ", 1)[0]
             if "/i/512/" in u:
                 thumbs.append(s.base + u)
-    children = [m.group(1) for m in re.finditer(r'href="/a/([^"]+)/"', body)]
+
+    # Every sub-album card carries its recursive photo count -- "1,311 photos"
+    # -- so the page says exactly where the big albums are and there is no need
+    # to guess. Pair each link with the next count in document order; the
+    # album's own total sits in the header, above the first card, so it is
+    # never mistaken for a child's.
+    children: list[tuple[str, int]] = []
+    for m in re.finditer(r'href="/a/([^"]+)/"(.*?)(?=href="/a/|\Z)', body, re.S):
+        n = re.search(r'([\d,]+)\s+photos?', m.group(2))
+        children.append((m.group(1), int(n.group(1).replace(",", "")) if n else 0))
     return thumbs, children
 
 
 def find_album(s: Session, album: str, want: int) -> tuple[str, list[str]]:
     """Pick an album with at least `want` photographs, or the largest there is.
 
-    Taking the first album listed is not good enough: on a tree organised by
-    year the first is often a handful of scanned photographs, and a "screenful"
-    of one thumbnail measures nothing at all -- it reports the round trip and
-    calls it throughput. So walk down until there are enough, and keep the best
-    candidate in case nothing has a full screen.
+    Every sub-album card states its recursive photo count, so the tree says
+    where the big albums are: open whichever unexplored album claims the most,
+    and repeat. A blind crawl tried forty-one albums and settled for 194 while
+    a 1,311-photograph album sat two clicks from the root.
     """
     if album:
         thumbs, _ = album_thumbs(s, album)
@@ -218,25 +226,41 @@ def find_album(s: Session, album: str, want: int) -> tuple[str, list[str]]:
                      "or its images are not generated yet")
         return album, thumbs
 
+    # Walk straight down, always into the sub-album claiming the most
+    # photographs. The counts are recursive, so the biggest child is the way to
+    # the biggest album beneath it, and a tree of any depth is a handful of
+    # fetches rather than a crawl.
+    #
+    # Best-first on the counts alone does not work, which is worth recording:
+    # a year holding 2,513 photographs outranks every individual album, so it
+    # opens all twenty-six years before the first real album. Guided descent
+    # found a 1,311-photograph album where that had settled for 249.
     best: tuple[str, list[str]] = ("", [])
-    queue, seen = [""], set()
-    while queue and len(best[1]) < want:
-        # A budget, because a large tree has thousands of albums and one good
-        # one is all we need.
-        if len(seen) > 40:
-            break
-        current = queue.pop(0)
+    siblings: list[tuple[int, str]] = []        # passed over, kept for later
+    seen: set[str] = set()
+    current: str | None = ""
+    while current is not None and len(best[1]) < want and len(seen) <= 12:
+        seen.add(current)
+        thumbs, children = album_thumbs(s, current)
+        if len(thumbs) > len(best[1]):
+            best = (current, thumbs)
+        children = sorted(((n, p) for p, n in children if p not in seen),
+                          reverse=True)
+        siblings.extend(children[1:])
+        current = children[0][1] if children else None
+
+    # Nothing big enough on that path: fall back to the ones passed over,
+    # biggest first, until the budget runs out.
+    while siblings and len(best[1]) < want and len(seen) <= 12:
+        siblings.sort(reverse=True)
+        _, current = siblings.pop(0)
         if current in seen:
             continue
         seen.add(current)
         thumbs, children = album_thumbs(s, current)
         if len(thumbs) > len(best[1]):
             best = (current, thumbs)
-        # Depth first. A tree organised by year has a couple of dozen album-of-
-        # album pages at the top, each holding no photographs at all, so going
-        # breadth first spends the whole budget on them and never reaches a
-        # month. Descending finds real photographs in two or three fetches.
-        queue = children + queue
+        siblings.extend((n, p) for p, n in children if p not in seen)
 
     if not best[1]:
         sys.exit("found no album with generated thumbnails; pass --album")
