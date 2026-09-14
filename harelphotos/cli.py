@@ -330,6 +330,11 @@ def cmd_scan(args: argparse.Namespace) -> int:
     if args.force_unlock and lock.break_lock(lock_path):
         print(f"removed stale lock {lock_path}")
 
+    # A scan is a batch job that competes with the live site for the CPU, and
+    # on a one-core server it does the encoding in this very process -- see
+    # scanner.nice_this_process. Do it here, before any of the work starts.
+    scanner.nice_this_process(cfg.scan.nice)
+
     if not args.quiet:
         target = cfg.photo_root / args.dir if args.dir else cfg.photo_root
         print(f"scanning {target}", file=sys.stderr)

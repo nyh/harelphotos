@@ -828,10 +828,36 @@ def _has_surrogates(s: str) -> bool:
 
 
 def _nice(level: int) -> None:
+    """Set this process's nice level to `level`, absolutely.
+
+    `os.setpriority`, not `os.nice`: the latter is a *relative* adjustment, so
+    a parent that has already niced itself would have each pool worker nice
+    itself again on top -- 10 becoming 20. This is idempotent, which matters
+    because the parent and the workers both call it.
+    """
     try:
-        os.nice(level)
-    except OSError:
+        os.setpriority(os.PRIO_PROCESS, 0, level)
+    except (OSError, AttributeError, ValueError):
         pass
+
+
+def nice_this_process(level: int) -> None:
+    """Lower this process's priority for a batch scan.
+
+    The pools nice their workers, but a one-core machine never starts a pool:
+    `effective_jobs` is `os.cpu_count()`, so `jobs > 1` is false and both slow
+    phases run inline, in this process, at whatever priority it already had.
+    `nice = 10` therefore did nothing at all on exactly the machines it was
+    written for -- measured on the live server as a scan holding 99% of the
+    one CPU at nice 0 while the site it feeds was starved of it.
+
+    Called from the CLI rather than from `scan`, because it cannot be undone:
+    a process without CAP_SYS_NICE may raise its nice value and never lower it
+    again. That is right for a batch command and wrong for a caller that
+    merely imports us -- a test run, say, which would nice the whole pytest
+    session for good.
+    """
+    _nice(level)
 
 
 def scan(

@@ -492,3 +492,48 @@ def test_the_date_span_fills_in_while_metadata_is_read(tree):
     scanner.scan(cfg, conn)
     row = conn.execute("SELECT date_min, date_max FROM dirs WHERE path = '2019'").fetchone()
     assert row["date_min"] is not None and row["date_max"] is not None
+
+
+def test_the_scan_nice_level_is_applied_to_whatever_does_the_encoding():
+    """`nice = 10` used to do nothing on a one-core server.
+
+    The two slow phases nice their pool workers through an initializer, but
+    only start a pool when `jobs > 1`. `jobs = 0` means `os.cpu_count()`, so a
+    single-core machine runs both phases inline in the scan process -- which
+    nothing niced. Measured on the live server: the scan held 99% of the one
+    CPU at nice 0 for ten hours while the site it feeds was starved of it.
+
+    So the level must be settable on *this* process, not only on children, and
+    it must be idempotent: the parent nices itself and then every pool worker
+    runs the same initializer, which under `os.nice` -- a relative adjustment
+    -- would land them at 20 rather than 10.
+
+    Run in a forked child because raising a nice value cannot be undone
+    without CAP_SYS_NICE: asserting in-process would leave the whole pytest
+    session running at a lower priority than it started.
+    """
+    import os
+
+    pid = os.fork()
+    if pid == 0:                                    # child
+        status = 0
+        try:
+            from harelphotos import scanner
+
+            base = os.getpriority(os.PRIO_PROCESS, 0)
+            scanner.nice_this_process(base + 3)
+            if os.getpriority(os.PRIO_PROCESS, 0) != base + 3:
+                status = 1
+            # The pool initializer runs on top of the parent's own value.
+            scanner._nice(base + 3)
+            if os.getpriority(os.PRIO_PROCESS, 0) != base + 3:
+                status = 2                          # stacked, so it is relative
+        except BaseException:
+            status = 3
+        os._exit(status)
+
+    _, status = os.waitpid(pid, 0)
+    code = os.waitstatus_to_exitcode(status)
+    assert code != 1, "nice_this_process did not set this process's own priority"
+    assert code != 2, "applying the level twice stacked; it must be absolute"
+    assert code == 0, f"child failed with {code}"
