@@ -474,6 +474,25 @@ Where things go wrong:
 | `Failed to connect to bus` from `systemd-run --user` | an ssh login has no user D-Bus session; use `tmux`, see §2 |
 | thumbnails re-download on every page load | an old build: fixed by not re-sending the session cookie each response |
 
+### When it feels slow, measure before changing anything
+
+```sh
+contrib/measure-serving.py https://photos.example.org --user you
+```
+
+It logs in and separates the four things that can make a site feel slow, which
+need completely different fixes and are very easy to confuse: the round trip
+(distance, unfixable from here), the server's own work per request, throughput
+once bytes are flowing, and stalls. Add `--heavy` to measure bulk throughput
+too, which tells you whether a slow screenful is the uplink or the serving
+path. `--help` lists the rest.
+
+Worth the habit. Twice now the obvious explanation has been the wrong one: an
+album page that took 6.5 seconds looked like too many requests and was
+actually the `X-Sendfile` hand-off, and a later slowdown looked like the scan
+starving the CPU and survived the scan being paused outright. Both times the
+split above is what settled it, in about a minute.
+
 ### When a large album loads only some of its photos
 
 An album page is one HTML request followed by hundreds of image requests, many
