@@ -2,14 +2,14 @@
 
 What the software does **today**, and how to use it.
 
-This describes only what is implemented and working. For why things are the way
-they are — the measurements, the alternatives rejected, the plan for what isn't
-built yet — see [DESIGN.md](DESIGN.md). Where the two disagree, this file is
-right and DESIGN.md is out of date.
+This describes only what is implemented and working, and it is the document to
+trust about the software's current behavior.
 
-> **Implemented so far:** indexing a photo tree, generating its images,
-> browsing them in a web interface, and logging in with a local account. Not
-> yet: Google sign-in, and the real server deployment behind Apache with TLS.
+[DESIGN.md](DESIGN.md) is a *historical* document: it records how the design
+was arrived at, with the measurements and the alternatives rejected, and is
+deliberately not updated as the software changes. Read it for why, never for
+what. Where the two disagree, this file is right. [IDEAS.md](IDEAS.md) holds
+what is being considered next, and what was tried and reversed.
 
 ---
 
@@ -998,7 +998,6 @@ secret_key_file = "/etc/harelphotos/secret_key"
 base_url        = "https://photos.example.org"
 session_days    = 30                  # how long a login lasts
 behind_proxy    = false               # true when Apache is in front
-sendfile_header = "auto"              # "X-Sendfile" with mod_xsendfile
 
 [scan]
 jobs    = 0                           # 0 = all cores
@@ -1009,7 +1008,7 @@ exclude = [".*", "@eaDir", "Thumbs.db"]
 family = ["nyh", "dad@gmail.com"]
 ```
 
-The three that only matter on a server:
+The two that only matter on a server:
 
 - **`base_url`** must be exactly what the browser asks for, with no trailing
   slash. It decides whether the session cookie is marked `Secure`, so getting
@@ -1019,10 +1018,6 @@ The three that only matter on a server:
   directly-reachable server would let anyone claim any address. Behind Apache
   without it, every request looks like `127.0.0.1`, so one person mistyping a
   password throttles everybody.
-- **`sendfile_header = "X-Sendfile"`** lets Apache send image bytes itself once
-  the access check has passed, instead of copying them through Python. Needs
-  `mod_xsendfile` and a matching `XSendFilePath`.
-
 Under `[ui]`, **`source_url`** is where the branch icon in the top bar leads.
 The AGPL's section 13 asks that anyone running a *modified* version offer its
 source to the people reaching it over the network, so point this at your own

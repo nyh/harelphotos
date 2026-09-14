@@ -40,7 +40,6 @@ def test_minimal_config_and_defaults(tmp_path):
     assert cfg.encode.fallback == "auto"
     assert cfg.encode.speed == 6
     assert cfg.ui.map_link == "osm"
-    assert cfg.sendfile_header == "auto"
     assert cfg.google.enabled is False
     assert cfg.state_dir == Path("/state")
 

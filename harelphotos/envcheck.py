@@ -285,7 +285,6 @@ def _apache(r: Report, cfg: Config | None) -> None:
         ("filter_module", True, "provides AddOutputFilterByType"),
         ("headers_module", True, "cache and security headers"),
         ("ssl_module", True, "TLS"),
-        ("xsendfile_module", False, "optional: lets Apache send image bytes itself"),
         # Not required, and the largest single win available on a slow link:
         # without it a browser fetches an album's thumbnails six at a time,
         # each batch costing a round trip.
@@ -296,19 +295,11 @@ def _apache(r: Report, cfg: Config | None) -> None:
         r.add(verdict, f"mod_{mod.replace('_module', '')}",
               ("loaded" if present else "not loaded") + f" — {why}")
 
-    if cfg and cfg.sendfile_header == "X-Sendfile" and "xsendfile_module" not in out:
-        r.add(FAIL, "sendfile_header", "set to X-Sendfile but mod_xsendfile is not loaded")
-    # "auto" is the value `init` writes and it does nothing at all: the image
-    # route acts on the literal "X-Sendfile" and treats everything else as
-    # "none", so a server with the module loaded and the default config sends
-    # every thumbnail through Python. Nothing else says so, and the name
-    # promises the opposite -- which is exactly the kind of setting that stays
-    # wrong for a year.
-    if cfg and cfg.sendfile_header == "auto" and "xsendfile_module" in out:
-        r.add(WARN, "sendfile_header",
-              'is "auto", which means the same as "none": every image is sent '
-              'by Python. mod_xsendfile is loaded — set it to "X-Sendfile" '
-              "and Apache will send the bytes instead")
+    # Earlier versions told you to install this and to switch it on.
+    if "xsendfile_module" in out:
+        r.add(INFO, "mod_xsendfile",
+              "loaded but unused (see images.send) — safe to unload, along "
+              "with any XSendFile lines in the vhost")
 
 
 def _selinux(r: Report, cfg: Config | None) -> None:
@@ -333,21 +324,8 @@ def _selinux(r: Report, cfg: Config | None) -> None:
         on = out.endswith("on")
         r.add(OK if on else FAIL, boolean, f"{'on' if on else 'off'} — {why}")
 
-    if cfg and cfg.sendfile_header == "X-Sendfile":
-        for label, path in (("photos", cfg.photo_root), ("derived", cfg.derived_root)):
-            ctx = _selinux_context(path)
-            fine = ctx and ("httpd_sys_content_t" in ctx or "public_content" in ctx)
-            r.add(OK if fine else WARN, f"selinux label ({label})",
-                  f"{ctx or 'unknown'}" + ("" if fine else " — Apache may not be able to read it"))
-
-
-def _selinux_context(path: Path) -> str | None:
-    try:
-        out = subprocess.run(["ls", "-Zd", str(path)], capture_output=True, text=True,
-                             timeout=5).stdout.split()
-        return out[0] if out else None
-    except Exception:
-        return None
+    # No label check on the photo and derived trees: gunicorn reads them, as
+    # its own user, and what Apache may read is irrelevant.
 
 
 def _live(r: Report, url: str) -> None:

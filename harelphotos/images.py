@@ -6,10 +6,10 @@ Two things happen here that are easy to get subtly wrong:
   the browser said it accepts. That makes ``Vary: Accept`` mandatory — without
   it a cache can hand a client a format it cannot read, and with a year-long
   immutable lifetime that failure is both silent and very long-lived.
-* **Handing off to the web server.** Once the access check has passed, Apache
-  can send the file itself via ``X-Sendfile``, costing the Python process
-  nothing. `XSendFilePath` lets Apache serve a file *the application asked it
-  to*; it is not a route by which a request can reach one.
+* **Every byte goes through Python.** This used to be optional: once the access
+  check had passed, Apache could send the file itself via ``X-Sendfile``. That
+  hand-off was removed in September 2026 after measuring it against the live
+  server, where it was *slower* — see ``send`` below.
 """
 
 # Copyright (C) 2026 Nadav Har'El
@@ -117,34 +117,41 @@ def _under(path: Path, root: Path) -> bool:
 
 def send(cfg: Config, path: Path, mime: str, *, download_name: str | None = None,
          immutable: bool = True, vary_accept: bool = True) -> Response:
-    """Send a file, handing off to the web server where possible."""
+    """Send a file. Python copies the bytes; nothing is handed to the proxy.
+
+    There used to be an `X-Sendfile` hand-off here, so that Apache sent the
+    derived images itself and the Python process only did the access check. It
+    was removed after measuring it on the live server -- a weak CPU behind a
+    slow link, exactly the machine it was supposed to help:
+
+        24 thumbnails (344 KB)     X-Sendfile      Python
+        over HTTP/2                  6.56 s        0.84 s
+        over HTTP/1.1                2.52 s        0.87 s
+        240 sequential, stalled       38%             0%
+
+    The mechanism was never identified, so this is not a claim that the
+    technique is wrong -- nginx's `X-Accel-Redirect` is the same idea and is
+    not suspected. What can be said: the only Apache implementation is
+    `mod_xsendfile`, a third-party module last released around 2012 that does
+    not officially support Apache 2.4, let alone HTTP/2; it was slow over
+    HTTP/1.1 too, so it is not purely an h2 interaction; and the hand-off's
+    entire purpose -- sparing the CPU the byte copying -- buys nothing here,
+    because Python was measured moving image bytes at 2.4 MB/s on that box,
+    which is faster than the link it feeds.
+
+    So the best case was zero and the measured case was a 7.8x loss, and the
+    `sendfile_header` setting went with it.
+    """
     if not _within_a_served_root(cfg, path):
         log.warning("refusing to send %s: outside the photo and derived trees", path)
         abort(404)
-    # X-Sendfile only for the generated tree.
-    #
-    # Apache will send a file the application names only if it sits under an
-    # XSendFilePath, and that lists the derived directory alone -- the photo
-    # tree cannot be added, because it lives in a home directory Apache cannot
-    # read, which is the whole reason the generated images live elsewhere.
-    #
-    # Naming a file outside that list does not fail loudly: mod_xsendfile
-    # answers 404. So every original -- the "Download original" button, and the
-    # full-size image shown for a photo whose copies are not generated yet --
-    # was silently missing in production while working perfectly in
-    # development, where nothing hands off to Apache at all.
-    if cfg.sendfile_header == "X-Sendfile" and _under(path, cfg.derived_root):
-        resp = Response(b"", mimetype=mime)
-        resp.headers["X-Sendfile"] = str(path)
-        resp.headers["Content-Length"] = str(path.stat().st_size)
-    else:
-        resp = send_file(
-            path,
-            mimetype=mime,
-            as_attachment=download_name is not None,
-            download_name=download_name,
-            conditional=download_name is None,
-        )
+    resp = send_file(
+        path,
+        mimetype=mime,
+        as_attachment=download_name is not None,
+        download_name=download_name,
+        conditional=download_name is None,
+    )
     if download_name is not None:
         resp.headers["Content-Disposition"] = (
             f'attachment; filename="{download_name}"'

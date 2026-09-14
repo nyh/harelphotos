@@ -352,9 +352,10 @@ The blocker is the web server. Apache 2.4 ships no HTTP/3 — `mod_http2` and
 nothing beyond it — and Rocky 9 ships Apache. nginx has had it since 1.25 and
 Caddy does it by default, so this means replacing or fronting the web server,
 against two deliberate choices: INSTALL.md assumes an Apache already serving
-other sites and takes care not to disturb it, and the X-Sendfile handoff is
-Apache's (`sendfile_header` is an enum of `auto`, `X-Sendfile`, `none`, and
-knows nothing of nginx's `X-Accel-Redirect`).
+other sites and takes care not to disturb it. The second reason listed here —
+that the X-Sendfile handoff was Apache's and knew nothing of nginx's
+`X-Accel-Redirect` — is gone: the handoff was removed in September 2026 (item
+20), so nothing in the application is tied to a particular web server any more.
 
 Worth revisiting if Apache ever ships it, or if this site ever moves off a
 shared httpd for other reasons. Not worth moving *for*.
@@ -384,55 +385,70 @@ This is a few lines; if it is enough, the argument about 21 never has to be
 had — and if it is not, 21's case rests on how paging *feels* rather than on
 what it saves.
 
-### 20. Stop the thumbnails appearing one at a time
+### ~~20. Stop the thumbnails appearing one at a time~~ — closed, 2026-09-14
 
-Nadav's idea, and the honest answer is that it is two ideas.
+Nadav's idea, and it was two ideas. The packing half is now closed, for a
+reason nobody guessed. Kept in full because the *instinct* was right twice and
+the *explanation* was wrong twice, which is worth remembering.
 
-The *appearance* is easy: hold a row until its images have all decoded, or fade
-them in together, so a grid arrives as a grid rather than as popcorn. Tens of
-lines, no new files, no invalidation.
+**What it was slow for.** Not the request count, and not the disk. The album
+page was slow because the `X-Sendfile` handoff to Apache was slow. Measured
+against the live server:
 
-The *cause* was item 18, which is now done — so the first thing to do here is
-look again and see whether it still happens. Once the requests are multiplexed
-they largely arrive together anyway, and this may have stopped being annoying
-without anything else being
-done.
+| 24 thumbnails, 344 KB | X-Sendfile | Python |
+|---|---|---|
+| over HTTP/2 | 6.56 s | **0.84 s** |
+| over HTTP/1.1 | 2.52 s | 0.87 s |
+| 240 sequential, stalled >300 ms | 38% | **0%** |
 
-The larger version — pack many thumbnails into one file and slice them out with
-`background-position` or `object-view-box` — is genuinely attractive and
-genuinely expensive. It buys one request instead of fifty and a grid that
-appears at once. It costs:
+Removing the handoff made a screenful 7.8x faster and made the stalls — a third
+of all requests, hanging for about a second on a one-second clock — vanish
+entirely. See `images.send` for the numbers and for what can and cannot be
+concluded about *why*; the mechanism was never found.
 
-Two objections raised against it here were wrong, and are recorded as wrong so
-that nobody re-derives them:
+**The spinning-disk argument, measured.** The last version of this idea was
+that the server has a spinning disk, so three thumbnails in one file would cost
+one seek instead of three and a screenful could be 3x faster. Sound reasoning,
+false premise. 120 thumbnails from albums nothing had ever fetched, then the
+same 120 again:
 
-- **Lazy loading is not lost.** Packs of about fifty make a 5000-photo album a
-  hundred packs; you fetch the one or two on screen and the rest as they are
-  scrolled to. That is the same model we already have, observing packs instead
-  of images — *fewer* things to watch, not more.
-- **Invalidation is only fatal if packs are cut by page position**, where
-  inserting one photograph at the front shifts every pack after it. Cut them by
-  *directory* and an album page's photographs are exactly one directory's own,
-  in sort order, so adding a photograph rebuilds that directory's packs and
-  nothing else. Comparable to what a rescan already does.
+```
+COLD  median 104.7 ms      WARM  median 103.2 ms       ->  ~1 ms
+```
 
-What remains genuinely awkward:
+A cold screenful in parallel came out at 769 ms against 865 ms warm — cold
+*faster*, i.e. the difference is noise. The scanner writes an album's
+derivatives in directory order, so they land adjacent on the platter and
+readahead collects a run of them in one go. The filesystem is already doing the
+packing, for free.
+
+So the awkward costs below are now being paid for a benefit measured at
+approximately zero, and the idea is closed:
 
 - **The geometry.** The grid is justified with true aspect ratios and never
-  crops, so a pack holds fifty rectangles of differing shapes. That needs a
-  packing pass at scan time, per-tile coordinates in the index, and
-  `object-view-box` or a `background-position` trick to slice them out. Stacked
-  at a common height it is simpler and wastes width on a panorama.
+  crops, so a pack holds fifty rectangles of differing shapes — a packing pass
+  at scan time, per-tile coordinates in the index, and `object-view-box` to
+  slice them out.
 - **Cache sharing.** A thumbnail fetched once is reused wherever it appears,
   including as a cover on a parent page. Packs break that.
 - **Two ladders.** `srcset` offers 256 and 512; packs would need both.
 
-So: worth doing only if 18 and the cheap version of 20 are done and the grid
-still arrives badly — which it may well not, because the fifty requests really
-are the problem and HTTP/2 fixes them for one line of configuration. Recorded
-in full because the instinct was right about the cause, and because the reason
-to skip it should be "the cheap fix worked", not a list of difficulties that
-turned out to be softer than they first looked.
+Two objections raised against packing *here* were wrong, and are still recorded
+as wrong, because they would be wrong again for the next idea of this shape:
+
+- **Lazy loading is not lost.** Packs of about fifty make a 5000-photo album a
+  hundred packs; you fetch the one or two on screen and the rest as they are
+  scrolled to — *fewer* things to observe, not more.
+- **Invalidation is only fatal if packs are cut by page position.** Cut them by
+  *directory* and adding a photograph rebuilds that directory's packs and
+  nothing else.
+
+**Still open, and now the only part worth doing:** the cheap *appearance* fix —
+hold a row until its images have decoded, or fade them in together, so a grid
+arrives as a grid rather than as popcorn. Tens of lines, no new files, no
+invalidation. Worth looking at once more first: with the handoff gone a
+screenful now lands in under a second, and this may have stopped being
+annoying on its own.
 
 ### 21. Page between photographs without loading a page
 
@@ -576,12 +592,9 @@ costs a single extra encode per photograph and re-encodes nothing.
 Recorded because it was nearly acted on twice. Both times the reasoning was
 about a device nobody here owns.
 
-**`sendfile_header = "auto"` does nothing.** It is what `init` writes, and
-`images.py` acts on the literal `"X-Sendfile"` and treats everything else as
-`"none"` -- so the default configuration sends every thumbnail through Python
-even where `mod_xsendfile` is loaded and ready. The name promises detection and
-there is none. `check --env` now says so when the module is present; whether
-the setting should instead *mean* something is a separate question.
+**~~`sendfile_header = "auto"` does nothing.~~** Resolved, and not in the
+direction anyone expected: the setting turned out to be a trap rather than a
+missing feature, and the whole handoff was measured and removed. See item 20.
 
 **The lazy-load window may be too wide for a 312-photo page.** `limitLoading`
 uses `rootMargin: "200% 0px"` -- two viewports of slack in each direction --

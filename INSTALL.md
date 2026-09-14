@@ -45,7 +45,7 @@ Packages you are likely to need, all from EPEL:
 
 ```sh
 sudo dnf install epel-release
-sudo dnf install mod_ssl certbot python3-certbot-apache mod_xsendfile mod_http2
+sudo dnf install mod_ssl certbot python3-certbot-apache mod_http2
 sudo systemctl restart httpd
 ```
 
@@ -57,10 +57,6 @@ distance costs the rest. Over HTTP/1.1 a browser opens six connections and
 fetches an album's hundred-odd thumbnails six at a time, roughly seventeen
 round trips of waiting. HTTP/2 puts them all on one connection and sends the
 requests together. The vhost below turns it on if the module is there.
-
-`mod_xsendfile` is optional but worth it on a weak machine: it lets Apache send
-the image bytes itself once the application has done the access check, instead
-of copying every image through Python.
 
 
 ## 1. Configure
@@ -78,12 +74,11 @@ sudo .venv/bin/harelphotos --config /etc/harelphotos/config.toml init \
 sudo chown -R nyh:nyh /etc/harelphotos /var/lib/harelphotos
 ```
 
-Then edit `/etc/harelphotos/config.toml`. Four lines matter for a server:
+Then edit `/etc/harelphotos/config.toml`. Two lines matter for a server:
 
 ```toml
 base_url        = "https://photos.example.org"   # exactly, no trailing slash
 behind_proxy    = true                           # believe Apache's X-Forwarded-*
-sendfile_header = "X-Sendfile"                   # only with mod_xsendfile
 ```
 
 `behind_proxy` is not cosmetic. Without it every request appears to come from
@@ -470,8 +465,7 @@ Where things go wrong:
 |---|---|
 | `attempt to write a readonly database` | `sudo chown -R nyh:nyh /var/lib/harelphotos` — `init` ran as root |
 | 503 from Apache | `systemctl status harelphotos` — gunicorn is not up |
-| every image 404s but pages work | `sendfile_header`/`XSendFilePath` disagree, or Apache cannot read `/var/lib/harelphotos/derived` |
-| thumbnails fine, "Download original" 404s | an old build: originals were handed to Apache, which may only send files under `XSendFilePath` |
+| every image 404s but pages work | gunicorn's user cannot read `/var/lib/harelphotos/derived` |
 | login always returns to the login page | `base_url` is not exactly what the browser asked for, so the cookie is dropped |
 | everyone throttled at once | `behind_proxy` is not `true` |
 | grey placeholder tiles | those photos have no images generated yet; finish the scan |
@@ -497,9 +491,9 @@ sudo cp contrib/harelphotos.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl restart harelphotos
 ```
 
-Threads rather than more workers because with X-Sendfile the Python side of an
-image request is an access check and a header -- microseconds, then Apache
-sends the bytes -- so a thread spends its time waiting rather than computing.
+Threads rather than more workers because an image request is an access check
+and then a file copied to a socket: almost all of it is waiting on I/O, not
+computing, which is exactly what a thread is cheap at.
 
 ### Tuning it for a small machine
 

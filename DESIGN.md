@@ -3,6 +3,28 @@
 Expansion of [PLAN](PLAN) into something implementable. `PLAN` stays as the
 original statement of intent; this file is the working design.
 
+> **This is a historical document. Do not trust it for how the software
+> behaves today.**
+>
+> It records the design as it was worked out, including the reasoning, the
+> measurements, and the alternatives weighed and rejected — which is why it is
+> kept rather than updated. The software has since moved on in places, and
+> those places are deliberately *not* edited back into this file: rewriting
+> history would destroy the very thing it is for, which is the record of why
+> each choice was made with what was known at the time.
+>
+> For what the software actually does now, see
+> [MANUAL.md](MANUAL.md) — it is the current description, and where the two
+> disagree, MANUAL.md is right. For what is being considered next, and for
+> decisions that were later measured and reversed, see [IDEAS.md](IDEAS.md).
+>
+> (One worked example of the divergence, so the shape of it is clear: §10.4
+> below describes handing image bytes to Apache via `X-Sendfile`. That was
+> measured on the live server in September 2026, found to be 7.8x *slower*
+> than serving them from Python, and removed — see item 20 in IDEAS.md. The
+> section below stays as written, because the reasoning it records was sound
+> given what was known then, and the point of keeping it is to show that.)
+
 ---
 
 ## 0. Decisions already made

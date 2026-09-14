@@ -916,49 +916,34 @@ def test_the_albums_own_header_keeps_its_dates(scanned):
     assert "·" in head, head
 
 
-# --------------------------------------------------- originals and X-Sendfile
+# ---------------------------------------------------------- serving the bytes
 
-def test_originals_are_not_handed_to_apache(scanned, tmp_path):
-    """Apache sends a file the application names only if it is under an
-    XSendFilePath, and that lists the derived tree alone -- the photo tree
-    cannot be added, because it lives in a home directory Apache cannot read.
+def test_no_route_hands_a_file_to_the_web_server(scanned):
+    """Every route sends its own bytes, derived images included.
 
-    Naming a file outside the list does not fail loudly: mod_xsendfile answers
-    404. So "Download original", and the full-size image shown for a photo
-    whose copies are not generated yet, were silently missing in production
-    while working in development, where nothing hands off to Apache at all.
+    There used to be an X-Sendfile hand-off for the derived tree. It was
+    removed after measuring it 7.8x slower than serving from Python on the
+    live server (images.send records the numbers). A response that names a
+    file instead of carrying it is now a bug: on a server with no
+    mod_xsendfile it would be an empty image, and on one with it, the slow
+    path back again.
     """
-    from harelphotos.web import create_app
-
-    object.__setattr__(scanned, "sendfile_header", "X-Sendfile")
-    app = create_app(scanned, require_login=False)
-    app.config.update(TESTING=True)
-    c = app.test_client()
-
-    for url in ("/orig/2019/01/a.jpg", "/i/orig/2019/01/a.jpg"):
-        r = c.get(url)
-        assert r.status_code == 200, url
-        assert "X-Sendfile" not in r.headers, url
-        assert r.data, f"{url} served no bytes"
-
-
-def test_derived_images_are_still_handed_to_apache(scanned):
-    """The hand-off is the point of the setting; only originals are exempt."""
     import re
 
     from harelphotos.web import create_app
 
-    object.__setattr__(scanned, "sendfile_header", "X-Sendfile")
     app = create_app(scanned, require_login=False)
     app.config.update(TESTING=True)
     c = app.test_client()
 
     body = c.get("/a/2019/01/").get_data(as_text=True)
-    url = re.search(r'src="(/i/\d+/[^"]+)"', body).group(1)
-    r = c.get(url)
-    assert r.status_code == 200
-    assert "X-Sendfile" in r.headers
-    assert str(scanned.derived_root) in r.headers["X-Sendfile"]
+    derived = re.search(r'src="(/i/\d+/[^"]+)"', body).group(1)
+
+    for url in (derived, "/orig/2019/01/a.jpg", "/i/orig/2019/01/a.jpg"):
+        r = c.get(url)
+        assert r.status_code == 200, url
+        assert "X-Sendfile" not in r.headers, url
+        assert r.data, f"{url} served no bytes"
 
 
 def test_the_source_link_is_offered_to_everyone_who_uses_the_site(scanned):
