@@ -12,7 +12,11 @@ Usage
     --user U   the account to log in as. Defaults to $USER.
     --album P  which album to pull thumbnails from, e.g. 2016/03. Defaults to
                searching for one with enough photographs to fill a screen,
-               which is what makes the throughput figure meaningful.
+               which is what makes the throughput figure meaningful. Pin it to
+               one album when comparing runs over days: the search is
+               deterministic but its answer moves as photographs are added, and
+               a screenful of 2003 snapshots is not the same number of
+               kilobytes as one of 2016 photographs.
     --heavy    also measure bulk throughput. Downloads about 6 MB of original
                photographs, so leave it off when the link is the thing you are
                worried about, and turn it on when you need to know whether a
@@ -246,7 +250,11 @@ def main() -> int:
     relpath = thumbs[0].split("/i/512/", 1)[1].split("?")[0]
 
     where = f"/a/{album}/" if album else "/a/ (the top album)"
-    print(f"\n{s.base}  ({where}, {len(thumbs)} thumbnails)\n")
+    # Say both numbers. Printing only the sample size reads as though a
+    # 24-photograph album had been chosen, when the album may hold hundreds and
+    # 24 is deliberately a screenful -- the unit a person actually waits for.
+    print(f"\n{s.base}  ({where}, {len(thumbs)} of {len(found)} thumbnails "
+          f"-- one screenful)\n")
 
     # ---- latency, and the server's own work on top of it.
     #
@@ -271,8 +279,12 @@ def main() -> int:
     runs = [s.parallel(thumbs, SCREENFUL) for _ in range(REPEATS)]
     best = sorted(runs, key=lambda r: r[0])[len(runs) // 2]
     secs, nbytes = best
-    row(f"screenful ({len(thumbs)} thumbnails)", f"{secs:.2f} s",
-        f"{nbytes / 1024 / secs:.0f} KB/s, median of {REPEATS}")
+    # The byte count, not just the time: a screenful of 2003 snapshots and one
+    # of 2016 photographs are not the same number of kilobytes, so the seconds
+    # are only comparable between runs over the same album. Printing both makes
+    # a mismatched comparison obvious instead of silently misleading.
+    row(f"screenful ({len(thumbs)} thumbnails, {nbytes / 1024:.0f} KB)",
+        f"{secs:.2f} s", f"{nbytes / 1024 / secs:.0f} KB/s, median of {REPEATS}")
 
     if args.heavy and relpath:
         one = curl(["--http2", "-b", jar, f"{s.base}/orig/{relpath}",
