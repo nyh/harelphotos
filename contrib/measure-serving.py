@@ -291,8 +291,15 @@ def main() -> int:
         "the distance; unfixable from here")
     row("thumbnail, typical", f"{st.median(seq):.0f} ms",
         f"{st.median(seq) - floor:+.0f} ms of server work")
-    row(f"  ... stalled (>{STALL_MS} ms)", f"{over * 100 / len(seq):.0f}%",
-        "anything above ~1% is a bug, not load")
+    # The count, not only the percentage. With a sample this size one unlucky
+    # request is already 1.4%, so a percentage alone invites reading noise as a
+    # finding -- which a threshold of "above 1%" did, on this very server.
+    # What actually indicates a bug is a large share, or stalls that land on a
+    # clock: the X-Sendfile hand-off stalled a third of all requests at almost
+    # exactly one-second intervals, and that regularity was the giveaway.
+    row(f"  ... stalled (>{STALL_MS} ms)",
+        f"{over} of {len(seq)}",
+        "a few under load is normal; a third of them is a bug")
 
     # ---- throughput: what a person actually waits for.
     runs = [s.parallel(thumbs, SCREENFUL) for _ in range(REPEATS)]
@@ -329,7 +336,9 @@ Reading it:
   Latency high, everything else fine .... distance. HTTP/2 already helps most.
   Per-request cost high ................. the index lookup or the access check;
                                           profile the image route.
-  Stalls above a percent or two ......... a bug. They cluster on a clock when
+  A few stalls .......................... normal when the machine is busy.
+                                          A large share of them is a bug, and
+                                          they cluster on a clock when
                                           something periodic is to blame.
   Screenful slow, per-request fine ...... throughput. Compare against the
                                           originals below (--heavy): if those
