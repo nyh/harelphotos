@@ -21,7 +21,16 @@ User=nyh
 Group=nyh
 
 Environment=HARELPHOTOS_CONFIG=/etc/harelphotos/config.toml
-WorkingDirectory=/home/nyh/harelphotos
+
+# Deliberately NOT the source tree. The config search order begins with the
+# relative path `config.toml`, so a service whose working directory is a
+# checkout will load that checkout's development config -- different
+# photo_root, different index, different secret key -- the moment the line
+# above is removed or mistyped. It would not fail; it would quietly serve the
+# wrong album. Pointing here keeps gunicorn's sys.path fallback for an
+# uninstalled checkout while leaving nothing for that first search entry to
+# find.
+WorkingDirectory=/var/lib/harelphotos
 
 # --threads is the setting that matters here, not --workers.
 #
