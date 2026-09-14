@@ -182,8 +182,16 @@ ACCEPT = "Accept: image/avif,image/webp,*/*"
 
 
 def album_thumbs(s: Session, album: str) -> tuple[list[str], list[str]]:
-    """The thumbnails on one album page, and the albums below it."""
-    body = curl(["-b", s.jar, f"{s.base}/a/{album.strip('/')}/"]).stdout
+    """The thumbnails on one album page, and the albums below it.
+
+    `--compressed` because searching a large tree fetches dozens of these and
+    an album page of two hundred photographs is a few hundred kilobytes of
+    HTML. Apache compresses it about thirtyfold, and curl does not ask unless
+    told -- so the search was pulling megabytes down the very link it is about
+    to measure. Only for HTML: the images must be fetched exactly as a browser
+    would, and AVIF does not compress again.
+    """
+    body = curl(["--compressed", "-b", s.jar, f"{s.base}/a/{album.strip('/')}/"]).stdout
     thumbs: list[str] = []
     for m in re.finditer(r'srcset="([^"]*)"', body):
         for cand in m.group(1).split(", "):
@@ -194,8 +202,8 @@ def album_thumbs(s: Session, album: str) -> tuple[list[str], list[str]]:
     return thumbs, children
 
 
-def find_album(s: Session, album: str) -> tuple[str, list[str]]:
-    """Pick an album with enough photographs to fill a screen.
+def find_album(s: Session, album: str, want: int) -> tuple[str, list[str]]:
+    """Pick an album with at least `want` photographs, or the largest there is.
 
     Taking the first album listed is not good enough: on a tree organised by
     year the first is often a handful of scanned photographs, and a "screenful"
@@ -212,7 +220,7 @@ def find_album(s: Session, album: str) -> tuple[str, list[str]]:
 
     best: tuple[str, list[str]] = ("", [])
     queue, seen = [""], set()
-    while queue and len(best[1]) < GOOD_ENOUGH:
+    while queue and len(best[1]) < want:
         # A budget, because a large tree has thousands of albums and one good
         # one is all we need.
         if len(seen) > 40:
@@ -232,9 +240,10 @@ def find_album(s: Session, album: str) -> tuple[str, list[str]]:
 
     if not best[1]:
         sys.exit("found no album with generated thumbnails; pass --album")
-    if len(best[1]) < SCREENFUL:
-        print(f"note: best album found has only {len(best[1])} thumbnails; "
-              f"pass --album for a fuller one\n", file=sys.stderr)
+    if len(best[1]) < want:
+        print(f"note: wanted {want} thumbnails, and the largest album found in "
+              f"{len(seen)} tried has {len(best[1])}. Pass --album if you know "
+              f"a bigger one.\n", file=sys.stderr)
     return best[0], best[1]
 
 
@@ -270,7 +279,11 @@ def main() -> int:
     s = Session(args.base, jar)
     s.login(args.user, password)
 
-    album, found = find_album(s, args.album)
+    # Look for an album big enough for the largest test that will actually run.
+    # Searching for a screenful and then asking --bulk for 300 finds a
+    # 132-photograph album and quietly measures less than was asked for.
+    want = max(args.bulk, GOOD_ENOUGH) if args.heavy else GOOD_ENOUGH
+    album, found = find_album(s, args.album, want)
     thumbs = found[:SCREENFUL]
     relpath = thumbs[0].split("/i/512/", 1)[1].split("?")[0]
 
@@ -351,8 +364,6 @@ def main() -> int:
             secs, nbytes = s.parallel(bulk, SCREENFUL)
             row(f"scrolling it ({len(bulk)} thumbnails, {nbytes / 1024:.0f} KB)",
                 f"{secs:.2f} s", f"{nbytes / 1024 / secs:.0f} KB/s sustained")
-            if len(bulk) < args.bulk:
-                print(f"  (album holds {len(found)}; --bulk {args.bulk} wanted more)")
 
     if args.heavy and relpath:
         one = curl(["--http2", "-b", jar, f"{s.base}/orig/{relpath}",
