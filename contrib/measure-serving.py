@@ -269,11 +269,11 @@ def main() -> int:
     relpath = thumbs[0].split("/i/512/", 1)[1].split("?")[0]
 
     where = f"/a/{album}/" if album else "/a/ (the top album)"
-    # Say both numbers. Printing only the sample size reads as though a
-    # 24-photograph album had been chosen, when the album may hold hundreds and
-    # 24 is deliberately a screenful -- the unit a person actually waits for.
-    print(f"\n{s.base}  ({where}, {len(thumbs)} of {len(found)} thumbnails "
-          f"-- one screenful)\n")
+    # Only the album and its size. Describing the sample here was wrong twice
+    # over: it read as though a 24-photograph album had been chosen, and with
+    # --heavy there are two different samples anyway. Each row below says how
+    # many it used, which is where that belongs.
+    print(f"\n{s.base}  {where} -- {len(found)} thumbnails\n")
 
     # ---- latency, and the server's own work on top of it.
     #
