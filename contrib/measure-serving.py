@@ -17,10 +17,11 @@ Usage
                deterministic but its answer moves as photographs are added, and
                a screenful of 2003 snapshots is not the same number of
                kilobytes as one of 2016 photographs.
-    --heavy    also measure bulk throughput. Downloads about 6 MB of original
-               photographs, so leave it off when the link is the thing you are
-               worried about, and turn it on when you need to know whether a
-               slow screenful is the uplink or the serving path.
+    --heavy    also measure bulk throughput, by fetching original photographs
+               -- about 6 MB. Turn it on when you need to know whether a slow
+               screenful is the uplink or the serving path. It does not change
+               which album is used, nor the size of the screenful: a screenful
+               is a screenful whatever else is being measured.
 
     $HARELPHOTOS_PASSWORD  the password. If unset you are prompted for it.
                            Either way it is never written to disk, and the
@@ -82,6 +83,15 @@ STALL_MS = 300
 # Enough thumbnails to fill a screen on a desktop, which is the unit of work a
 # person actually waits for.
 SCREENFUL = 24
+
+# When to stop looking for an album and settle for the best one found.
+#
+# Stopping at the first album with a bare screenful is a bad rule: most albums
+# hold a hundred or more, and the first to scrape past 24 is an oddity -- a
+# short month, a handful of scanned snapshots -- whose photographs are not
+# typical of the collection. Keep looking until one is comfortably bigger, then
+# take a screenful from that.
+GOOD_ENOUGH = SCREENFUL * 3
 
 # Repeats of the whole-screenful test. Three is enough to see whether a figure
 # is stable; the first is often slower because the connection is still in TCP
@@ -189,7 +199,7 @@ def find_album(s: Session, album: str) -> tuple[str, list[str]]:
 
     best: tuple[str, list[str]] = ("", [])
     queue, seen = [""], set()
-    while queue and len(best[1]) < SCREENFUL:
+    while queue and len(best[1]) < GOOD_ENOUGH:
         # A budget, because a large tree has thousands of albums and one good
         # one is all we need.
         if len(seen) > 40:
