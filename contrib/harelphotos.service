@@ -15,8 +15,8 @@ After=network.target
 [Service]
 # Runs as the user who owns the photos: they stay where they are, in a home
 # directory, and nothing needs to be moved or re-owned. Only the *generated*
-# tree lives outside, under /var/lib/harelphotos, so that Apache can read it
-# for X-Sendfile without opening up the home directory.
+# tree lives outside, under /var/lib/harelphotos, which also keeps a writable
+# directory out of the home tree that ProtectHome= locks down below.
 User=nyh
 Group=nyh
 
@@ -33,10 +33,10 @@ WorkingDirectory=/home/nyh/harelphotos
 # worker. That is the "some photos never load, then appear a minute later"
 # symptom exactly.
 #
-# Threads suit this workload precisely. With X-Sendfile the Python side of an
-# image request is an access check and a header -- microseconds, then Apache
-# sends the bytes -- so a thread spends its time waiting, not computing, and
-# the GIL is barely contended. 2 x 8 = 16 concurrent requests.
+# Threads suit this workload precisely. An image request is an access check
+# and then a file copied to a socket, and the copying releases the GIL while it
+# waits on the disk and the network -- so threads overlap where it matters and
+# contend only for the small Python part. 2 x 8 = 16 concurrent requests.
 #
 # --workers is the memory knob, not --threads. Measured with warmed processes,
 # counting PSS: 24 threads cost about a megabyte more than one, because they
@@ -56,7 +56,6 @@ ExecStart=/home/nyh/harelphotos/.venv/bin/gunicorn \
     --timeout 120 \
     --graceful-timeout 10 \
     --bind 127.0.0.1:8099 \
-    --access-logfile - \
     --error-logfile - \
     harelphotos.wsgi:app
 
