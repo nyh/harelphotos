@@ -17,11 +17,13 @@ Usage
                deterministic but its answer moves as photographs are added, and
                a screenful of 2003 snapshots is not the same number of
                kilobytes as one of 2016 photographs.
-    --heavy    also measure bulk throughput, by fetching original photographs
-               -- about 6 MB. Turn it on when you need to know whether a slow
-               screenful is the uplink or the serving path. It does not change
-               which album is used, nor the size of the screenful: a screenful
-               is a screenful whatever else is being measured.
+    --heavy    also measure sustained throughput -- a whole album's thumbnails,
+               then original photographs, about 8 MB in all. Turn it on when
+               you need to know whether a slow screenful is the uplink or the
+               serving path, and when you want a throughput figure steady
+               enough to compare between days. The screenful stays a screenful
+               either way: it answers a different question, which is how long
+               somebody waits for the grid to appear.
 
     $HARELPHOTOS_PASSWORD  the password. If unset you are prompted for it.
                            Either way it is never written to disk, and the
@@ -92,6 +94,13 @@ SCREENFUL = 24
 # typical of the collection. Keep looking until one is comfortably bigger, then
 # take a screenful from that.
 GOOD_ENOUGH = SCREENFUL * 3
+
+# How many thumbnails the --heavy sustained test asks for. A screenful is too
+# small to measure throughput honestly over a long link: 400 KB is gone before
+# TCP is out of slow start, which is why a screenful's time bounces by 15%
+# between runs while this figure holds steady. This is also the most realistic
+# bulk workload the site has -- somebody scrolling a long album.
+BULK = 120
 
 # Repeats of the whole-screenful test. Three is enough to see whether a figure
 # is stable; the first is often slower because the connection is still in TCP
@@ -226,7 +235,7 @@ def find_album(s: Session, album: str) -> tuple[str, list[str]]:
 
 
 def row(label: str, value: str, note: str = "") -> None:
-    print(f"  {label:<34} {value:>14}   {note}")
+    print(f"  {label:<40} {value:>10}   {note}")
 
 
 def main() -> int:
@@ -295,6 +304,16 @@ def main() -> int:
     # a mismatched comparison obvious instead of silently misleading.
     row(f"screenful ({len(thumbs)} thumbnails, {nbytes / 1024:.0f} KB)",
         f"{secs:.2f} s", f"{nbytes / 1024 / secs:.0f} KB/s, median of {REPEATS}")
+
+    if args.heavy:
+        # Scrolling a long album: many small files, the same route and the same
+        # multiplexed connection as the screenful, but enough of them that the
+        # figure is throughput rather than slow start.
+        bulk = found[:BULK]
+        if len(bulk) > SCREENFUL:
+            secs, nbytes = s.parallel(bulk, SCREENFUL)
+            row(f"whole album ({len(bulk)} thumbnails, {nbytes / 1024:.0f} KB)",
+                f"{secs:.2f} s", f"{nbytes / 1024 / secs:.0f} KB/s sustained")
 
     if args.heavy and relpath:
         one = curl(["--http2", "-b", jar, f"{s.base}/orig/{relpath}",
