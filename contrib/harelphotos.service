@@ -58,6 +58,13 @@ WorkingDirectory=/var/lib/harelphotos
 # --timeout 120: the first request for a WebP or JPEG fallback transcodes on
 # demand, and on a slow machine a large image can take a while. Every request
 # after it is a static file.
+#
+# --no-control-socket: gunicorn 26 opens a management socket, defaulting to
+# /run/user/$UID/gunicorn.ctl. A system service has no login session, so that
+# directory does not exist and it falls back to $HOME/.gunicorn -- which
+# ProtectHome=read-only below forbids, logging "Control server error: [Errno
+# 30] Read-only file system" on every start. Nothing here uses the control
+# interface; ExecReload sends SIGHUP directly.
 ExecStart=/home/nyh/harelphotos/.venv/bin/gunicorn \
     --workers 2 \
     --threads 8 \
@@ -65,6 +72,7 @@ ExecStart=/home/nyh/harelphotos/.venv/bin/gunicorn \
     --timeout 120 \
     --graceful-timeout 10 \
     --bind 127.0.0.1:8099 \
+    --no-control-socket \
     --error-logfile - \
     harelphotos.wsgi:app
 
