@@ -17,13 +17,17 @@ Usage
                deterministic but its answer moves as photographs are added, and
                a screenful of 2003 snapshots is not the same number of
                kilobytes as one of 2016 photographs.
-    --heavy    also measure sustained throughput -- a whole album's thumbnails,
-               then original photographs, about 8 MB in all. Turn it on when
-               you need to know whether a slow screenful is the uplink or the
-               serving path, and when you want a throughput figure steady
-               enough to compare between days. The screenful stays a screenful
-               either way: it answers a different question, which is how long
-               somebody waits for the grid to appear.
+    --heavy    also measure sustained throughput -- a long album's thumbnails,
+               then original photographs. Turn it on when you scroll quickly
+               through big albums, when you need to know whether a slow
+               screenful is the uplink or the serving path, or when you want a
+               figure steady enough to compare between days.
+    --bulk N   how many thumbnails the sustained test asks for, default 120.
+               Set it to the size of the albums you actually scroll: `--bulk
+               300` downloads roughly 5 MB and measures what that feels like.
+               The screenful stays a screenful regardless -- it answers the
+               other question, which is how long you wait before the grid
+               appears at all.
 
     $HARELPHOTOS_PASSWORD  the password. If unset you are prompted for it.
                            Either way it is never written to disk, and the
@@ -244,7 +248,9 @@ def main() -> int:
     p.add_argument("--user", default=os.environ.get("USER", ""))
     p.add_argument("--album", default="", help="album to pull thumbnails from")
     p.add_argument("--heavy", action="store_true",
-                   help="also measure bulk throughput (downloads ~6 MB of originals)")
+                   help="also measure sustained throughput and originals")
+    p.add_argument("--bulk", type=int, default=BULK, metavar="N",
+                   help=f"thumbnails for the sustained test (default {BULK})")
     args = p.parse_args()
 
     if not shutil.which("curl"):
@@ -310,17 +316,43 @@ def main() -> int:
     # are only comparable between runs over the same album. Printing both makes
     # a mismatched comparison obvious instead of silently misleading.
     row(f"screenful ({len(thumbs)} thumbnails, {nbytes / 1024:.0f} KB)",
-        f"{secs:.2f} s", f"{nbytes / 1024 / secs:.0f} KB/s, median of {REPEATS}")
+        f"{secs:.2f} s", f"cold connection, {nbytes / 1024 / secs:.0f} KB/s")
+
+    # And the same screenful on a connection that is already open, which is
+    # what a browser actually has: it fetched the HTML over it a moment ago.
+    #
+    # Every figure above pays TCP slow start, because each curl run is a new
+    # process and so a new connection. Over a 100 ms link that is several round
+    # trips of ramp before the window is wide enough to matter -- which made
+    # this tool report roughly twice the wait a person experiences, and sent me
+    # hunting a throughput problem the browser barely felt.
+    #
+    # Estimated by difference: time one screenful, then time two screenfuls of
+    # *different* photographs in one connection. Everything before the second
+    # screenful is common to both, so subtracting leaves the second one alone,
+    # warm. Different photographs, because repeating the first would measure
+    # the server's page cache instead.
+    second = found[len(thumbs):len(thumbs) * 2]
+    if len(second) == len(thumbs):
+        pairs = [s.parallel(thumbs + second, SCREENFUL) for _ in range(REPEATS)]
+        both = sorted(p[0] for p in pairs)[len(pairs) // 2]
+        warm = both - secs
+        warm_bytes = sorted(p[1] for p in pairs)[len(pairs) // 2] - nbytes
+        if warm > 0:
+            row("  ... on a warm connection", f"{warm:.2f} s",
+                f"what a browser sees, {warm_bytes / 1024 / warm:.0f} KB/s")
 
     if args.heavy:
         # Scrolling a long album: many small files, the same route and the same
         # multiplexed connection as the screenful, but enough of them that the
         # figure is throughput rather than slow start.
-        bulk = found[:BULK]
+        bulk = found[:args.bulk]
         if len(bulk) > SCREENFUL:
             secs, nbytes = s.parallel(bulk, SCREENFUL)
-            row(f"whole album ({len(bulk)} thumbnails, {nbytes / 1024:.0f} KB)",
+            row(f"scrolling it ({len(bulk)} thumbnails, {nbytes / 1024:.0f} KB)",
                 f"{secs:.2f} s", f"{nbytes / 1024 / secs:.0f} KB/s sustained")
+            if len(bulk) < args.bulk:
+                print(f"  (album holds {len(found)}; --bulk {args.bulk} wanted more)")
 
     if args.heavy and relpath:
         one = curl(["--http2", "-b", jar, f"{s.base}/orig/{relpath}",
