@@ -122,10 +122,22 @@ flag.
 tree, so it must filter by `dirs.acl_chain` like every other listing, or it
 becomes a way to enumerate photographs one cannot otherwise see. Sorting by
 date wants `photos.taken`, which is already indexed (`photos_date`), and a
-decision about photographs with no EXIF date. And this is the first *per-person
-mutable state* in the project beyond the session cookie itself, which is the
-real reason it is a bigger change than it sounds: everything the web process
-does today is read-only apart from logging in.
+decision about photographs with no EXIF date.
+
+**It is the first per-person state, but not the first mutable state**, and the
+difference matters. Choosing an album's cover from the UI already writes: the
+`/cover` route calls `overrides.set_many`, which serializes the entire override
+table and replaces the file. That is fine for a handful of album covers chosen
+occasionally by one admin, and it is the wrong shape for stars — thousands of
+rows, toggled constantly, by everybody, where rewriting the whole file per
+click is both slow and a lost update waiting for two people clicking at once.
+
+So stars would be the *third* kind of state the web process writes, after the
+login throttle and the overrides file, and each has picked its own mechanism.
+That is the argument for deciding once where UI-written state belongs rather
+than inventing a third answer — and quite possibly for moving the cover picks
+there too, which was always the plan for them. Worth doing as part of this
+rather than after it: two stores with one design beats three with three.
 
 ---
 
