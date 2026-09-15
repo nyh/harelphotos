@@ -180,6 +180,55 @@ against a real remote — because the decision was made to scan on the server
 instead. Code that is never run does not stay working. Either exercise it once
 properly and keep it, or delete it and let the git history hold it.
 
+### 25. Renaming a directory should not re-encode it
+
+Nadav's question, and the answer is worse than it sounds: a rename is not
+recognized at all. There is no move detection anywhere in the scanner —
+`content_sig` is used only to ask "did the bytes *at this path* change?".
+
+So renaming `2019/trip` to `2019/italy` is a delete plus an add. `prune()`
+drops every old row; the new names are fresh rows with `deriv_key` NULL; phase
+2 reads each file and computes a `content_sig` that is *identical*, since the
+bytes never moved; and phase 3 hits `if r["deriv_key"] != want_key` — NULL
+against the key — and re-encodes every tier. Three hundred photographs is
+twelve hundred AVIF encodes, on a one-core server, to produce files
+byte-for-byte identical to the ones the same scan is about to delete.
+
+**It is avoidable because of a property the code already has.** `deriv_key` is
+computed from `content_sig` and the encode settings only, and never from the
+path (`derive.deriv_key`). The derivatives of a renamed photograph are
+therefore already correct; the only thing wrong about them is where they sit.
+The work is a `rename(2)` per file, not an encode.
+
+Two accidents of ordering make it tractable rather than a rewrite:
+
+- `prune()` already collects the vanished rows before deleting them, and
+  returns their paths. It would need to return their `content_sig` and
+  `deriv_tiers` as well, which is two more columns in a `SELECT` it already
+  runs.
+- `prune_derivatives(orphans)` is called *after* `derive_all()`, not before —
+  so throughout phase 3 the old derivative files are still on disk, waiting to
+  be moved instead of deleted.
+
+So: after phase 2, match the signatures of newly-seen photographs against those
+of pruned ones; for each match, rename the derived files into place and write
+`deriv_key` and `deriv_tiers` so phase 3 skips them entirely. Nothing about
+correctness changes — a missed match costs exactly what happens today.
+
+What is genuinely awkward:
+
+- **Identical duplicates share a signature**, so it is a many-to-many match and
+  not a lookup. Item 12 again, from a third direction.
+- **A rename plus an edit is not a rename**, which the signature comparison
+  handles correctly by simply not matching — worth stating so nobody adds a
+  filename heuristic on top and reintroduces the bug `content_sig` exists to
+  prevent.
+- **`scan --dir X` cannot see a move across its own boundary.** `prune()` is
+  deliberately scoped to the subtree, so a photograph moved out of `X` is
+  pruned with nothing to match it against, and one moved *in* is new with no
+  pruned partner. Detection would work on a full scan and quietly not on a
+  scoped one, which is acceptable but must not be surprising.
+
 ---
 
 ## Places and names
