@@ -860,13 +860,53 @@ hidden = true
 unknown value, a wrong type — each is reported by `check`, the affected setting
 falls back to its default, and the directory is scanned normally.
 
-Two ordering details worth knowing:
+#### Ordering, and `sort_key`
 
-- Sorting is **natural**, so `Day 2` comes before `Day 10` and `2009` before
-  `2010`.
-- `sort_key` is how you place a directory whose name will not sort where you
-  want. An `ancient` directory among year directories can carry
-  `sort_key = "1975"` and land in the right place without being renamed.
+Sorting is **natural**, so `Day 2` comes before `Day 10` and `2009` before
+`2010`. It also **ignores case**, so `apple` and `Apple` sort together and you
+cannot use capitals to place a directory.
+
+Digits sort before letters, which is the rule that matters on a tree organized
+by year: `2001` … `2026` come first, and every directory with a name beginning
+with a letter — `cookbook`, `Terry`, `chosen-pictures` — follows them, whatever
+its case.
+
+`sort_key` places a directory whose *name* will not sort where you want it,
+without renaming the directory. It goes in **that directory's own**
+`.album.toml`, not its parent's, and it replaces the name for sorting purposes
+only — the album is still titled and addressed by its real name.
+
+To put a directory **before** the years, give it a key that sorts before them.
+In `pictures/about-this-album/.album.toml`:
+
+```toml
+sort_key = "0000"
+```
+
+To put one **after** them, or to order the named albums among themselves:
+
+```toml
+sort_key = "zzz-cookbook"
+```
+
+Placing one **among** the years needs nothing clever — an `ancient` directory
+can carry `sort_key = "1975"` and land between 1974 and 1976.
+
+Changing a `sort_key` takes effect at the next scan, and that scan is cheap:
+the order is precomputed into the index when the directory is walked, and the
+walk neither re-reads photographs nor re-encodes anything. Scanning just the
+one directory is enough, since the key lives on its own row:
+
+```sh
+harelphotos scan --dir about-this-album
+```
+
+`sort_key` and `order` do different jobs. `order` lives in the **parent's**
+`.album.toml` and pins a few named subdirectories to the front, in the order
+listed; everything else follows in the usual sort. `sort_key` lives in the
+**child's** file and changes where that one directory falls in the ordinary
+sort. Use `order` for "these two always come first", and `sort_key` for "this
+one belongs over there".
 
 ### Access control
 
