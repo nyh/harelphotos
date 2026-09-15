@@ -62,6 +62,71 @@ Needs care: it is the first thing in the project that gives access without an
 account, so it wants its own tests and a clear way to list and revoke what has
 been shared.
 
+### 24. Starred photographs, per person
+
+Nadav's idea. A star on a photograph in the single-photo view, one's own and
+nobody else's; a small star over the corner of a starred tile in the grid and
+in the photo view; and a way to see the starred ones under any node of the
+tree — at the root, everything starred anywhere; inside `2019/08`, what is
+starred beneath `2019/08`. Ordered by date taken, not by where they sit in the
+tree, because a list of favorites is a timeline and not a directory.
+
+Numbered 24 and filed here rather than renumbering: the numbers are referred to
+from elsewhere in this file, so they are identifiers and not an ordering.
+
+**Where it is stored, and why not in the index.** Not `index.sqlite`. That
+database is read-only to the web process and is locked by a running scan, which
+is exactly the collision that drove login throttling out of it (DESIGN.md 12.1:
+"database is locked" while a scan ran, and logging in failed). There is already
+a second database for precisely this, `auth.sqlite` in the state directory,
+and it is already the one thing the web process writes. Stars either join it or
+get a third file beside it; joining it is less machinery, a separate file is
+tidier if stars ever grow rows in bulk. Either way the rule stands: one writer
+at a time, and never the scanner's database.
+
+**Naming a photograph so a star survives a rename.** The index already computes
+`content_sig` — `blake2b(size ‖ first bytes ‖ last bytes)`, in
+`scanner.content_signature` — which is stable across renames and moves because
+it never looks at the path. It is the obvious key, and it comes with three
+consequences worth deciding on deliberately rather than discovering:
+
+- **Two identical copies of a photograph share a signature**, so starring one
+  in `2019/trip` stars the one in `chosen-pictures` too. That is arguably
+  correct — it is the same photograph — but it is a decision, not an accident,
+  and item 12 (duplicate detection) is the same fact viewed from the other
+  side.
+- **It is a cheap fingerprint, not a full hash.** Two different files could
+  collide in principle. For a star the cost of a collision is one wrongly
+  marked photograph, which is tolerable; it would not be tolerable for
+  anything that deleted data.
+- **It is NULL until phase 2 of a scan has read the file.** A star cannot be
+  placed on a photograph the scanner has only walked past, so the UI needs to
+  not offer it, rather than fail.
+
+**Whose star.** `Viewer` carries `token` and `name`. The token is the session's,
+so it is the wrong key — a new login would orphan every star. The account name
+from `users.toml` is the stable identity, with the wrinkle that renaming an
+account would then lose that person's stars, and that Google sign-in identifies
+people by a different string again.
+
+**What `gc` must do.** Delete stars whose photographs are gone, as Nadav says.
+With one caution loud enough to survive into the implementation: *gone from the
+index* is not the same as *gone*. An unmounted drive, or a scan that has not run
+since a reorganization, makes photographs vanish from the index temporarily, and
+a `gc` that prunes on absence would quietly delete people's favorites. This
+wants either a grace period, or to run only after a full successful scan, or a
+`--dry-run` that says how many stars it is about to drop — `gc` already has the
+flag.
+
+**The rest of the awkwardness.** The starred view is a query across the whole
+tree, so it must filter by `dirs.acl_chain` like every other listing, or it
+becomes a way to enumerate photographs one cannot otherwise see. Sorting by
+date wants `photos.taken`, which is already indexed (`photos_date`), and a
+decision about photographs with no EXIF date. And this is the first *per-person
+mutable state* in the project beyond the session cookie itself, which is the
+real reason it is a bigger change than it sounds: everything the web process
+does today is read-only apart from logging in.
+
 ---
 
 ## Operational, now that the numbers are real
