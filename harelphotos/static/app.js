@@ -299,6 +299,37 @@
       window.location.href = nav.album;
     }
 
+    /* Show the back arrow, but only when it has something to pop.
+     *
+     * Escape does this on a keyboard and there is no equivalent on a phone. An
+     * installed site on iOS has no back button and no back gesture either --
+     * `touch-action: none` on the stage suppresses the edge swipe, and a
+     * sideways swipe is paging here anyway -- so a photograph was a dead end
+     * but for the breadcrumb, which leads to the top of the album rather than
+     * back to the place you were looking at.
+     *
+     * Conditional on `openedFromAlbum` for the same reason the button is
+     * hidden in the markup: on a photograph opened from a shared link there is
+     * nothing behind us, `backToAlbum` would fall through to a fresh
+     * navigation, and an arrow that means "back" would be doing something
+     * else. The breadcrumb is the honest way out of that case.
+     *
+     * Revealed from script rather than rendered visible, because without
+     * script it could not work at all. */
+    var backBtn = document.getElementById("back-to-album");
+    if (backBtn && openedFromAlbum()) {
+      backBtn.hidden = false;
+      backBtn.addEventListener("click", function (e) {
+        e.preventDefault();
+        backToAlbum();
+      });
+      // The stage turns a pointerdown into a pan or a swipe. Tapping a control
+      // that sits on top of it is neither.
+      ["pointerdown", "pointerup", "touchstart"].forEach(function (t) {
+        backBtn.addEventListener(t, function (e) { e.stopPropagation(); });
+      });
+    }
+
     // Fetch the neighboring photos while this one is being looked at.
     //
     // Paging is a page load, so without this every arrow press waits a full

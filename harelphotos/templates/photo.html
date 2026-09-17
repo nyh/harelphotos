@@ -95,6 +95,29 @@
   </header>
 
   <div class="stage">
+    {#- The way back, for a window with no browser chrome.
+
+        An installed site on iOS has no back button and no back gesture -- the
+        edge swipe is suppressed by `touch-action: none` on this stage, and
+        would be read as paging anyway -- so without this a photograph is a
+        dead end but for the breadcrumb, which goes to the top of the album
+        rather than back to where you were.
+
+        A button, not a link: a link would push a history entry, so the real
+        Back button would then lead *into* the photograph again, and a pile of
+        them would build up. This pops instead, which also restores the grid
+        from the back/forward cache: already laid out, images already painted.
+
+        Hidden until app.js finds there is genuinely an album behind us. On a
+        photograph opened from a shared link there is nothing to pop, and the
+        breadcrumb is the honest way out. -#}
+    <button type="button" id="back-to-album" class="backlink iconbutton"
+            title="Back to the album" aria-label="Back to the album" hidden>
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor"
+              stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
     {% if prev %}<a class="nav prev" href="{{ prev.page_url }}" title="Previous">&#8249;</a>{% endif %}
     {#- No `background: photo.color` here, unlike the grid tiles. The element
         fills the stage and object-fit letterboxes the picture inside it, so a

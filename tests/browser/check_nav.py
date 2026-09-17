@@ -249,9 +249,11 @@ def main():
         failures += not check("swiping added no history entries",
                               b.eval("history.length"), depth)
 
-        swipe(b, 200, 300, 200, 640)                   # down: to the album
-        failures += not check("swipe down returns to the album",
-                              b.eval("location.pathname"), album)
+        # No swipe-down check: that gesture was removed deliberately. Dragging
+        # down while looking at a photograph is what you do to scroll or to
+        # pull-to-refresh, and having it navigate instead was unexpected every
+        # time. The visible back arrow is the answer to "how do I get out of
+        # here" on a phone.
 
         b.send("Emulation.setTouchEmulationEnabled", enabled=False)
         b.send("Emulation.clearDeviceMetricsOverride")
@@ -262,6 +264,36 @@ def main():
         b.key("Escape")
         failures += not check("Escape from a deep link still reaches the album",
                               b.eval("location.pathname"), album)
+
+        # The visible way back, which is the only one an installed site on iOS
+        # has: no back button, and no back gesture either, since touch-action
+        # on the stage suppresses the edge swipe and a sideways swipe is
+        # paging. Escape covers a keyboard and nothing covered a phone.
+        b.goto(URL)
+        b.eval("(function(){document.querySelector('#grid a').click();})()")
+        b.settle()
+        depth = b.eval("history.length")
+        failures += not check("the back arrow is shown on a photo opened from the grid",
+                              b.eval("(function(){var e="
+                                     "document.getElementById('back-to-album');"
+                                     "return !!e && !e.hidden;})()"), True)
+        b.eval("document.getElementById('back-to-album').click()")
+        b.settle()
+        failures += not check("the back arrow returns to the album",
+                              b.eval("location.pathname"), album)
+        failures += not check("...as a history step, not a new entry",
+                              b.eval("history.length"), depth)
+
+        # And it stays hidden where it would be lying: a photograph reached
+        # from a shared link has no album behind it to pop, so backToAlbum
+        # would fall through to a fresh navigation and an arrow meaning "back"
+        # would be doing something else. The breadcrumb is that case's way out.
+        b.eval("sessionStorage.clear()")
+        b.goto(URL.rstrip("/").rsplit("/a/", 1)[0] + opened)
+        failures += not check("the back arrow is hidden on a photo opened cold",
+                              b.eval("(function(){var e="
+                                     "document.getElementById('back-to-album');"
+                                     "return !!e && e.hidden;})()"), True)
 
     finally:
         chrome.terminate()

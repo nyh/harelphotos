@@ -302,6 +302,38 @@ h2.section:first-child { margin-block-start: 0.25rem; }
    one pages away from the photograph being examined. */
 .stage.zoomed .nav { opacity: 0; pointer-events: none; }
 
+/* The way back out of a photograph, for a window with no browser chrome.
+ *
+ * Over the picture at the top inline-start, where a back control belongs and
+ * where iOS and Android both put theirs. Logical properties, so it moves to
+ * the other corner under `dir="rtl"` along with everything else.
+ *
+ * Above `.nav`, which spans the full height of the stage so that paging is an
+ * easy target anywhere down the edge. That means these overlap, and the small
+ * corner is deliberately won by the back button: the paging glyph is centered
+ * vertically, so nothing of it is actually covered.
+ *
+ * Kept visible while zoomed, unlike the paging arrows -- being lost inside a
+ * magnified photograph is exactly when the way out matters most. */
+.backlink {
+  position: absolute;
+  z-index: 2;
+  inset-block-start: 0.35rem;
+  inset-inline-start: 0.35rem;
+  /* A backdrop, which the paging arrows deliberately do without. They sit in
+     the letterbox margin and are found by swiping as much as by looking; this
+     one has to be *findable*, and on a photograph whose corner happens to be
+     the same tone as the icon it would otherwise vanish. The opaque background
+     is the fallback for a browser without color-mix. */
+  background: var(--bg);
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  border-radius: 999px;
+  color: var(--fg);
+}
+.backlink:hover, .backlink:focus-visible {
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+}
+
 .nav {
   position: absolute;
   /* Above the photo. The image is absolutely positioned too and comes after
