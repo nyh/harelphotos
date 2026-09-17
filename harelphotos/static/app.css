@@ -196,6 +196,32 @@ h2.section:first-child { margin-block-start: 0.25rem; }
  * with exact rows.
  */
 
+
+/* Nothing is shown until the rows have been laid out.
+ *
+ * The grid is drawn twice: the flexbox rule below is what the browser can
+ * manage on its own, and app.js then replaces it with exact justified rows.
+ * Both intermediate layouts were worse than showing none. Flex stretched the
+ * tiles and drew photographs in the wrong shape; sizing them by aspect-ratio
+ * instead fixed the shapes but left the rows short of the width, which reads
+ * as broken and still jumped when the real layout arrived.
+ *
+ * Hiding costs nothing in loading time: `visibility: hidden` keeps the boxes
+ * in the layout, so the page reserves its full height and the thumbnails are
+ * fetched exactly as before -- by the time the rows appear, most of them have
+ * arrived, and the grid fills in one go instead of settling.
+ *
+ * The animation is a dead man's switch. If app.js never runs -- disabled,
+ * blocked, failed to fetch -- the grid must not stay invisible forever, so a
+ * zero-length animation with a delay reveals it anyway. That case then gets
+ * the flexbox layout, which is what it always got.
+ */
+.grid:not(.justified) {
+  visibility: hidden;
+  animation: hp-grid-fallback 0s 1.2s forwards;
+}
+@keyframes hp-grid-fallback { to { visibility: visible; } }
+
 .grid { display: flex; flex-wrap: wrap; gap: var(--gap); }
 
 .grid .tile {
