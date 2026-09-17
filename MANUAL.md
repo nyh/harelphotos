@@ -207,11 +207,17 @@ derived tree, or after an interrupted copy: because the recipe fingerprint
 still matches, an ordinary rescan would skip those photos forever. The fix it
 suggests is `scan --repair`.
 
-### `harelphotos stats`
+### `harelphotos stats [--no-files]`
 
 Counts, the size of the derived tree broken down per tier with average file
 sizes, and the biggest directories. The quickest way to see what the images are
 costing you in disk.
+
+The counts come from the index and appear at once. Measuring the derived tree
+is the slow half: it stats every generated image — four per photograph, so
+four hundred thousand files for a collection of a hundred thousand — which on
+a spinning disk is minutes of random reading. It shows a progress line while it
+works, and `--no-files` skips it entirely when you only want the counts.
 
 ### `harelphotos gc [--deep] [--dry-run]`
 
@@ -635,26 +641,52 @@ before this, `harelphotos geocode --force` refreshes the stored names.
 Download and build the offline place-name dataset that place names come from.
 Run it once, before your first scan.
 
-**There are three flags and really only two answers.** `--villages` and
-`--landmarks` want the *same* 421 MB download, and it is cached and shared — so
-once you have paid for it, having only one of the two saves a download and
-costs you the other's detail for nothing. Pick by how much disk you can spare:
+#### Which of the three flags to use
+
+**The usual answer is all three**, and the reason is the download rather than
+the disk:
 
 ```sh
-# Small: towns only. 14 MB to fetch, 18 MB on disk.
-harelphotos init --geonames
-
-# Everything: villages and landmarks too. One 421 MB download, ~410 MB on disk.
 harelphotos init --geonames --villages --landmarks
 ```
 
-The small one names the nearest town, which in a city is exactly right and in
-the countryside can be kilometres off. The full one adds hamlets with no
-recorded population — 88% of Germany's villages are missing from the small
-dataset — and names parks, airports, museums and theme parks rather than the
-town they sit in. On a server with a small disk take the first; on a machine
-with room, the second is the one that produces "Muggenbrunn" and "Europa-Park"
-instead of "Todtnau" and "Rust".
+`--villages` and `--landmarks` want the *same* 421 MB file. It is cached and
+shared, so asking for both fetches it once. Take only one and you have paid the
+entire download for half the benefit — which is why splitting the difference is
+usually the worst of the three choices, and why "all three" is the sensible
+default for anyone not short of disk.
+
+| | downloads | adds to the database |
+|---|---|---|
+| `--geonames` | 14 MB | 18 MB — 235,694 towns |
+| `--villages` | 421 MB, shared | ~160 MB — about 2M places |
+| `--landmarks` | *the same* 421 MB | ~250 MB — about 2M landmarks |
+
+**When you would want one but not the other.** They fix different problems, so
+this is a real choice and not just a size dial:
+
+- **`--villages` improves the ordinary name, in empty places.** Without it the
+  table holds only settlements with five hundred *recorded* inhabitants —
+  measured on the German dump, 9,957 places out of 82,294, so 88% of the
+  country's villages are absent and in open country the nearest name it knows
+  can be kilometres away. In a city it changes almost nothing, because the
+  city is in the small dataset already. Take it if your photographs are rural.
+- **`--landmarks` names the thing rather than the town it stands in.** Parks,
+  airports, museums, stadiums, theme parks: "Europa-Park" instead of "Rust",
+  the airport instead of the village beside the runway. It helps anywhere, and
+  is most useful for holidays and days out — which is to say, exactly the
+  photographs `--villages` does nothing for.
+
+So: countryside and hiking, `--villages` earns its keep first. Cities and
+travel, `--landmarks` does. Both, and you have covered each other's blind spot
+for no extra download.
+
+**When to take neither.** `--geonames` alone is 18 MB against ~410 MB, and that
+matters on a machine with little memory as much as little disk: the place
+database competes with your thumbnails for the page cache, and on a small
+server that is what decides how quickly an album appears. Plain `--geonames`
+still names the nearest town, which for city photographs is the right answer
+anyway.
 
 Each flag is described in full below. To see which you actually installed —
 easy to forget months later — ask:

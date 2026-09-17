@@ -112,7 +112,16 @@ class Stats:
     biggest: list[tuple[str, int]] = field(default_factory=list)
 
 
-def gather(cfg: Config, conn: sqlite3.Connection) -> Stats:
+def gather(cfg: Config, conn: sqlite3.Connection, *, files: bool = True,
+           progress=None) -> Stats:
+    """Counts from the index, and optionally the size of the derived tree.
+
+    `files=False` skips the second part, which is the expensive one by a very
+    long way: it walks every generated image and stats it, which on a hundred
+    thousand photographs is four hundred thousand files. On a spinning disk
+    that is minutes of random I/O, during which the command used to print
+    nothing at all and look like it had hung.
+    """
     s = Stats()
     s.dirs = conn.execute("SELECT count(*) AS n FROM dirs").fetchone()["n"]
     s.photos = conn.execute("SELECT count(*) AS n FROM photos").fetchone()["n"]
@@ -133,13 +142,19 @@ def gather(cfg: Config, conn: sqlite3.Connection) -> Stats:
             "ORDER BY n_photos DESC LIMIT 10"
         )
     ]
-    if cfg.derived_root.is_dir():
+    if files and cfg.derived_root.is_dir():
         for tier_dir in sorted(derive._tier_dirs(cfg), key=lambda p: p.name):
             n = size = 0
             for dirpath, _, filenames in os.walk(tier_dir):
                 for fn in filenames:
                     n += 1
                     size += _size(Path(dirpath) / fn)
+                    # Reported every file, not every thousandth: the caller
+                    # draws on a clock. A count-based interval shows nothing at
+                    # all on a small collection and stalls visibly on a slow
+                    # disk, which is the same mistake the scanner made once.
+                    if progress:
+                        progress(tier_dir.name, s.derived_files + n)
             label = (
                 tier_dir.name
                 if tier_dir.parent == cfg.derived_root

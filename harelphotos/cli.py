@@ -301,6 +301,33 @@ def _derive_progress(done: int, total: int, elapsed: float) -> None:
     _bar("generating images", done, total, elapsed)
 
 
+def _stats_progress():
+    """A live line for `stats`, drawn on a clock rather than a file count.
+
+    Measuring the derived tree stats every generated image, which on a
+    spinning disk is minutes of random I/O for a large collection. It printed
+    nothing at all until it finished, and was reported as a hang.
+    """
+    started = time.monotonic()
+    # Seeded with the start time, not zero: a collection small enough to
+    # measure in under one interval should print no progress line at all,
+    # rather than flashing one and erasing it.
+    last = [started]
+
+    def report(tier: str, done: int) -> None:
+        now = time.monotonic()
+        if now - last[0] < scanner.PROGRESS_INTERVAL:
+            return
+        last[0] = now
+        rate = done / (now - started) if now > started else 0
+        sys.stderr.write(
+            f"\r\033[K  measuring {tier}: {done:,} files · {rate:,.0f}/s"
+        )
+        sys.stderr.flush()
+
+    return report
+
+
 def _geocode_progress():
     """A live line for `geocode`, drawn on a clock rather than a row count.
 
@@ -669,15 +696,34 @@ def cmd_gc(args: argparse.Namespace) -> int:
 def cmd_stats(args: argparse.Namespace) -> int:
     cfg = _load_config(args)
     conn = db.open_index(cfg.index_db, read_only=True)
-    s = maintenance.gather(cfg, conn)
-    print(f"directories      {s.dirs:,}")
-    print(f"photos           {s.photos:,}")
-    print(f"  derived        {s.derived_photos:,}")
-    if s.pending:
-        print(f"  pending        {s.pending:,}   (run 'harelphotos scan')")
-    if s.failed:
-        print(f"  failed         {s.failed:,}   (see 'harelphotos check')")
-    print(f"  with a place   {s.with_place:,}")
+
+    # The index counts first, and flushed, before the slow part starts.
+    #
+    # Measuring the derived tree stats every generated image -- four hundred
+    # thousand of them for a hundred thousand photographs -- which on a
+    # spinning disk is minutes of random I/O. Printing everything at the end
+    # meant the command sat silent throughout and looked hung.
+    counts = maintenance.gather(cfg, conn, files=False)
+    print(f"directories      {counts.dirs:,}")
+    print(f"photos           {counts.photos:,}")
+    print(f"  derived        {counts.derived_photos:,}")
+    if counts.pending:
+        print(f"  pending        {counts.pending:,}   (run 'harelphotos scan')")
+    if counts.failed:
+        print(f"  failed         {counts.failed:,}   (see 'harelphotos check')")
+    print(f"  with a place   {counts.with_place:,}")
+    sys.stdout.flush()
+
+    s = counts
+    if args.no_files:
+        print("\nderived tree     not measured (--no-files)")
+    else:
+        s = maintenance.gather(
+            cfg, conn, progress=None if args.quiet else _stats_progress()
+        )
+        if not args.quiet:
+            sys.stderr.write("\r\033[K")
+            sys.stderr.flush()
     if s.per_tier:
         print(f"\nderived tree     {s.derived_bytes / 1e9:.2f} GB in {s.derived_files:,} files")
         for label, n, size in s.per_tier:
@@ -926,6 +972,9 @@ def build_parser() -> argparse.ArgumentParser:
     pgc.set_defaults(func=cmd_gc)
 
     pst = sub.add_parser("stats", help="counts and derived-tree size")
+    pst.add_argument("--no-files", action="store_true",
+                     help="skip measuring the derived tree, which stats every "
+                          "generated image and is slow on a large collection")
     pst.set_defaults(func=cmd_stats)
 
     pv = sub.add_parser("serve", help="run the web interface (development server)")
