@@ -277,38 +277,31 @@ h2.section:first-child { margin-block-start: 0.25rem; }
    photo mean anything: against an auto height it resolves to nothing at all,
    and the image sizes the stage instead of the stage bounding the image. */
 .photo-page {
-  /* `dvh`: the viewport as it is now.
-   *
-   * `svh` was tried here and is why this page alone broke on rotation. It is a
-   * *static* value per orientation, and a browser that does not recompute it
-   * when the screen turns lays the whole column out against the old one: the
-   * stage takes the wrong height, the photograph is drawn far too large and
-   * off-centre, and `overflow: hidden` means it never even shows as spilling
-   * over an edge. Album pages were unaffected, because nothing there depends
-   * on the viewport's height at all. `dvh` tracks continuously and so cannot
-   * go stale.
-   *
-   * What sent this to `svh` was landscape overflow, on the reasoning that
-   * `dvh` could leave the page taller than what is actually visible. The
-   * padding below is what really keeps the content clear, and it landed in the
-   * same commit -- so `dvh` together with it had never been tried.
-   *
-   * The padding: `viewport-fit=cover` in base.html asks the browser to lay out
-   * *behind* the system bars, which is what gives an installed site the whole
-   * screen -- and it means nothing is kept clear of them unless we do it.
-   * Every inset was applied in the inline direction and none in the block, so
-   * on a phone held upright the foot of this page sat underneath the
-   * navigation bar. `box-sizing: border-box` keeps the total at one
-   * screenful; the padding comes out of the content, which is the point. Zero
-   * on a desktop, so nothing there moves. */
-  block-size: 100dvh;
+  /* `svh`, not `dvh`: the *smallest* viewport, the one that remains when every
+     retractable piece of browser chrome is showing. This page cannot scroll,
+     so a retractable toolbar never retracts, and sizing to `dvh` -- which
+     tracks whatever the viewport happens to be at that instant -- can leave
+     the page taller than what is actually on screen, pushing the bottom of the
+     photograph past the edge. `svh` is the conservative one and always fits.
+     On a desktop, and in an installed application with no chrome at all, the
+     three are the same number.
+
+     The padding is the other half: `viewport-fit=cover` in base.html asks the
+     browser to lay out *behind* the system bars, which is what gives an
+     installed site the whole screen -- and it means nothing is kept clear of
+     them unless we do it. Every inset was applied in the inline direction and
+     none in the block, so on a phone held upright the foot of this page sat
+     underneath the navigation bar. `box-sizing: border-box` keeps the total at
+     one screenful; the padding comes out of the content, which is the point.
+     Zero on a desktop, so nothing there moves. */
+  block-size: 100svh;
   padding-block-end: env(safe-area-inset-bottom, 0px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 .photo-page .sitefoot { flex: none; }
-.viewer { display: flex; flex-direction: column; min-block-size: 100dvh; }
+.viewer { display: flex; flex-direction: column; min-block-size: 100svh; }
 .photo-page .viewer { flex: 1; min-block-size: 0; }
 .viewer-bar { background: var(--bg); }
 
