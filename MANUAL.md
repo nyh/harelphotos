@@ -151,17 +151,26 @@ Index the photo tree. Safe to interrupt and re-run.
 | `--full` | re-read all metadata and regenerate all images |
 | `--repair` | regenerate images whose files have gone missing |
 | `--no-images` | index metadata only, generate no images |
+| `--no-geocode` | skip resolving place names for the new photos |
 | `--dry-run` | report what would happen, write nothing |
 | `--force-unlock` | remove a lock left behind by a killed run |
 
-A scan runs in three visible phases, each with its own progress line:
+A scan runs in three visible phases, each with its own progress line, plus a
+brief fourth between the last two if any of the new photographs carry GPS:
 
 ```
 scanning /srv/photos/2024/08
   looking for photos: 12 directories, 4,318 photos · 287/s
   reading metadata: 146/4,318 · 17.2/s · ETA 4:02
+  naming places: 318/318 · 2,911/s · ETA 0:00
   generating images: 92/4,318 · 4.9/s · ETA 14:11
 ```
+
+Place names come *before* the slow phase deliberately: resolving them takes
+seconds where encoding takes hours, so an album reads "Náxos, Greece" while its
+pictures are still arriving. It is a database operation and never opens a photo
+— see [`geocode`](#harelphotos-geocode---force), which you now rarely need to
+run by hand.
 
 The first phase has no total to count towards — it is still finding out how
 much there is — so it shows what it has found so far. On a network mount this
@@ -221,8 +230,38 @@ scan, so it is a database operation taking seconds, not a re-read of your
 collection. It needs the place-name dataset (below). `--force` re-resolves
 photos that already have a place, after a dataset update.
 
-`scan` does not geocode automatically; run this once after the dataset is
-installed, and again when you add photos with GPS.
+**`scan` already does this, so you usually never run this command.** A scan
+resolves the places of the photographs it has just taken in, between reading
+their metadata and generating their images — so the names are there while the
+pictures are still encoding. Adding photographs is `scan`, and nothing else.
+
+Set the datasets up *before* your first scan, choosing then whether you want
+landmark names and village-level detail — see
+[`init --geonames`](#harelphotos-init---geonames) for what each costs:
+
+```sh
+harelphotos init --geonames --landmarks     # add --villages for hamlets
+harelphotos scan                            # geocodes as it goes
+```
+
+The reason to decide first is that a scan only resolves photographs that have
+**no place yet**. It will never revisit one, so enriching the data later —
+adding landmarks, adding villages, or upgrading to rules that choose better
+names — does not reach the photographs you already have. That is what `--force`
+is for, and it is the main reason this command still exists:
+
+```sh
+harelphotos init --landmarks        # decided you want landmark names after all
+harelphotos geocode --force         # apply them to everything already scanned
+```
+
+The other case is installing the dataset late: photographs scanned without one
+have no place, and a single `harelphotos geocode` catches them all up — no
+`--force` needed, since they have nothing to overwrite.
+
+A scan with no dataset installed does not fail. It says which command would
+install one and carries on, so a missing download never costs you an hour of
+encoding. `--no-geocode` turns the step off for one scan.
 
 ### `harelphotos serve [--login] [--bind ADDR] [--port N]`
 

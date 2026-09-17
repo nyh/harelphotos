@@ -361,9 +361,11 @@ def cmd_scan(args: argparse.Namespace) -> int:
                 full=args.full,
                 repair=args.repair,
                 headers_only=args.headers_only,
+                geocode=not args.no_geocode,
                 walk_progress=None if args.quiet else _walk_progress,
                 progress=None if args.quiet else _progress,
                 derive_progress=None if args.quiet else _derive_progress,
+                geocode_progress=None if args.quiet else _geocode_progress(),
             )
     except lock.LockBusy as e:
         print(f"error: {e}", file=sys.stderr)
@@ -385,6 +387,12 @@ def cmd_scan(args: argparse.Namespace) -> int:
     if stats.photos_failed:
         print(f"  {stats.photos_failed} photos could not be read; see 'harelphotos check'",
               file=sys.stderr)
+    if stats.geocode is not None and stats.geocode.considered:
+        print(f"  places: {stats.geocode.summary()}")
+    if stats.geocode_skipped:
+        print(f"  no place names: {stats.geocode_skipped}", file=sys.stderr)
+    if stats.geocode is not None:
+        _print_geocode_notes(stats.geocode)
     conn.close()
     return 0
 
@@ -406,6 +414,18 @@ def cmd_geocode(args: argparse.Namespace) -> int:
         sys.stderr.write("\r\033[K")
         sys.stderr.flush()
     print(stats.summary())
+    _print_geocode_notes(stats)
+    conn.close()
+    return 0
+
+
+def _print_geocode_notes(stats) -> None:
+    """Warnings about a dataset too old to answer correctly.
+
+    Shared by `geocode` and by `scan`, which now geocodes as it goes: a note
+    that only one of the two printed would be a note nobody sees, since the
+    usual way to resolve a new photograph is no longer to run `geocode` at all.
+    """
     if stats.places_stale:
         # Without the feature code we cannot tell a city from one of its own
         # neighborhoods, and photographs in Boston come out labelled "North
@@ -413,16 +433,14 @@ def cmd_geocode(args: argparse.Namespace) -> int:
         print("\nNOTE: the place dataset predates this version and cannot tell\n"
               "      a city from one of its neighborhoods. Re-run\n"
               "      'harelphotos init --geonames' (14 MB; your landmarks are\n"
-              "      kept), then geocode again.", file=sys.stderr)
+              "      kept), then 'harelphotos geocode --force'.", file=sys.stderr)
     if stats.landmarks_stale:
         # The table is filtered when it is built, so a code added since then
         # was never stored and no amount of re-geocoding will find it.
         print("\nNOTE: the landmark table was built with an older list of\n"
               "      feature codes. Re-run 'harelphotos init --landmarks' to\n"
-              "      rebuild it (the download is cached), then geocode again.",
-              file=sys.stderr)
-    conn.close()
-    return 0
+              "      rebuild it (the download is cached), then\n"
+              "      'harelphotos geocode --force'.", file=sys.stderr)
 
 
 def cmd_acl(args: argparse.Namespace) -> int:
@@ -467,7 +485,10 @@ def cmd_acl(args: argparse.Namespace) -> int:
         # nothing until the subtree is walked again.
         conn = db.open_index(cfg.index_db)
         try:
-            scanner.scan(cfg, conn, subpath=relpath, headers_only=True)
+            # No geocoding: this is refreshing one directory after an
+            # ACL or override edit, not taking in new photographs.
+            scanner.scan(cfg, conn, subpath=relpath, headers_only=True,
+                         geocode=False)
         finally:
             conn.close()
         print("rescanned the subtree, so the change is in force now")
@@ -515,7 +536,9 @@ def cmd_hide(args: argparse.Namespace) -> int:
     # change is not in force until the subtree has been walked again.
     conn = db.open_index(cfg.index_db)
     try:
-        scanner.scan(cfg, conn, subpath=relpath, headers_only=True)
+        # As above: a metadata refresh, not an import.
+        scanner.scan(cfg, conn, subpath=relpath, headers_only=True,
+                     geocode=False)
     finally:
         conn.close()
     if args.show:
@@ -835,6 +858,8 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--headers-only", "--no-images", dest="headers_only",
                     action="store_true",
                     help="index metadata only, generate no images")
+    ps.add_argument("--no-geocode", action="store_true",
+                    help="skip resolving place names for new photos")
     ps.add_argument("--dry-run", action="store_true", help="report, write nothing")
     ps.add_argument("--force-unlock", action="store_true", help="remove a stale lock file")
     ps.set_defaults(func=cmd_scan)

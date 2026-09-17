@@ -198,3 +198,90 @@ def test_a_village_with_no_population_is_a_place(tmp_path):
             assert got and got[0].startswith("Muggenbrunn"), (lat, lon, got)
     finally:
         gc.close()
+
+
+def _tiny_dataset(cfg):
+    """The smallest place database that resolves one coordinate."""
+    import sqlite3 as _sqlite3
+
+    gpath = cfg.state_dir / "geonames.sqlite"
+    g = _sqlite3.connect(gpath)
+    g.executescript(geonames.SCHEMA)
+    g.execute("INSERT INTO places (name, cc, admin1, lat, lon, pop) "
+              "VALUES ('Náxos','GR','24',37.1036,25.3766,7000)")
+    g.execute("INSERT INTO countries VALUES ('GR','Greece')")
+    g.commit()
+    g.close()
+    return gpath
+
+
+def test_scan_resolves_place_names_without_a_separate_geocode(tmp_path):
+    """Adding photographs used to be `scan` and then `geocode`, and forgetting
+    the second left an album with no places until somebody noticed. The
+    coordinates are in the index after phase 2, so the scan can finish the job
+    itself -- before the slow phase, so names appear while images encode."""
+    from harelphotos import scanner
+    from tests import fixtures
+
+    photos = tmp_path / "pictures"
+    fixtures.make_jpeg(photos / "a.jpg", gps=(37.1036, 25.3766))
+    cfg = fixtures.make_config(tmp_path, photos)
+    _tiny_dataset(cfg)
+    conn = fixtures.fresh_index(cfg)
+
+    stats = scanner.scan(cfg, conn)
+    place = conn.execute("SELECT place FROM photos").fetchone()["place"]
+    conn.close()
+
+    assert place and "Náxos" in place
+    assert stats.geocode is not None and stats.geocode.resolved == 1
+    assert not stats.geocode_skipped
+
+
+def test_a_missing_place_dataset_does_not_fail_the_scan(tmp_path):
+    """The dataset is optional and 500 MB. A scan that has already spent an
+    hour encoding must not fall over at the end because it is not installed --
+    it says what is missing and finishes."""
+    from harelphotos import scanner
+    from tests import fixtures
+
+    photos = tmp_path / "pictures"
+    fixtures.make_jpeg(photos / "a.jpg", gps=(37.1036, 25.3766))
+    cfg = fixtures.make_config(tmp_path, photos)
+    conn = fixtures.fresh_index(cfg)          # deliberately no geonames.sqlite
+
+    stats = scanner.scan(cfg, conn)
+    row = conn.execute("SELECT place, deriv_key FROM photos").fetchone()
+    conn.close()
+
+    assert stats.geocode_skipped and "init --geonames" in stats.geocode_skipped
+    assert row["place"] is None
+    assert row["deriv_key"], "the rest of the scan must still have run"
+
+
+def test_scanning_one_directory_geocodes_only_that_directory(tmp_path):
+    """`--dir X` means X in every phase. Resolving the whole collection because
+    one album was rescanned is the surprise the scanner already avoids."""
+    from harelphotos import scanner
+    from tests import fixtures
+
+    photos = tmp_path / "pictures"
+    fixtures.make_jpeg(photos / "a" / "one.jpg", gps=(37.1036, 25.3766))
+    fixtures.make_jpeg(photos / "b" / "two.jpg", gps=(37.1036, 25.3766))
+    cfg = fixtures.make_config(tmp_path, photos)
+    _tiny_dataset(cfg)
+    conn = fixtures.fresh_index(cfg)
+
+    scanner.scan(cfg, conn, geocode=False)
+    assert conn.execute(
+        "SELECT count(*) AS n FROM photos WHERE place IS NOT NULL"
+    ).fetchone()["n"] == 0, "geocode=False must resolve nothing"
+
+    scanner.scan(cfg, conn, subpath="a")
+    rows = {
+        r["name"]: r["place"]
+        for r in conn.execute("SELECT name, place FROM photos")
+    }
+    conn.close()
+    assert rows["one.jpg"], "the scanned directory should have been resolved"
+    assert rows["two.jpg"] is None, "the other directory must be left alone"

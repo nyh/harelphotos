@@ -44,16 +44,24 @@ class GeocodeStats:
 
 
 def geocode(
-    cfg: Config, conn: sqlite3.Connection, *, force: bool = False, progress=None
+    cfg: Config, conn: sqlite3.Connection, *, force: bool = False,
+    subpath: str = "", progress=None
 ) -> GeocodeStats:
     stats = GeocodeStats()
     sql = (
-        "SELECT id, exif_json FROM photos "
-        "WHERE exif_json IS NOT NULL AND exif_json LIKE '%\"lat\"%'"
+        "SELECT p.id, p.exif_json FROM photos p JOIN dirs d ON d.id = p.dir_id "
+        "WHERE p.exif_json IS NOT NULL AND p.exif_json LIKE '%\"lat\"%'"
     )
+    params: tuple = ()
     if not force:
-        sql += " AND place IS NULL"
-    rows = conn.execute(sql).fetchall()
+        sql += " AND p.place IS NULL"
+    # `--dir X` means X in every phase, here as much as in the scanner: a scan
+    # of one album that quietly resolved place names for the whole collection
+    # would be a surprising way to spend the afternoon.
+    if subpath:
+        sql += " AND (d.path = ? OR d.path LIKE ?)"
+        params = (subpath, f"{subpath}/%")
+    rows = conn.execute(sql, params).fetchall()
     if not rows:
         return stats
 

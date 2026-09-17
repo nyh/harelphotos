@@ -105,8 +105,17 @@ Optionally fetch the place-name database, so photos with GPS say where they
 were taken (about 30 MB, offline afterwards, no per-photo lookups):
 
 ```sh
-harelphotos init --geonames
+harelphotos init --geonames                 # towns; add --landmarks for parks,
+                                            # airports and the like
 ```
+
+**Do this before the scan, not after.** A scan names the places of the
+photographs it takes in, so with the dataset already installed there is no
+second command to remember. Installing it afterwards means catching up with
+`harelphotos geocode`, and *enriching* it afterwards — adding `--landmarks` or
+`--villages` later — needs `harelphotos geocode --force`, because a scan never
+revisits a photograph that already has a place. See MANUAL.md for what each
+dataset costs.
 
 
 ## 2. Scan

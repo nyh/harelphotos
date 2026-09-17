@@ -27,8 +27,9 @@ from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from pathlib import Path
 
-from . import acl, album, derive, exif, overrides
+from . import acl, album, derive, exif, geocode as geocode_mod, overrides
 from .config import Config
+from .geonames import GeonamesError
 from .util import natkey
 
 log = logging.getLogger("harelphotos.scan")
@@ -86,6 +87,11 @@ class ScanStats:
     repaired: int = 0
     skipped_names: list[str] = field(default_factory=list)
     config_errors: list[str] = field(default_factory=list)
+    # Phase 2.5. None when geocoding was turned off or had nothing to do;
+    # `geocode_skipped` carries the reason when the dataset is not installed,
+    # which is a note to print rather than a failure.
+    geocode: geocode_mod.GeocodeStats | None = None
+    geocode_skipped: str = ""
 
     def summary(self) -> str:
         parts = [
@@ -870,9 +876,11 @@ def scan(
     full: bool = False,
     repair: bool = False,
     headers_only: bool = False,
+    geocode: bool = True,
     walk_progress=None,
     progress=None,
     derive_progress=None,
+    geocode_progress=None,
 ) -> ScanStats:
     """Run phases 1-4."""
     s = Scanner(cfg, conn)
@@ -889,6 +897,30 @@ def scan(
     # Before the two slow phases, so a browser sees real counts throughout.
     s.rollup()
     s.read_headers(jobs=jobs, limit=limit, progress=progress, subpath=subpath)
+
+    # Place names, between the two slow phases and not after them.
+    #
+    # It has to be after phase 2, which is what writes the coordinates into
+    # exif_json, and there is every reason to put it before phase 3: resolving
+    # is seconds where encoding is hours, so the album reads "Prague" while the
+    # pictures are still arriving rather than once they have all finished.
+    #
+    # Incremental by default -- `place IS NULL` -- so an ordinary rescan only
+    # resolves what is new, and a collection whose places are already known
+    # costs one query. `harelphotos geocode` remains for --force.
+    if geocode:
+        try:
+            s.stats.geocode = geocode_mod.geocode(
+                cfg, conn, subpath=subpath, progress=geocode_progress
+            )
+            conn.commit()
+        except GeonamesError as e:
+            # Not installed, or built by a version that cannot be read. A scan
+            # that has already spent an hour must not fall over because the
+            # optional place dataset is missing: say so and carry on.
+            s.stats.geocode_skipped = str(e)
+            log.warning("skipping place names: %s", e)
+
     if not headers_only:
         s.derive_all(
             jobs_n=jobs, limit=limit, progress=derive_progress or progress, subpath=subpath
