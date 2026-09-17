@@ -16,25 +16,22 @@
   {% if notice %}<p class="notice">{{ notice }}</p>{% endif %}
   {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
 
-  {#- Side by side where there is room, stacked where there is not. Below the
-      form the Google button fell under the fold on a laptop once the hero
-      image was in place, which is a poor fate for the easier of the two ways
-      in. -#}
-  <div class="signin{% if cfg.google.enabled %} two-ways{% endif %}">
-    <form class="login" method="post" action="{{ url_for('login') }}">
-      <input type="hidden" name="csrf" value="{{ csrf }}">
-      {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
-      <label for="username">Username</label>
-      <input id="username" name="username" autocomplete="username"
-             autocapitalize="none" spellcheck="false" required autofocus>
-      <label for="password">Password</label>
-      <input id="password" name="password" type="password"
-             autocomplete="current-password" required>
-      <button type="submit">Log in</button>
-    </form>
+  {#- Side by side where there is room, stacked where there is not -- and
+      Google first in both.
 
+      Below the form the Google button fell under the fold on a laptop once the
+      hero image was in place, which is a poor fate for the easier of the two
+      ways in. Going side by side fixed that for a wide window and left the
+      narrow one alone, where the form still came first and pushed the button
+      off a short screen. So it leads now, in the markup rather than by CSS
+      `order`, which would leave the keyboard tabbing through them in the
+      opposite order to the eye.
+
+      The password field gives up its autofocus whenever Google is offered: the
+      browser scrolls a focused field into view, which on a short screen would
+      scroll away the very button this puts first. -#}
+  <div class="signin{% if cfg.google.enabled %} two-ways{% endif %}">
     {% if cfg.google.enabled %}
-      <div class="or"><span>or</span></div>
       <div class="alt">
         <a class="google" href="{{ url_for('google_start', next=next_url) }}">
           {#- Google's own mark, inline rather than fetched: the site loads no
@@ -48,7 +45,21 @@
           <span>Sign in with Google</span>
         </a>
       </div>
+      <div class="or"><span>or</span></div>
     {% endif %}
+
+    <form class="login" method="post" action="{{ url_for('login') }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+      <label for="username">Username</label>
+      <input id="username" name="username" autocomplete="username"
+             autocapitalize="none" spellcheck="false" required
+             {% if not cfg.google.enabled %}autofocus{% endif %}>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password"
+             autocomplete="current-password" required>
+      <button type="submit">Log in</button>
+    </form>
   </div>
 
   <p class="legal">

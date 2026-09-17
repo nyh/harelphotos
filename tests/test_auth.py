@@ -93,6 +93,7 @@ def test_every_route_either_needs_a_session_or_is_on_the_list(app):
         "logout": None,          # POST-only; covered by its own tests
         # POST-only, admin-only, CSRF-checked; covered by test_overrides.py.
         "set_cover": None,
+        "cover_to_parent": None,
         # Public by necessity: signing in cannot require being signed in.
         # Both 404 when Google sign-in is disabled, which is the fixture here.
         "google_start": "/auth/google",
@@ -627,3 +628,37 @@ def test_a_session_cookie_still_round_trips(client):
     mistake here would be both silent and total."""
     assert login(client).status_code in (302, 303)
     assert client.get("/a/").status_code == 200
+
+
+def test_google_sign_in_comes_before_the_password_form(project):
+    """It is the easier of the two ways in, and on a short screen whichever
+    comes second may not be on it at all.
+
+    Asserted on the markup, not the stylesheet: ordering them with CSS `order`
+    would leave the keyboard tabbing through them in the opposite order to the
+    eye.
+    """
+    from dataclasses import replace
+
+    from harelphotos.web import create_app
+
+    cfg = replace(project, google=replace(project.google, enabled=True,
+                                          client_id="cid", client_secret="sec"))
+    app = create_app(cfg, require_login=True)
+    app.config.update(TESTING=True)
+    body = app.test_client().get("/login").get_data(as_text=True)
+    assert body.index("Sign in with Google") < body.index('name="username"')
+    # And the password field must not grab the focus, or the browser scrolls it
+    # into view and takes the Google button off the top of a short screen.
+    assert "autofocus" not in body
+
+
+def test_the_password_field_keeps_autofocus_without_google(project):
+    """With one way in there is nothing to scroll away from."""
+    from harelphotos.web import create_app
+
+    app = create_app(project, require_login=True)
+    app.config.update(TESTING=True)
+    body = app.test_client().get("/login").get_data(as_text=True)
+    assert "Sign in with Google" not in body
+    assert "autofocus" in body
