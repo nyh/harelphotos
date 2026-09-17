@@ -124,7 +124,7 @@ photo tree is `.album.toml` files, which you create yourself.
 | `index_db` | `<state>/index.sqlite` | the index. **A cache** — delete it and rescan |
 | `derived_root` | `<state>/derived` | generated images. **A cache** — rebuildable |
 | `users_file` | next to `config.toml` | accounts, mode 0600 |
-| `secret_key_file` | next to `config.toml` | 32 random bytes, mode 0600 |
+| `secret_key_file` | next to `config.toml` | signs the session cookies, mode 0600. **Back this up** |
 | `geonames.sqlite` | `<state>/` | place-name dataset, if installed. Re-downloadable |
 | `auth.sqlite` | `<state>/` | failed-login counts. Safe to delete; resets the backoff |
 
@@ -1138,6 +1138,49 @@ A few details that are deliberate:
 - **Sessions last 30 days** and survive a restart. They stop working
   immediately if you delete the account or run `user revoke`.
 
+### `secret_key` — why that file exists
+
+A session is not stored on the server. It is a cookie in the visitor's browser
+saying who they are, **signed** with the 32 random bytes in `secret_key`; the
+signature is what stops somebody editing the cookie to claim they are you. The
+server keeps no session table, which is why signing in survives a restart and
+why there is nothing to clean up.
+
+This is Flask's standard signed-cookie session, not anything home-made: the
+cookie is serialized as JSON and signed with **HMAC** (SHA-1 as the digest,
+with the signing key derived from `secret_key` by HMAC over a fixed salt) by
+the `itsdangerous` library. Thirty-two random bytes is a 256-bit key, far more
+than the construction needs. The serializer is the timestamped one and Flask
+checks the age when it loads a cookie, so an expired session is refused by the
+server rather than relying on the browser to stop sending it.
+
+**Signed is not encrypted.** Anyone holding the cookie can read its contents,
+so nothing secret goes in it — only the account name, a counter used for
+revoking, how the person signed in, and a CSRF token. No password, and nothing
+about the photographs.
+
+That counter is what makes revocation work without server-side sessions:
+`user revoke` increments it in `users.toml`, and every cookie carrying the old
+value stops being accepted for that one account.
+
+Three consequences follow, and they are the reason the file is treated the way
+it is:
+
+- **It is as sensitive as the password file, in some ways more so.** Anyone who
+  reads it can mint a cookie for any account, including an admin, without
+  knowing a password. Hence mode 0600, and `check --env` complains if it is
+  readable by anyone else or shorter than 16 bytes.
+- **`init` never overwrites it.** Running `init` a second time — which is
+  otherwise safe and idempotent — would generate a new key and log the whole
+  family out. It says so when it leaves the existing one alone.
+- **It belongs on the backup list**, with `users.toml`. Restoring a machine
+  without it does not lose any photographs, but it does invalidate every
+  session, so everyone has to sign in again.
+
+That last property is occasionally what you want. Replacing the file and
+restarting is the way to **log everybody out at once** — after a lost laptop,
+say — without touching any account.
+
 ### Signing in with Google
 
 Optional, and off unless `[google] enabled = true` with a client ID and secret
@@ -1552,10 +1595,32 @@ That exemption list is the highest-risk few lines in the application, so a test
 walks every registered route and asserts each one either requires a session or
 appears on the list.
 
-Alongside that: a CSRF token on the login form and on every state-changing
-POST, and the response headers `Content-Security-Policy` (the site loads no
-third-party assets at all, so it can stay strict), `Referrer-Policy:
+Alongside that, the response headers `Content-Security-Policy` (the site loads
+no third-party assets at all, so it can stay strict), `Referrer-Policy:
 no-referrer`, `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY`.
+
+### The CSRF token
+
+Cross-site request forgery is the trick where *another* website makes your
+browser send a request here. Your browser attaches your cookie to it
+automatically, because that is what browsers do, so the request arrives looking
+exactly like something you chose to do. Nothing needs to be stolen: the
+attacker never sees your cookie or the reply, they only get the *effect*.
+
+Here that effect would be small but real — a hidden form on a page you visit
+could log you out, or, if you are an admin, change an album's cover picture.
+Elsewhere the same trick transfers money.
+
+The defence is that every action-taking form carries a short random token that
+is also kept in your session, and the server refuses the request unless the two
+match. Another site can make your browser send a request; it cannot read your
+session to learn the token. All three places that change something check it:
+logging in, logging out, and setting a cover.
+
+This is also why **logging out is a button rather than a link**. A link can be
+followed by anything that scans or prefetches URLs — a mail scanner, a preview
+bot, a browser guessing where you will click next — and each would quietly log
+you out.
 
 ## Dark mode
 
