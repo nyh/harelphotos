@@ -1,4 +1,4 @@
-"""``harelphotos acl`` — inspect and set who may see a directory (DESIGN.md 6).
+"""``harelphotos acl`` — inspect and set who may see a directory.
 
 Restrictions can be written by hand in a ``.album.toml`` beside the photos, and
 that keeps working. What this command *writes* goes to the overrides file in

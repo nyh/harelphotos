@@ -1,4 +1,4 @@
-"""EXIF extraction (DESIGN.md 9.3).
+"""EXIF extraction.
 
 Everything here is best-effort. Malformed EXIF is extremely common in a
 collection spanning decades, and a photo with unreadable metadata is still a
@@ -63,8 +63,7 @@ def parse_datetime(raw: Any) -> int | None:
     The tag carries no timezone: it is what the camera's clock said. We convert
     with ``timestamp()`` on a naive datetime, which uses the local zone, and
     the display side renders it back the same way. What must never happen is a
-    round-trip through UTC that shifts everyone's holiday photos (DESIGN.md
-    11.2).
+    round-trip through UTC that shifts everyone's holiday photos.
     """
     s = _clean(raw)
     if not s:

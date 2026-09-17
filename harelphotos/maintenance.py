@@ -1,4 +1,4 @@
-"""``gc`` and ``stats`` (DESIGN.md 15).
+"""``gc`` and ``stats``.
 
 The derived tree is a cache, and caches accumulate rubbish: a scan killed
 halfway leaves files whose database row was never written, and retuning the

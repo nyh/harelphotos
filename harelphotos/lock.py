@@ -1,4 +1,4 @@
-"""An exclusive lock around mutating operations (DESIGN.md 8).
+"""An exclusive lock around mutating operations.
 
 Two concurrent scans would not corrupt SQLite, but they would duplicate work,
 interleave scan generations, and let one process's prune delete files the

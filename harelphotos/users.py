@@ -1,4 +1,4 @@
-"""Accounts, stored in a hand-editable users.toml (DESIGN.md 5.2).
+"""Accounts, stored in a hand-editable users.toml.
 
 Not a database, deliberately: the PLAN asks for metadata in files, and there
 are going to be about eight of these. ``harelphotos user ...`` maintains the
@@ -62,7 +62,7 @@ class Users:
         Matches an explicit ``google = "..."`` field first, then falls back to
         the table key itself, which is how a pure-Google account is written.
         No match means refuse: Google asserts identity, the allowlist grants
-        access (DESIGN.md 12.2).
+        access.
         """
         needle = email.strip().casefold()
         for u in self.by_token.values():
@@ -144,7 +144,7 @@ def _quote_value(s: str) -> str:
 def dumps(users: Users) -> str:
     """Render users.toml. Stable ordering so diffs stay readable."""
     lines = [
-        "# harelphotos accounts. Editable by hand; see DESIGN.md 5.2.",
+        "# harelphotos accounts. Editable by hand; see MANUAL.md.",
         "# The table key is the identity used in .album.toml 'allow' lists.",
         "",
     ]
@@ -180,7 +180,7 @@ def hash_password(password: str) -> str:
 
 # A hash of a fixed dummy password, used to spend the same CPU on an unknown
 # username as on a known one so response time does not reveal which accounts
-# exist (DESIGN.md 12.1). Computed lazily to keep import cheap.
+# exist. Computed lazily to keep import cheap.
 _DUMMY_HASH: str | None = None
 
 

@@ -1,4 +1,4 @@
-"""ACL model tests (DESIGN.md 6).
+"""ACL model tests.
 
 The accumulate rule and its escape hatch are the security core of the project,
 so these are deliberately thorough.
@@ -100,7 +100,7 @@ def test_admin_bypasses_everything():
 def test_anonymous_never_passes_a_restriction():
     assert not acl.can_view(chain_for((["nyh"], False)), None, GROUPS)
     # ...but an unrestricted directory is not itself a login gate; that lives
-    # in the before_request hook (DESIGN.md 12.3).
+    # in the before_request hook.
     assert acl.can_view((), None, GROUPS)
 
 

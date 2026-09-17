@@ -1,4 +1,4 @@
-"""The landing page's image (DESIGN.md 11.5).
+"""The landing page's image.
 
 The front page is the one thing an unauthenticated visitor sees, so its image
 has to be servable without a session. It is therefore **not** a photo from the

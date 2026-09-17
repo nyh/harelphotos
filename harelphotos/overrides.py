@@ -1,4 +1,4 @@
-"""Per-album settings that the server itself may change (DESIGN.md 5.3).
+"""Per-album settings that the server itself may change.
 
 Everything here could equally live in a ``.album.toml`` beside the photos, and
 for a while it did. It moved because **the photo tree is read-only to this

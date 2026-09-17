@@ -1,4 +1,4 @@
-"""Generating the derivative images (DESIGN.md 9.1).
+"""Generating the derivative images.
 
 One decode per photo, then a **descending cascade**: each tier is resized from
 the tier above it rather than from the original. That is what makes the three
@@ -100,7 +100,7 @@ def deriv_key(content_sig: bytes | None, cfg: Config) -> str:
 
     Deliberately built from `content_sig` and never from mtime: timestamps get
     rewritten without pixels changing, and making derivatives depend on them
-    would turn a metadata tidy-up into a full re-encode (DESIGN.md 7).
+    would turn a metadata tidy-up into a full re-encode.
 
     Just as deliberately, it does **not** include which tiers are configured.
     Adding a size to the ladder should cost only that size, not a re-encode of

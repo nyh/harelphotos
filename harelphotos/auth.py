@@ -1,4 +1,4 @@
-"""Sessions, login and the login gate (DESIGN.md 12).
+"""Sessions, login and the login gate.
 
 The security-critical module. Three things it must get right:
 
@@ -7,7 +7,7 @@ The security-critical module. Three things it must get right:
   exactly that, so a new route cannot quietly forget.
 * **Authentication is not authorization.** A verified identity is only ever
   matched against `users.toml`; nothing self-registers, and access to a
-  particular album is then decided by the ACL chain (§6).
+  particular album is then decided by the ACL chain.
 * **Don't leak which accounts exist.** An unknown username costs the same time
   as a known one, and says the same thing.
 """
@@ -51,7 +51,7 @@ PUBLIC_ENDPOINTS = frozenset(
         "google_callback",
         "logout",           # clearing a session needs no session
         "privacy",          # Google's consent screen requires these to be
-        "terms",            # publicly fetchable (§12.2)
+        "terms",            # publicly fetchable
         "public_asset",     # the landing page's own image, fixed filenames
         "manifest",         # fetched before anyone has signed in
         "healthz",

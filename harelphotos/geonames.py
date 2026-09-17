@@ -1,4 +1,4 @@
-"""Offline reverse geocoding (DESIGN.md 9.5).
+"""Offline reverse geocoding.
 
 Turns a photo's GPS coordinates into "Náxos, Greece", from a local dataset —
 no network call at scan time and, more to the point, no transmitting the

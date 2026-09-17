@@ -1,4 +1,4 @@
-"""The scanner (DESIGN.md 8).
+"""The scanner.
 
 Phase 1  walk        os.scandir, upsert rows, detect what disappeared
 Phase 2  header      content signature + EXIF + dimensions, in parallel
@@ -240,7 +240,7 @@ class Scanner:
         self._last_rollup = 0.0
         # Read once for the whole scan: settings written by the web interface
         # or the cover/acl commands, which take precedence over the
-        # .album.toml beside the photos (DESIGN.md 5.3).
+        # .album.toml beside the photos.
         self.overrides = overrides.load(cfg)
         self.generation = self._next_generation()
 
@@ -369,8 +369,10 @@ class Scanner:
             except (UnicodeDecodeError, ValueError):
                 self.stats.skipped_names.append(str(abspath))
                 continue
-            # DESIGN.md 19: filenames are assumed UTF-8. A surrogate-escaped
-            # name is skipped and reported rather than crashing the run.
+            # Filenames are assumed to be UTF-8. One that is not decodes to
+            # surrogates, which would raise the moment it reached SQLite or a
+            # template, so it is skipped and reported rather than killing a run
+            # that may be hours in.
             if _has_surrogates(entry_name):
                 self.stats.skipped_names.append(os.path.join(relpath, entry_name))
                 continue

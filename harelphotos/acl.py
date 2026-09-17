@@ -1,4 +1,4 @@
-"""Access control (DESIGN.md 6).
+"""Access control.
 
 The rule is that **restrictions accumulate**: a user may view a directory if,
 for *every* ``allow`` list on the path from the root down to it, the user
@@ -111,8 +111,8 @@ def can_view(
     """Apply the accumulate rule.
 
     ``user`` of None is an anonymous request, which never passes a restriction —
-    and the caller should have rejected it before reaching here anyway (the
-    login gate in DESIGN.md 12.3).
+    and the caller should have rejected it before reaching here anyway: the
+    login gate refuses an anonymous request long before an ACL is consulted.
     """
     if is_admin:
         return True

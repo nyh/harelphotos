@@ -1,10 +1,9 @@
-"""Reading the index for the web application (DESIGN.md 10, 11).
+"""Reading the index for the web application.
 
 Every lookup here takes a *path string from a request* and resolves it by exact
 match against the database. Filesystem paths are only ever built from values
 that came back out of SQLite, which were produced by ``os.scandir`` — so
-``..``, symlink games and NUL bytes cannot reach the filesystem at all
-(DESIGN.md 10.2).
+``..``, symlink games and NUL bytes cannot reach the filesystem at all.
 """
 
 # Copyright (C) 2026 Nadav Har'El
@@ -131,7 +130,7 @@ class Photo:
 
         Must be the real per-photo width: a portrait photo in the 512 tier is
         384 wide, and advertising 512 would make the browser's DPR arithmetic
-        wrong for half the collection (DESIGN.md 10.3).
+        wrong for half the collection.
         """
         w, h = self.width or tier, self.height or tier
         longest = max(w, h)
@@ -213,7 +212,7 @@ class Index:
         """Look up one album. Returns None if absent *or* not permitted.
 
         Deliberately conflated: the caller turns None into a 404, so a private
-        album is indistinguishable from one that does not exist (DESIGN.md 6).
+        album is indistinguishable from one that does not exist.
         """
         r = self.conn.execute("SELECT * FROM dirs WHERE path = ?", (path,)).fetchone()
         if r is None or not self._may_view(r["acl_chain"], viewer):
@@ -401,7 +400,7 @@ def sort_photos(photos: Sequence[Photo], spec: str) -> list[Photo]:
         ordered = sorted(
             photos, key=lambda p: (p.taken is None, p.taken or 0, p.name.casefold())
         )
-    else:   # "date": EXIF when present, file date otherwise (DESIGN.md 5.3)
+    else:   # "date": EXIF when present, file date otherwise
         ordered = sorted(photos, key=lambda p: (p.when, p.name.casefold()))
     return list(reversed(ordered)) if reverse else ordered
 

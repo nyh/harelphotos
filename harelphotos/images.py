@@ -1,4 +1,4 @@
-"""Serving image bytes (DESIGN.md 9.4, 10.3, 10.4).
+"""Serving image bytes.
 
 Two things happen here that are easy to get subtly wrong:
 

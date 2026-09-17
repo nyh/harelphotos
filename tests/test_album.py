@@ -1,4 +1,4 @@
-"""`.album.toml` parsing (DESIGN.md 5.3).
+"""`.album.toml` parsing.
 
 The recurring theme: a mistake in one file degrades that directory to defaults
 and is reported, never raised.

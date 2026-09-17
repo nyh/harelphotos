@@ -1,4 +1,4 @@
-"""Global config loading (DESIGN.md 5.1).
+"""Global config loading.
 
 Unlike .album.toml, a bad global config is fatal — we would not know where the
 photos are — so these assert that problems raise with a useful message.

@@ -1,4 +1,4 @@
-"""Album settings the server writes for itself (DESIGN.md 5.3).
+"""Album settings the server writes for itself.
 
 The point of this layer is that the photo tree is read-only to this software,
 so the tests that matter are: the tree is never written, `.album.toml` still

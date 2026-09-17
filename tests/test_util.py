@@ -10,7 +10,7 @@ def sorted_by_natkey(names):
 
 def test_digit_runs_compare_numerically():
     # The whole point: plain lexicographic sorting gets these wrong, and they
-    # are exactly the naming patterns people use (DESIGN.md 11.1b).
+    # are exactly the naming patterns people use.
     assert sorted_by_natkey(["Day 10", "Day 2", "Day 1"]) == ["Day 1", "Day 2", "Day 10"]
     assert sorted_by_natkey(["2010", "2009", "1998"]) == ["1998", "2009", "2010"]
     assert sorted_by_natkey(["img12", "img2", "img100"]) == ["img2", "img12", "img100"]

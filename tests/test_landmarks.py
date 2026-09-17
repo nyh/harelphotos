@@ -1,4 +1,4 @@
-"""Landmark naming (DESIGN.md 9.5), the opt-in second layer over the cities.
+"""Landmark naming, the opt-in second layer over the cities.
 
 **Getting the town right matters more than getting the landmark right.** A
 photograph labelled with the wrong city, or with a hospital record or a

@@ -1,4 +1,4 @@
-"""Resolving place names for indexed photos (DESIGN.md 9.5).
+"""Resolving place names for indexed photos.
 
 A pure database operation: the GPS coordinates are already in the index after
 the header pass, so this never opens a photo file. Running it is seconds, not a

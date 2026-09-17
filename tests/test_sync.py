@@ -1,4 +1,4 @@
-"""Copying generated state to another machine (DESIGN.md, M8).
+"""Copying generated state to another machine.
 
 No test here talks to a real host: the parts worth testing are the ones that
 would corrupt a *serving* site, and they are all local. Notably the index

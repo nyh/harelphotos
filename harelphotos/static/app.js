@@ -1,4 +1,4 @@
-/* harelphotos (DESIGN.md 11.1c, 11.2).
+/* harelphotos — the browser side.
  *
  * Plain JavaScript, no build step, no framework. Two jobs: lay the photo grid
  * out in justified rows, and make the single-photo page navigable by keyboard

@@ -1,4 +1,4 @@
-"""The web application (DESIGN.md 10, 12).
+"""The web application.
 
 Login is enforced by a single `before_request` hook against a literal list of
 public endpoints (`auth.PUBLIC_ENDPOINTS`), and a test walks every registered
@@ -61,7 +61,7 @@ def create_app(cfg: Config, *, require_login: bool = True) -> Flask:
         SESSION_COOKIE_SAMESITE="Lax",
         # Off only when serving plain HTTP locally: with it on and no TLS the
         # cookie is never sent back, and you land on the login page again with
-        # no error anywhere (DESIGN.md 13.5).
+        # no error anywhere.
         SESSION_COOKIE_SECURE=cfg.base_url.startswith("https://"),
         PERMANENT_SESSION_LIFETIME=timedelta(days=cfg.session_days),
         # Send the cookie only when the session actually changes.
@@ -208,7 +208,7 @@ def _clean_path(raw: str) -> str:
     """Reject anything that is not a plain relative path.
 
     Belt and braces: paths are resolved by exact database lookup, so traversal
-    cannot reach the filesystem anyway (DESIGN.md 10.2). This just refuses the
+    cannot reach the filesystem anyway. This just refuses the
     obviously-malicious early.
     """
     path = (raw or "").strip("/")
@@ -223,7 +223,7 @@ def _clean_path(raw: str) -> str:
 def _register_routes(app: Flask, cfg: Config) -> None:
     @app.route("/")
     def landing():
-        """The only page an unauthenticated visitor sees (DESIGN.md 11.5)."""
+        """The only page an unauthenticated visitor sees."""
         if g.viewer is not None:
             return redirect("/a/")
         return _render_landing(cfg)
@@ -245,7 +245,7 @@ def _register_routes(app: Flask, cfg: Config) -> None:
 
         # The throttle has its own small database: it is the only thing the
         # web process writes, and in the index it collided with a running scan
-        # (DESIGN.md 12.1).
+        #.
         with auth.throttle_db(cfg) as throttle:
             try:
                 auth.check_rate_limit(throttle)
@@ -669,7 +669,7 @@ def _register_filters(app: Flask, cfg: Config) -> None:
     @app.template_filter("photo_date")
     def photo_date(ts: int | None) -> str:
         """EXIF time is local wall-clock with no zone; render it as recorded
-        and never convert through UTC (DESIGN.md 11.2)."""
+        and never convert through UTC."""
         if not ts:
             return ""
         return datetime.fromtimestamp(ts).strftime("%A, %-d %B %Y, %H:%M")
@@ -684,7 +684,7 @@ def _register_filters(app: Flask, cfg: Config) -> None:
 
         `photo_date` is too long to sit beside a filename and `short_date` too
         coarse to be worth showing there. Local wall-clock as recorded, never
-        converted through UTC (DESIGN.md 11.2).
+        converted through UTC.
         """
         return datetime.fromtimestamp(ts).strftime("%-d %b %Y") if ts else ""
 

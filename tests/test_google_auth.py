@@ -1,4 +1,4 @@
-"""Sign in with Google (DESIGN.md 12.2).
+"""Sign in with Google.
 
 Every test here is about refusing to sign in the wrong person. The happy path
 is one test; the rest are the ways a token can be genuine but not ours.

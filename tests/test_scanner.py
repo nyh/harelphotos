@@ -1,4 +1,4 @@
-"""Scanner tests (DESIGN.md 8, 16).
+"""Scanner tests.
 
 The highest-value tests in the project: a rescan must converge on exactly what
 a from-scratch scan produces, and must not do work it doesn't need to.
@@ -101,7 +101,7 @@ def test_exif_dates_and_dimensions(tree):
     assert row["taken"] is not None
     assert time.strftime("%Y-%m-%d", time.localtime(row["taken"])) == "2019-01-15"
     # A photo with no EXIF date is indexed with taken = NULL; the sort falls
-    # back to mtime (DESIGN.md 5.3).
+    # back to mtime.
     row = conn.execute("SELECT * FROM photos WHERE name = 'd.jpg'").fetchone()
     assert row["taken"] is None
     assert row["width"] == fixtures.DEFAULT_SIZE[0]
@@ -170,7 +170,7 @@ def test_rescan_is_a_no_op(tree):
 
 
 def test_touching_every_file_re_reads_but_regenerates_nothing(tree):
-    """The jhead -ft trap (DESIGN.md 8 phase 2).
+    """The jhead -ft trap.
 
     Rewriting every mtime must NOT be mistaken for 'every photo changed'. The
     headers get re-read (mtime said to look), but the content signatures come

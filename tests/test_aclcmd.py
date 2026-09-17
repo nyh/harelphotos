@@ -1,4 +1,4 @@
-"""``harelphotos acl`` (DESIGN.md 6, 15).
+"""``harelphotos acl``.
 
 The command edits files that decide who can see private photographs, so the
 tests here are less about the happy path than about the two ways it could do

@@ -1,4 +1,4 @@
-"""Global configuration: loading, defaults and validation (DESIGN.md 5.1)."""
+"""Global configuration: loading, defaults and validation."""
 
 # Copyright (C) 2026 Nadav Har'El
 # SPDX-License-Identifier: AGPL-3.0-or-later
@@ -12,7 +12,7 @@ from pathlib import Path
 
 CONFIG_ENV = "HARELPHOTOS_CONFIG"
 
-# Search order, first match wins (DESIGN.md 5.1).
+# Search order, first match wins.
 CONFIG_SEARCH = (
     Path("config.toml"),
     Path.home() / ".config" / "harelphotos" / "config.toml",
@@ -30,7 +30,7 @@ DEFAULT_TIERS_THUMB = [256, 512]
 DEFAULT_TIERS_VIEW = [1280, 1600]
 
 # Per-tier AVIF quality. Smaller tiers get a higher Q because downscaling
-# concentrates detail, so low-Q artefacts show more (DESIGN.md 5.1).
+# concentrates detail, so low-Q artefacts show more.
 #
 # **Do not add entries here casually.** This table is part of the recipe
 # fingerprint, so touching it re-encodes the whole collection, whereas changing

@@ -17,7 +17,7 @@ from pathlib import Path
 from . import db
 
 CONFIG_TEMPLATE = """\
-# harelphotos configuration. See DESIGN.md 5.1.
+# harelphotos configuration. Every setting is described in MANUAL.md.
 
 photo_root      = "{photo_root}"
 derived_root    = "{derived_root}"
@@ -188,7 +188,7 @@ def init(
     else:
         notes.append(f"kept existing {secret_key_file} — rotating it would log everyone out")
 
-    if _write_new(users_file, "# harelphotos accounts. See DESIGN.md 5.2.\n", 0o600):
+    if _write_new(users_file, "# harelphotos accounts. See MANUAL.md.\n", 0o600):
         notes.append(f"wrote empty {users_file} — add accounts with 'harelphotos user add'")
     else:
         notes.append(f"kept existing {users_file}")

@@ -1,4 +1,4 @@
-"""Sign in with Google (DESIGN.md 12.2).
+"""Sign in with Google.
 
 Entirely optional: local accounts work without any of this. It exists so that
 relatives can use an account they already have rather than remember another

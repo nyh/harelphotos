@@ -1,4 +1,4 @@
-"""Authentication and the login gate (DESIGN.md 12).
+"""Authentication and the login gate.
 
 The security-critical tests. The one that matters most is
 `test_every_route_either_needs_a_session_or_is_on_the_list`: it walks every
@@ -220,7 +220,7 @@ def test_every_logged_in_page_offers_a_way_out(client):
 
 
 def test_every_page_names_who_you_are_and_offers_a_way_out(client):
-    """DESIGN.md 11.3: there must never be a page you cannot leave from.
+    """There must never be a page you cannot leave from.
 
     This used to be a footer as well as the top bar, which said the same thing
     twice and cost a strip of every screen. The guarantee is what matters, not
@@ -367,7 +367,7 @@ def test_an_admin_sees_everything(client):
 
 
 def test_a_private_albums_images_are_not_fetchable_by_guessing(client):
-    """The check must be on the image routes, not only the HTML (DESIGN.md 6)."""
+    """The check must be on the image routes, not only the HTML."""
     login(client, "sis", "sispw")
     for url in (
         "/i/512/private/secret.jpg",

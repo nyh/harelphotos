@@ -1,4 +1,4 @@
-"""The index database (DESIGN.md 7).
+"""The index database.
 
 A pure cache: every row here is derived from the filesystem and can be thrown
 away. If the schema version does not match and there is no migration path, the

@@ -1,4 +1,4 @@
-"""Offline reverse geocoding (DESIGN.md 9.5).
+"""Offline reverse geocoding.
 
 The dataset itself is a 14 MB download, so these tests build a tiny stand-in
 with the same schema rather than requiring the network.

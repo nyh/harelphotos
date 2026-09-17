@@ -1,4 +1,4 @@
-"""The web application (DESIGN.md 10, 11)."""
+"""The web application."""
 
 # Copyright (C) 2026 Nadav Har'El
 # SPDX-License-Identifier: AGPL-3.0-or-later
@@ -290,7 +290,7 @@ def test_grid_carries_aspect_ratios_for_the_layout(client):
 # ------------------------------------------------- serving during a scan
 
 def test_pages_are_served_while_a_scan_holds_a_write_transaction(client, tmp_path):
-    """A scan must never take the site down (DESIGN.md 8).
+    """A scan must never take the site down.
 
     WAL is what makes this work: readers do not block on a writer, and the
     application's connection is read-only and per-request.

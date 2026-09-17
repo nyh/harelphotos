@@ -19,7 +19,7 @@ def natkey(name: str) -> str:
     """Collation key that makes a plain string sort compare numerically.
 
     SQLite cannot natural-sort, so the scanner precomputes this once per
-    directory and lets ordinary ``ORDER BY`` do the work (DESIGN.md 7).
+    directory and lets ordinary ``ORDER BY`` do the work.
 
     >>> natkey("Day 10") > natkey("Day 2")
     True

@@ -1,4 +1,4 @@
-"""Command-line entry point (DESIGN.md 15).
+"""Command-line entry point.
 
 Only the M1 subcommands are implemented; the rest are declared so that
 ``--help`` describes the whole shape of the tool and so an unimplemented

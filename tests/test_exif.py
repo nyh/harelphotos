@@ -1,4 +1,4 @@
-"""EXIF parsing (DESIGN.md 9.3)."""
+"""EXIF parsing."""
 
 # Copyright (C) 2026 Nadav Har'El
 # SPDX-License-Identifier: AGPL-3.0-or-later
@@ -32,7 +32,7 @@ def test_datetime_original(tmp_path):
 
 
 def test_datetime_is_local_wall_time_not_converted(tmp_path, monkeypatch):
-    """The shifted-holiday-snaps bug (DESIGN.md 11.2).
+    """The shifted-holiday-snaps bug.
 
     The tag has no timezone; it is what the camera's clock said. Whatever TZ
     the server runs in, the rendered wall-clock time must match the tag.

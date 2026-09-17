@@ -1,4 +1,4 @@
-"""Per-directory metadata: .album.toml (DESIGN.md 5.3).
+"""Per-directory metadata: .album.toml.
 
 Parse errors here are deliberately **non-fatal**. A typo in one TOML file must
 never take the site down, so every problem is recorded as a message on the
