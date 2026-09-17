@@ -468,11 +468,21 @@ h2.section:first-child { margin-block-start: 0.25rem; }
 .nav.next { inset-inline-end: 0; }
 
 .info {
+  position: relative;
   border-block-start: 1px solid var(--line);
   padding: 1rem;
   padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
   background: var(--card);
 }
+/* Out of the way of the text, which is a two-column grid that would otherwise
+   run underneath it. */
+.info-close {
+  position: absolute;
+  inset-block-start: 0.25rem;
+  inset-inline-end: 0.25rem;
+  color: var(--dim);
+}
+
 .info dl {
   display: grid;
   grid-template-columns: max-content 1fr;

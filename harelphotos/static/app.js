@@ -430,15 +430,42 @@
       }
     );
 
+    /* The information panel, and whether it stays open as you page.
+     *
+     * Paging is a whole page load, so without remembering it the panel closed
+     * on every photograph and had to be opened again from the menu -- which is
+     * not what "show me the details" means when you are comparing a series.
+     *
+     * Kept in sessionStorage, so it lasts as long as the tab and no longer.
+     * localStorage would remember it next week too, which is the behaviour of
+     * a *setting*; this is a mode you turn on while looking at something, and
+     * having it reappear a month later would be a surprise rather than a
+     * convenience.
+     */
+    var INFO_KEY = "hp:info";
     var info = document.getElementById("info");
     var toggle = document.getElementById("info-toggle");
-    function toggleInfo() {
+    var closer = document.getElementById("info-close");
+
+    function showInfo(open) {
       if (!info) return;
-      var showing = !info.hidden;
-      info.hidden = showing;
-      if (toggle) toggle.setAttribute("aria-expanded", String(!showing));
+      info.hidden = !open;
+      if (toggle) toggle.setAttribute("aria-expanded", String(open));
+      try {
+        if (open) sessionStorage.setItem(INFO_KEY, "1");
+        else sessionStorage.removeItem(INFO_KEY);
+      } catch (e) {}
     }
+    function toggleInfo() { if (info) showInfo(info.hidden); }
+
     if (toggle) toggle.addEventListener("click", toggleInfo);
+    if (closer) closer.addEventListener("click", function () { showInfo(false); });
+
+    if (info) {
+      var wanted = false;
+      try { wanted = sessionStorage.getItem(INFO_KEY) === "1"; } catch (e) {}
+      if (wanted) showInfo(true);
+    }
 
     document.addEventListener("keydown", function (e) {
       if (e.metaKey || e.ctrlKey || e.altKey) return;

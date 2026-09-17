@@ -302,6 +302,28 @@ def main():
         failures += not check("...and returns to the album a second time",
                               b.eval("location.pathname"), album)
 
+        # The information panel stays open as you page, and closes from its
+        # own button. Paging is a whole page load, so without remembering it
+        # the panel shut on every photograph and had to be reopened from the
+        # menu -- not what "show me the details" means over a series.
+        b.goto(URL)
+        b.eval("(function(){document.querySelector('#grid a').click();})()")
+        b.settle()
+        b.eval("document.getElementById('info-toggle').click()")
+        b.settle(0.4)
+        failures += not check("the info panel opens",
+                              b.eval("!document.getElementById('info').hidden"), True)
+        b.key("ArrowRight")
+        failures += not check("...and is still open on the next photograph",
+                              b.eval("!document.getElementById('info').hidden"), True)
+        b.eval("document.getElementById('info-close').click()")
+        b.settle(0.4)
+        failures += not check("its own close button shuts it",
+                              b.eval("document.getElementById('info').hidden"), True)
+        b.key("ArrowRight")
+        failures += not check("...and it stays shut on the next one",
+                              b.eval("document.getElementById('info').hidden"), True)
+
         # The filename must not flash in the corner before the photograph
         # arrives. A browser paints alt text inside the image's box while it
         # loads, and paging is a whole page load, so every arrow press showed

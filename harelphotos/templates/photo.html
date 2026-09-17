@@ -133,6 +133,16 @@
   </div>
 
   <aside id="info" class="info" hidden>
+    {#- A way out that is where the panel is. Turning it off from the same menu
+        item that turned it on works, but means going back to a menu to dismiss
+        something that is right in front of you. -#}
+    <button type="button" id="info-close" class="iconbutton info-close"
+            title="Close" aria-label="Close photo information">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor"
+              stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+    </button>
     <dl>
       <dt>File</dt><dd>{{ photo.name }}
         {%- if photo.width %} <span class="dim">{{ photo.width }} × {{ photo.height }}</span>{% endif %}
