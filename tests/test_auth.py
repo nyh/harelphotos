@@ -600,3 +600,30 @@ def test_sending_a_file_outside_the_served_trees_fails_closed(project):
     r = app.test_client().get("/careless" + str(secret))
     assert r.status_code == 404
     assert b"PRIVATE" not in r.get_data()
+
+
+def test_sessions_are_signed_with_sha256_not_flasks_default_sha1(app):
+    """Flask signs its session cookie with HMAC-SHA1 by default.
+
+    Not a weakness: SHA-1 is broken for collisions, HMAC does not rest on
+    collision resistance, and NIST still approves SHA-1 for HMAC. It is simply
+    the wrong thing to have to explain to whoever audits this next, so it is
+    overridden -- and the override is one line nothing else would miss if it
+    were dropped, which is why it is asserted here.
+
+    Also asserts the override did not reach Flask's own default, which is a
+    single interface instance shared by every Flask app in the process.
+    """
+    import hashlib
+
+    from flask import Flask
+
+    assert app.session_interface.digest_method is hashlib.sha256
+    assert Flask("untouched").session_interface.digest_method().name == "sha1"
+
+
+def test_a_session_cookie_still_round_trips(client):
+    """The digest change must not break signing in, which is the one way a
+    mistake here would be both silent and total."""
+    assert login(client).status_code in (302, 303)
+    assert client.get("/a/").status_code == 200

@@ -1,15 +1,28 @@
 # harelphotos — manual
 
-What the software does **today**, and how to use it.
+**harelphotos turns a directory tree of photographs into a private web album.**
 
-This describes only what is implemented and working, and it is the document to
-trust about the software's current behavior.
+You point it at a directory. It reads the photographs where they are, without
+moving, renaming or writing to a single one of them, and records what it finds
+— dates, cameras, coordinates, sizes — in an index beside itself. It generates
+smaller copies for the web, and serves the tree as it stands: your directories
+become albums, their names become titles, and the order on disk is the order on
+the page. There is no importing step and no library to migrate into. The
+photographs remain ordinary files in ordinary directories, which is the point:
+whatever happens to this software, they are still just your photographs.
 
-[DESIGN.md](DESIGN.md) is a *historical* document: it records how the design
-was arrived at, with the measurements and the alternatives rejected, and is
-deliberately not updated as the software changes. Read it for why, never for
-what. Where the two disagree, this file is right. [IDEAS.md](IDEAS.md) holds
-what is being considered next, and what was tried and reversed.
+It is built for a collection that is large and a server that is not — tens of
+thousands of photographs served from a small machine on a domestic connection —
+so most of the work happens once, in advance, and the serving is deliberately
+dull. It is private by default: nothing is visible without an account, and
+per-directory lists decide who may see what.
+
+What it is not: a photo editor, an uploader, or anything that touches your
+originals. It is a way to look at them, and to send your family a link.
+
+A directory can carry an optional `.album.toml` giving it a title, a cover
+picture, an order, or a list of who may see it — all optional, and a tree with
+none of them works exactly as you would expect.
 
 ---
 
@@ -1147,10 +1160,10 @@ server keeps no session table, which is why signing in survives a restart and
 why there is nothing to clean up.
 
 This is Flask's standard signed-cookie session, not anything home-made: the
-cookie is serialized as JSON and signed with **HMAC** (SHA-1 as the digest,
-with the signing key derived from `secret_key` by HMAC over a fixed salt) by
-the `itsdangerous` library. Thirty-two random bytes is a 256-bit key, far more
-than the construction needs. The serializer is the timestamped one and Flask
+cookie is serialized as JSON and signed with **HMAC-SHA256**, the signing key
+derived from `secret_key` by HMAC over a fixed salt, by the `itsdangerous`
+library. Thirty-two random bytes is a 256-bit key, far more than the
+construction needs. The serializer is the timestamped one and Flask
 checks the age when it loads a cookie, so an expired session is refused by the
 server rather than relying on the browser to stop sending it.
 

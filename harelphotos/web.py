@@ -22,6 +22,7 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from flask.sessions import SecureCookieSessionInterface
 from flask import (
     Flask, abort, flash, g, get_flashed_messages, redirect, render_template,
     request, session, url_for,
@@ -40,6 +41,22 @@ log = logging.getLogger("harelphotos.web")
 NO_LOGIN_VIEWER = Viewer(token=None, name="", is_admin=True)
 
 
+class _Sha256Sessions(SecureCookieSessionInterface):
+    """Flask's signed-cookie session, with SHA-256 instead of SHA-1.
+
+    Flask still defaults to HMAC-SHA1 here, which is not a weakness -- SHA-1 is
+    broken for collisions, and HMAC does not rest on collision resistance, so
+    there is no forgery attack and NIST still approves SHA-1 for HMAC. It is
+    simply the wrong thing to have to explain to whoever audits this next.
+
+    A subclass rather than setting `digest_method` on the interface Flask
+    provides: that one instance is a class attribute shared by every Flask app
+    in the process, so assigning to it would reach further than this app.
+    """
+
+    digest_method = staticmethod(hashlib.sha256)
+
+
 def create_app(cfg: Config, *, require_login: bool = True) -> Flask:
     app = Flask(__name__)
     if cfg.behind_proxy:
@@ -56,6 +73,7 @@ def create_app(cfg: Config, *, require_login: bool = True) -> Flask:
     app.config["HARELPHOTOS_REQUIRE_LOGIN"] = require_login
     app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
     app.secret_key = auth.secret_key(cfg)
+    app.session_interface = _Sha256Sessions()
     app.config.update(
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
