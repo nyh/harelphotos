@@ -145,7 +145,6 @@ class Config:
     # response, because its value is part of the browser's image cache key and
     # changing it threw away every cached thumbnail (see web.py).
     session_days: int = 30
-    log_file: Path | None = None
     # Album settings the server itself writes: cover picks and access rules set
     # from the web interface. In the state directory because the web process
     # must be able to write it, and must NOT be able to write the directory
@@ -342,7 +341,6 @@ def from_dict(raw: dict, src: Path) -> Config:
             f"{src}: [google] enabled = true but client_id/client_secret are not both set"
         )
 
-    log_file = raw.get("log_file")
     return Config(
         photo_root=photo_root,
         derived_root=derived_root,
@@ -352,7 +350,6 @@ def from_dict(raw: dict, src: Path) -> Config:
         base_url=str(raw.get("base_url", "http://127.0.0.1:5000")).rstrip("/"),
         behind_proxy=bool(raw.get("behind_proxy", False)),
         session_days=_positive_int(raw.get("session_days"), "session_days", src, 30),
-        log_file=Path(log_file).expanduser() if log_file else None,
         overrides_file=(
             Path(str(raw["overrides_file"])).expanduser()
             if raw.get("overrides_file")

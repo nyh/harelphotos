@@ -27,7 +27,6 @@ secret_key_file = "{secret_key_file}"
 
 base_url        = "http://127.0.0.1:5000"   # production: https://your.host
 session_days    = 30                        # how long a login lasts
-# log_file      = "{state}/harelphotos.log" # unset = stderr / journal
 
 [ui]
 site_title      = "Photo Album"
