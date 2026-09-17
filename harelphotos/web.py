@@ -408,6 +408,28 @@ def _register_routes(app: Flask, cfg: Config) -> None:
                  f" (and {len(changes) - 1} above)" if len(changes) > 1 else "")
         return redirect(auth.safe_next(request.form.get("next")) or alb.url)
 
+    def _cover_up_target(alb, viewer):
+        """Where this album's cover would go, and under what name.
+
+        Returns `(parent path, value)` or None. Shared by the album page, which
+        needs it to decide whether the deed is already done, and the route,
+        which needs it to do the deed -- one definition, so the label on the
+        button and the effect of pressing it cannot drift apart.
+        """
+        if not alb.path:
+            return None                      # the top album has nothing above
+        cover = g.index.cover_photo(alb, viewer)
+        if cover is None:
+            return None
+        parent = alb.path.rsplit("/", 1)[0] if "/" in alb.path else ""
+        # `relpath`, not `url_relpath`: the latter is percent-encoded for a URL
+        # and the overrides file holds real names. A photograph with a space in
+        # it would otherwise be written `a%20b.jpg` and never found again.
+        full = cover.relpath
+        if parent and not full.startswith(parent + "/"):
+            return None
+        return parent, (full[len(parent) + 1:] if parent else full)
+
     @app.route("/cover/up", methods=("POST",))
     def cover_to_parent():
         """Give this album's cover to the album one level above it.
@@ -433,29 +455,30 @@ def _register_routes(app: Flask, cfg: Config) -> None:
         alb = g.index.album(relpath, g.viewer)
         if alb is None:
             abort(404)
-
-        cover = g.index.cover_photo(alb, g.viewer)
-        if cover is None:
+        target = _cover_up_target(alb, g.viewer)
+        if target is None:
             abort(404)
+        parent, below = target
 
-        parent = relpath.rsplit("/", 1)[0] if "/" in relpath else ""
-        # `relpath`, not `url_relpath`: the latter is percent-encoded for a URL
-        # and the overrides file holds real names. A photograph with a space in
-        # it would otherwise be written as `a%20b.jpg` and never found again.
-        full = cover.relpath
-        if parent and not full.startswith(parent + "/"):
-            # The cover resolved to something outside the parent's subtree,
-            # which cannot be expressed as a path relative to it.
-            abort(400)
-        below = full[len(parent) + 1:] if parent else full
+        if request.form.get("clear"):
+            # Only where the parent is still showing *this* -- an album
+            # somebody has since given a different picture to is a deliberate
+            # decision, and undoing must not walk over it. The same rule the
+            # "here and above" undo follows.
+            if overrides.get(cfg, parent).cover != below:
+                return redirect(auth.safe_next(request.form.get("next")) or alb.url)
+            changes = [(parent, {"cover": None})]
+        else:
+            changes = [(parent, {"cover": below})]
 
         try:
-            overrides.set_many(cfg, [(parent, {"cover": below})])
+            overrides.set_many(cfg, changes)
         except overrides.OverrideError as e:
             log.warning("cannot record a cover pick: %s", e)
             abort(500)
-        log.info("cover for %s set to %s by %s (copied up from %s)",
-                 parent or "/", full, g.viewer.token, relpath)
+        log.info("cover for %s %s by %s (from %s)", parent or "/",
+                 "cleared" if request.form.get("clear") else f"set to {below}",
+                 g.viewer.token, relpath)
         return redirect(auth.safe_next(request.form.get("next")) or alb.url)
 
     @app.route("/logout", methods=("POST",))
@@ -542,9 +565,19 @@ def _register_routes(app: Flask, cfg: Config) -> None:
         subalbums = g.index.subalbums(alb, g.viewer)
         photos = g.index.photos(alb, g.viewer)
         pager = _paginate(cfg, len(photos), request.args.get("page"))
+        # Whether the album above is already showing this album's cover, so the
+        # menu can offer to undo rather than to repeat. Computed only for an
+        # admin looking at an album that has a parent, which is the only case
+        # that can act on it -- it costs a cover lookup, and an ordinary viewer
+        # should not pay for a control they will never see.
+        copied_up = False
+        if g.viewer and g.viewer.is_admin and alb.path:
+            target = _cover_up_target(alb, g.viewer)
+            copied_up = bool(target and overrides.get(cfg, target[0]).cover == target[1])
         return render_template(
             "album.html",
             album=alb,
+            copied_up=copied_up,
             subalbums=subalbums,
             photos=photos[pager["start"]:pager["end"]],
             pager_data=pager,

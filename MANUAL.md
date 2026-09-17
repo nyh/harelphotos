@@ -1514,6 +1514,13 @@ that album's own cover came from a subdirectory, that is what gets passed up,
 recorded relative to whichever album receives it. Like every other cover
 choice, it takes effect on the next page rather than the next scan.
 
+Come back to the same album while the one above is still showing what you gave
+it, and the item reads **Copied up ✓ — undo**, which hands that album back to
+choosing its own cover. If you have since given it a different picture, the
+undo leaves that alone — a later choice is a deliberate one. And it undoes one
+level, just as it copied one: to walk back three levels, undo from each album
+in turn.
+
 The button only ever sets the cover of the album the photo is *in*. To give a
 cover to a directory that holds nothing but subdirectories, use the command
 above with a path, or edit the overrides file — there is no way to express that

@@ -510,3 +510,37 @@ def test_the_copy_up_item_appears_on_every_album_but_the_top(project):
     assert "Copy cover up" not in c.get("/a/").get_data(as_text=True)
     assert "Copy cover up" in c.get("/a/trip/").get_data(as_text=True)
     assert "Copy cover up" in c.get("/a/trip/junk/deep/").get_data(as_text=True)
+
+
+def test_copying_a_cover_up_can_be_undone(project):
+    """The menu offers the undo itself, the way the photo page's "Make cover"
+    turns into "Cover ✓ — undo" when you return to the photograph it chose."""
+    c = client_as(project, "boss")
+    c.post("/cover/up", data={"album": "trip/junk/deep",
+                              "csrf": _token(c, "/a/trip/junk/deep/")})
+    assert overrides.get(project, "trip/junk").cover == "deep/x.jpg"
+
+    body = c.get("/a/trip/junk/deep/").get_data(as_text=True)
+    assert "Copied up ✓ — undo" in body
+    assert "Copy cover up one level" not in body
+
+    # Undo is pressed on the album that copied it up, not on the one that
+    # received it.
+    c.post("/cover/up", data={"album": "trip/junk/deep", "clear": "1",
+                              "csrf": _token(c, "/a/trip/junk/deep/")})
+    assert overrides.get(project, "trip/junk").cover is None
+
+
+def test_undo_does_not_walk_over_a_different_choice(project):
+    """If somebody has since given the album above a picture of its own, that
+    is a deliberate decision and undoing this must leave it alone -- the rule
+    the "here and above" undo already follows."""
+    c = client_as(project, "boss")
+    c.post("/cover/up", data={"album": "trip/junk/deep",
+                              "csrf": _token(c, "/a/trip/junk/deep/")})
+    overrides.set_for(project, "trip/junk", cover="deep/x.jpg")   # same, then changed
+    overrides.set_for(project, "trip/junk", cover="../a.jpg")
+
+    c.post("/cover/up", data={"album": "trip/junk/deep", "clear": "1",
+                              "csrf": _token(c, "/a/trip/junk/deep/")})
+    assert overrides.get(project, "trip/junk").cover == "../a.jpg"
