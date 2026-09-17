@@ -477,6 +477,42 @@
     var stage = document.querySelector(".stage");
     var img = document.getElementById("main");
 
+    /* Rotating the phone must resize the photograph.
+     *
+     * The page is one screenful, `block-size: 100svh`. `svh` is a static value
+     * per orientation -- deliberately, because it is the height that survives
+     * every piece of browser chrome appearing, and this page cannot scroll so
+     * chrome never retracts. The risk in a static unit is that a browser fails
+     * to recompute it when the screen turns, and the page then keeps the old
+     * orientation's height until something else forces a reflow. Reported:
+     * turn the phone and the photograph is the wrong size until you swipe to
+     * another one.
+     *
+     * Corrected only when it is provably wrong. `innerHeight` is the viewport;
+     * if the body already matches it there is nothing to fix and the inline
+     * style is removed again, so a browser that gets `svh` right is left
+     * entirely alone -- which is every desktop, and phones too.
+     */
+    function fixViewportHeight() {
+      var want = window.innerHeight;
+      if (!want) return;
+      var body = document.body;
+      // Measured without the inline style, so this never measures its own
+      // previous answer and latches on to it.
+      body.style.removeProperty("block-size");
+      if (Math.abs(body.clientHeight - want) > 2) {
+        body.style.blockSize = want + "px";
+      }
+    }
+
+    // `orientationchange` fires before the new dimensions are always readable,
+    // so the work happens on the `resize` that follows it; the extra frame is
+    // belt and braces for a browser that fires only one of the two.
+    window.addEventListener("resize", fixViewportHeight, { passive: true });
+    window.addEventListener("orientationchange", function () {
+      requestAnimationFrame(fixViewportHeight);
+    }, { passive: true });
+
     // The stylesheet hides this image's alt text, so that the filename does
     // not flash in the corner while the photograph loads. If it never loads,
     // put it back: an empty frame that does not say what is missing is worse

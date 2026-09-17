@@ -302,6 +302,36 @@ def main():
         failures += not check("...and returns to the album a second time",
                               b.eval("location.pathname"), album)
 
+        # Turning the phone must resize the photograph. The page is one
+        # screenful of `svh`, a static value per orientation, and a browser
+        # that fails to recompute it on rotation leaves the old orientation's
+        # height in place -- the photograph then stays the wrong size until
+        # something forces a reflow, which is what swiping to the next one did.
+        send = b.send
+        send("Emulation.setDeviceMetricsOverride", width=412, height=915,
+             deviceScaleFactor=2.625, mobile=True)
+        b.goto(URL)
+        b.eval("(function(){document.querySelector('#grid a').click();})()")
+        b.settle()
+        send("Emulation.setDeviceMetricsOverride", width=915, height=412,
+             deviceScaleFactor=2.625, mobile=True)
+        b.settle()
+        rotated = b.eval("(function(){var r="
+                         "document.getElementById('main').getBoundingClientRect();"
+                         "return Math.round(r.width)+'x'+Math.round(r.height);})()")
+        # The correction in app.js must stay out of the way where the browser
+        # gets svh right, or it becomes the thing that is wrong.
+        failures += not check("rotation leaves no inline height behind",
+                              b.eval("document.body.style.blockSize || ''"), "")
+        b.goto(b.eval("location.href"))
+        b.settle()
+        fresh = b.eval("(function(){var r="
+                       "document.getElementById('main').getBoundingClientRect();"
+                       "return Math.round(r.width)+'x'+Math.round(r.height);})()")
+        failures += not check("rotating matches a fresh load at that size",
+                              rotated, fresh)
+        send("Emulation.clearDeviceMetricsOverride")
+
         # The filename must not flash in the corner before the photograph
         # arrives. A browser paints alt text inside the image's box while it
         # loads, and paging is a whole page load, so every arrow press showed
