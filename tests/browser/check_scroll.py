@@ -16,6 +16,8 @@ Referrer-Policy: no-referrer.
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 import json, subprocess, time, urllib.request, sys
+from urllib.parse import urlparse
+
 import websocket
 
 PORT = 9333
@@ -63,58 +65,80 @@ try:
     cmd("Runtime.enable")
 
     goto(URL)
-    print("album loaded, height =", js("document.body.scrollHeight"))
-    js("window.scrollTo(0, 1500)")
+    album_path = urlparse(URL).path
+    height = js("document.body.scrollHeight")
+    view = js("window.innerHeight")
+    print(f"album loaded, height = {height}, window = {view}")
+
+    # Targets as a fraction of what can actually be scrolled, not absolute
+    # pixels. This asserted 1800 on an album 1830 tall, where the browser
+    # clamps to about 1030 -- so the expectation was unreachable and the album
+    # it was written against is the only one it could ever have passed on.
+    span = max(0, height - view)
+    if span < 300:
+        raise SystemExit(f"album is only {height}px tall; too short to test "
+                         "scrolling -- use one with more photographs")
+    low, mid, high = round(span * 0.35), round(span * 0.55), round(span * 0.9)
+
+    def open_first_photo():
+        """Click a tile, the way a person does.
+
+        Not `goto` of its href: the album page records "you left here by
+        opening a photograph" on a *click*, and the photo page uses that to
+        decide whether Escape is a history step. Navigating straight to the
+        URL looks to the application exactly like a shared link, which
+        deliberately does not restore anything -- so this used to measure a
+        path no reader ever takes.
+        """
+        js("document.querySelector('#grid .tile').click()")
+        time.sleep(3.0)
+
+    def press(key, vk):
+        for kind in ("keyDown", "keyUp"):
+            cmd("Input.dispatchKeyEvent", type=kind, key=key, code=key,
+                windowsVirtualKeyCode=vk, nativeVirtualKeyCode=vk)
+
+    js(f"window.scrollTo(0, {mid})")
     time.sleep(0.6)
     before = js("Math.round(window.scrollY)")
     print("scrolled to", before)
-    stored = js("sessionStorage.getItem('hp:scroll:' + location.pathname)")
-    print("sessionStorage says", stored)
+    print("sessionStorage says",
+          js("sessionStorage.getItem('hp:scroll:' + location.pathname)"))
 
-    href = js("document.querySelector('#grid .tile').href")
-    print("opening", href.split('/p/')[-1])
-    goto(href)
+    open_first_photo()
     print("on photo page:", js("location.pathname"))
 
-    # Press Escape exactly as a user would.
-    cmd("Input.dispatchKeyEvent", type="keyDown", key="Escape", code="Escape",
-        windowsVirtualKeyCode=27, nativeVirtualKeyCode=27)
-    cmd("Input.dispatchKeyEvent", type="keyUp", key="Escape", code="Escape",
-        windowsVirtualKeyCode=27, nativeVirtualKeyCode=27)
+    press("Escape", 27)
     time.sleep(3.5)
-
     where = js("location.pathname")
     after = js("Math.round(window.scrollY)")
-    print(f"after Escape:        at {where}, scrollY = {after}")
-    results = [("Escape from one photo", where.endswith("/ancient/") and abs(after - before) < 100)]
+    print(f"after Escape:        at {where}, scrollY = {after} (wanted ~{before})")
+    results = [("Escape from one photo",
+                where == album_path and abs(after - before) < 100)]
 
     # ...and after paging through several photos with the arrow keys.
-    js("window.scrollTo(0, 900)"); time.sleep(0.6)
-    goto(js("document.querySelector('#grid .tile').href"))
+    js(f"window.scrollTo(0, {low})"); time.sleep(0.6)
+    open_first_photo()
     for _ in range(3):
-        cmd("Input.dispatchKeyEvent", type="keyDown", key="ArrowRight",
-            code="ArrowRight", windowsVirtualKeyCode=39, nativeVirtualKeyCode=39)
-        cmd("Input.dispatchKeyEvent", type="keyUp", key="ArrowRight",
-            code="ArrowRight", windowsVirtualKeyCode=39, nativeVirtualKeyCode=39)
+        press("ArrowRight", 39)
         time.sleep(2.5)
     print("paged to:           ", js("location.pathname"))
-    cmd("Input.dispatchKeyEvent", type="keyDown", key="Escape", code="Escape",
-        windowsVirtualKeyCode=27, nativeVirtualKeyCode=27)
-    cmd("Input.dispatchKeyEvent", type="keyUp", key="Escape", code="Escape",
-        windowsVirtualKeyCode=27, nativeVirtualKeyCode=27)
+    press("Escape", 27)
     time.sleep(3.5)
     where2, after2 = js("location.pathname"), js("Math.round(window.scrollY)")
-    print(f"after paging+Escape: at {where2}, scrollY = {after2} (wanted ~900)")
-    results.append(("Escape after paging 3 photos", where2.endswith("/ancient/") and abs(after2 - 900) < 100))
+    print(f"after paging+Escape: at {where2}, scrollY = {after2} (wanted ~{low})")
+    results.append(("Escape after paging 3 photos",
+                    where2 == album_path and abs(after2 - low) < 100))
 
     # And the Back button must still work as it always did.
-    js("window.scrollTo(0, 1800)"); time.sleep(0.6)
-    goto(js("document.querySelector('#grid .tile').href"))
+    js(f"window.scrollTo(0, {high})"); time.sleep(0.6)
+    open_first_photo()
     cmd("Page.navigateToHistoryEntry", entryId=cmd("Page.getNavigationHistory")["entries"][-2]["id"])
     time.sleep(3.0)
     where3, after3 = js("location.pathname"), js("Math.round(window.scrollY)")
-    print(f"after Back:          at {where3}, scrollY = {after3} (wanted ~1800)")
-    results.append(("Back button", where3.endswith("/ancient/") and abs(after3 - 1800) < 200))
+    print(f"after Back:          at {where3}, scrollY = {after3} (wanted ~{high})")
+    results.append(("Back button",
+                    where3 == album_path and abs(after3 - high) < 200))
 
     print()
     for name, ok in results:
