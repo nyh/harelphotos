@@ -165,7 +165,7 @@
       try {
         sessionStorage.setItem(FROM_ALBUM_KEY, JSON.stringify({
           album: window.location.pathname,
-          depth: window.history.length
+          t: Date.now()
         }));
       } catch (err) {}
     });
@@ -265,22 +265,68 @@
     // which is not what Back means here. Replacing keeps history at
     // [album, the photo you are on], so Back always means "return to the
     // grid", however far along you have paged.
-    function go(url) { if (url) window.location.replace(url); }
+    function go(url) {
+      if (!url) return;
+      keepTicket();
+      window.location.replace(url);
+    }
 
     // Opening a photo from the grid is a normal link, so it does add one
     // entry -- which is the one Back consumes.
-    function openedFromAlbum() {
+    /* Is there an album behind us to step back to?
+     *
+     * Decided once, here, because the answer cannot change while this page is
+     * open -- and because the test is about how we *arrived*, which is only
+     * knowable on arrival.
+     *
+     * The guard is recency, not history depth. Depth was the obvious test and
+     * was wrong: `history.length === mark.depth + 1` assumes opening a
+     * photograph appends an entry, and it does not when a forward entry
+     * exists. Go album -> photo -> back -> photo and the second click
+     * *replaces* the forward entry, so the length never changes. Measured:
+     * 2 to 3 on the first click, 3 to 3 on the second. So every photograph
+     * after the first in one visit lost its way back.
+     *
+     * What actually distinguishes a click from a pasted URL is that a click
+     * writes this mark microseconds before the page loads. The window is
+     * short, and refreshing the mark below keeps paging alive indefinitely
+     * without widening it -- paging is a page load too, so it renews the
+     * lease each time.
+     *
+     * The case this still gets wrong is a deep link pasted within seconds of
+     * leaving a photograph of the same album, where Back leads somewhere
+     * else. It is a narrow window, and both outcomes put you on that album.
+     */
+    var FROM_ALBUM_TTL = 30000;
+
+    var cameFromAlbum = (function () {
       var raw;
       try { raw = sessionStorage.getItem(FROM_ALBUM_KEY); } catch (e) { return false; }
+      // Consumed, always, whatever it says. That single line is what makes
+      // this exact: the mark is a ticket for *one* page load, written by the
+      // click that caused it, and spent on arrival. A photograph opened later
+      // from a pasted link finds nothing, because the previous load took it.
+      try { sessionStorage.removeItem(FROM_ALBUM_KEY); } catch (e) {}
       if (!raw) return false;
       var mark;
       try { mark = JSON.parse(raw); } catch (e) { return false; }
-      // Same album, and exactly one entry deeper than when the tile was
-      // clicked. Both must hold: a stale mark from earlier in the session
-      // would otherwise send a deep link (a bookmark, a pasted URL) backwards
-      // out of the site entirely.
-      return mark && mark.album === nav.album &&
-             window.history.length === mark.depth + 1;
+      if (!mark || mark.album !== nav.album) return false;
+      // Belt and braces for a ticket written by a click that never arrived --
+      // the reader changed their mind, or the navigation failed.
+      return Date.now() - mark.t < FROM_ALBUM_TTL;
+    })();
+
+    // Paging replaces this page, so hand the ticket on: the next photograph is
+    // the same visit to the same album, and it reaches that page the same way
+    // the album's click reaches this one -- written microseconds before the
+    // navigation that consumes it.
+    function keepTicket() {
+      if (!cameFromAlbum) return;
+      try {
+        sessionStorage.setItem(FROM_ALBUM_KEY, JSON.stringify({
+          album: nav.album, t: Date.now()
+        }));
+      } catch (e) {}
     }
 
     // Escape and the Back button return to the album.
@@ -295,7 +341,7 @@
     // to tell the two apart, which could never work -- this site sends
     // `Referrer-Policy: no-referrer`, so the referrer is always empty.
     function backToAlbum() {
-      if (openedFromAlbum()) { window.history.back(); return; }
+      if (cameFromAlbum) { window.history.back(); return; }
       window.location.href = nav.album;
     }
 
@@ -308,7 +354,7 @@
      * but for the breadcrumb, which leads to the top of the album rather than
      * back to the place you were looking at.
      *
-     * Conditional on `openedFromAlbum` for the same reason the button is
+     * Conditional on `cameFromAlbum` for the same reason the button is
      * hidden in the markup: on a photograph opened from a shared link there is
      * nothing behind us, `backToAlbum` would fall through to a fresh
      * navigation, and an arrow that means "back" would be doing something
@@ -317,8 +363,14 @@
      * Revealed from script rather than rendered visible, because without
      * script it could not work at all. */
     var backBtn = document.getElementById("back-to-album");
-    if (backBtn && openedFromAlbum()) {
-      backBtn.hidden = false;
+    if (backBtn) {
+      // Wired unconditionally, and only its visibility is conditional. The
+      // two were tied together at first, which made a visible button with no
+      // handler possible -- and it happened: `.iconbutton` sets `display`,
+      // which beats the `hidden` attribute, so the button showed on every
+      // photograph while only some of them could act on a tap. It highlighted
+      // under the finger and did nothing. Behavior that cannot disagree with
+      // what is on screen is worth more than the saved listener.
       backBtn.addEventListener("click", function (e) {
         e.preventDefault();
         backToAlbum();
@@ -328,6 +380,7 @@
       ["pointerdown", "pointerup", "touchstart"].forEach(function (t) {
         backBtn.addEventListener(t, function (e) { e.stopPropagation(); });
       });
+      backBtn.hidden = !cameFromAlbum;
     }
 
     // Fetch the neighboring photos while this one is being looked at.

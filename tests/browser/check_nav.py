@@ -284,6 +284,24 @@ def main():
         failures += not check("...as a history step, not a new entry",
                               b.eval("history.length"), depth)
 
+        # And again, which is the case that was broken and reported: the
+        # second photograph opened from one album. The old test for "is there
+        # an album behind us" compared history.length, and the second click
+        # replaces the forward entry rather than appending, so the length never
+        # grew and the answer came back no. The arrow was visible anyway --
+        # `.iconbutton` sets `display`, which beats the `hidden` attribute --
+        # so it highlighted under the finger and did nothing at all.
+        b.eval("(function(){document.querySelector('#grid a').click();})()")
+        b.settle()
+        failures += not check("the back arrow is shown on a SECOND photo too",
+                              b.eval("(function(){var e="
+                                     "document.getElementById('back-to-album');"
+                                     "return !!e && !e.hidden;})()"), True)
+        b.eval("document.getElementById('back-to-album').click()")
+        b.settle()
+        failures += not check("...and returns to the album a second time",
+                              b.eval("location.pathname"), album)
+
         # And it stays hidden where it would be lying: a photograph reached
         # from a shared link has no album behind it to pop, so backToAlbum
         # would fall through to a fresh navigation and an arrow meaning "back"
