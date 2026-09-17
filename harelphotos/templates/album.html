@@ -21,7 +21,40 @@
         bother, and it is the one fact a folder name usually does not carry. -#}
     {%- if album.location and cfg.ui.show_gps %} <span class="sep">·</span> {{ album.location }}{% endif -%}
   </div>
+  {#- Admins only, and only where there is somewhere for it to go -- any album
+      but the top one, which has nothing above it.
+
+      Not conditioned on the album having a cover: `Index.album` does not
+      resolve one, because covers are looked up for the *cards* of subalbums
+      rather than for the album you are standing in, so `album.cover` is always
+      empty here and the item never appeared at all. The route resolves the
+      cover itself and answers 404 if there is genuinely none, which for a
+      listed album cannot happen -- a directory with no photograph beneath it
+      is not shown as an album in the first place.
+
+      The photo page can already set a cover "here and above", which writes
+      every ancestor at once -- right for a photograph buried three levels
+      down, too much when the year should change and the root should not. This
+      is the same idea one step at a time: press it here, then on the parent,
+      and stop where you like.
+
+      A form rather than a link, like every other control that changes what
+      other people see, so that no amount of prefetching or link-scanning can
+      trigger it. -#}
+  {%- if viewer and viewer.is_admin and album.path %}
+  {% call chrome.user_menu(viewer) %}
+    <form method="post" action="{{ url_for('cover_to_parent') }}">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <input type="hidden" name="album" value="{{ album.path }}">
+      <input type="hidden" name="next" value="{{ album.url }}">
+      <button type="submit" class="menu-item"
+              title="Show this album's cover on the parent album's card too"
+        >Copy cover up one level</button>
+    </form>
+  {% endcall %}
+  {%- else %}
   {{ chrome.user_menu(viewer) }}
+  {%- endif %}
 </header>
 
 <main>

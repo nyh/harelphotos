@@ -1497,6 +1497,23 @@ photo and the button reads **Cover ✓ — undo**, which goes back to choosing
 automatically. A pick naming a photo that has since been deleted quietly falls
 back to the automatic choice rather than leaving a blank card.
 
+#### Passing a cover upwards
+
+The photo page also offers **Make cover, here and above**, which gives the same
+photograph to every album from the one holding it to the top. That is right for
+a photograph buried three levels down, and too much when the month and the year
+should show it but the whole collection should not.
+
+For that, open the **album** and choose **Copy cover up one level** from the ⋮
+menu. It takes whatever that album is currently showing and gives it to the
+album directly above, and stops there. Do it again on the parent to climb
+another level, and stop wherever you like.
+
+The photograph does not have to belong to the album you are standing in — if
+that album's own cover came from a subdirectory, that is what gets passed up,
+recorded relative to whichever album receives it. Like every other cover
+choice, it takes effect on the next page rather than the next scan.
+
 The button only ever sets the cover of the album the photo is *in*. To give a
 cover to a directory that holds nothing but subdirectories, use the command
 above with a path, or edit the overrides file — there is no way to express that

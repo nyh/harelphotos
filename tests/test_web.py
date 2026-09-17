@@ -972,3 +972,4 @@ def test_the_source_link_can_point_at_a_fork(scanned):
     body = app.test_client().get("/login").get_data(as_text=True)
     assert "my-fork" in body
     assert "github.com/nyh/harelphotos" not in body
+

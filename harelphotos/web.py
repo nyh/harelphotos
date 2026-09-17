@@ -408,6 +408,56 @@ def _register_routes(app: Flask, cfg: Config) -> None:
                  f" (and {len(changes) - 1} above)" if len(changes) > 1 else "")
         return redirect(auth.safe_next(request.form.get("next")) or alb.url)
 
+    @app.route("/cover/up", methods=("POST",))
+    def cover_to_parent():
+        """Give this album's cover to the album one level above it.
+
+        The photo page can already set a cover "here and above", which writes
+        every ancestor at once. That is the right thing for a photograph buried
+        three levels down, and too much when only the year should change and
+        not the root. This is the same idea taken one step at a time: press it
+        on the album, then on its parent, and stop where you like.
+
+        Nothing is asked for but the album, because the photograph is whatever
+        that album is showing *now* -- which may itself have been inherited from
+        a descendant, and works the same either way.
+        """
+        if not (g.viewer and g.viewer.is_admin):
+            abort(403)
+        if not auth.check_csrf():
+            abort(400)
+        relpath = _clean_path(request.form.get("album", ""))
+        if not relpath:
+            # The top album has nothing above it.
+            abort(400)
+        alb = g.index.album(relpath, g.viewer)
+        if alb is None:
+            abort(404)
+
+        cover = g.index.cover_photo(alb, g.viewer)
+        if cover is None:
+            abort(404)
+
+        parent = relpath.rsplit("/", 1)[0] if "/" in relpath else ""
+        # `relpath`, not `url_relpath`: the latter is percent-encoded for a URL
+        # and the overrides file holds real names. A photograph with a space in
+        # it would otherwise be written as `a%20b.jpg` and never found again.
+        full = cover.relpath
+        if parent and not full.startswith(parent + "/"):
+            # The cover resolved to something outside the parent's subtree,
+            # which cannot be expressed as a path relative to it.
+            abort(400)
+        below = full[len(parent) + 1:] if parent else full
+
+        try:
+            overrides.set_many(cfg, [(parent, {"cover": below})])
+        except overrides.OverrideError as e:
+            log.warning("cannot record a cover pick: %s", e)
+            abort(500)
+        log.info("cover for %s set to %s by %s (copied up from %s)",
+                 parent or "/", full, g.viewer.token, relpath)
+        return redirect(auth.safe_next(request.form.get("next")) or alb.url)
+
     @app.route("/logout", methods=("POST",))
     def logout():
         """POST only, and CSRF-checked.

@@ -341,13 +341,21 @@ def test_the_button_offers_to_undo_on_the_photo_that_is_the_cover(project):
     assert overrides.get(project, "trip").cover is None
 
 
-def test_no_cover_control_appears_on_an_album_page(project):
-    """It was a footer on every album, which is a lot of furniture for a rare
-    action -- and it could not express a nested pick anyway."""
+def test_no_cover_picker_appears_on_an_album_page(project):
+    """Choosing *which* photograph is the cover belongs on the photo page.
+
+    It was a footer on every album once, which is a lot of furniture for a rare
+    action -- and it could not express a nested pick anyway.
+
+    Narrowed when "copy cover up one level" was added, which is a different
+    action: it takes no photograph, names none, and lives in the menu rather
+    than in a strip across the page. What must not come back is the picker.
+    """
     overrides.set_for(project, "trip", cover="c.jpg")
     body = client_as(project, "boss").get("/a/trip/").get_data(as_text=True)
     assert "automatically" not in body
-    assert "/cover" not in body
+    assert "Make cover" not in body
+    assert 'action="/cover"' not in body        # the picker's own form
 
 
 def test_making_a_cover_all_the_way_up(project):
@@ -431,3 +439,74 @@ def test_the_offer_is_absent_where_there_is_nothing_above(project):
     body = c.get("/p/trip/a.jpg").get_data(as_text=True)
     assert ">Make cover</button>" in body
     assert "here and above" in body      # trip itself sits under the root
+
+
+# ------------------------------------------------- copying a cover up a level
+
+def _token(c, url="/a/trip/"):
+    m = re.search(r'name="csrf" value="([^"]+)"', c.get(url).get_data(as_text=True))
+    return m.group(1) if m else ""
+
+
+def test_copying_a_cover_up_moves_it_exactly_one_level(project):
+    """Setting a cover "here and above" writes every ancestor at once, which is
+    too much when one level should change and the rest should not. This does
+    the same thing a step at a time.
+
+    The value written has to be relative to the album receiving it: the parent
+    of `trip/junk/deep` refers to that photograph as `deep/x.jpg`.
+    """
+    c = client_as(project, "boss")
+    r = c.post("/cover/up", data={"album": "trip/junk/deep",
+                                  "csrf": _token(c, "/a/trip/junk/deep/")})
+    assert r.status_code in (302, 303), r.status_code
+    assert overrides.get(project, "trip/junk").cover == "deep/x.jpg"
+    # One level only: neither the grandparent nor the root is touched.
+    assert overrides.get(project, "trip").cover is None
+    assert overrides.get(project, "").cover is None
+
+
+def test_copying_a_cover_up_can_be_repeated_to_climb(project):
+    """Which is the whole point: press it again on the parent."""
+    c = client_as(project, "boss")
+    c.post("/cover/up", data={"album": "trip/junk/deep",
+                              "csrf": _token(c, "/a/trip/junk/deep/")})
+    c.post("/cover/up", data={"album": "trip/junk",
+                              "csrf": _token(c, "/a/trip/junk/")})
+    assert overrides.get(project, "trip").cover == "junk/deep/x.jpg"
+    assert overrides.get(project, "").cover is None
+
+
+def test_copying_a_cover_up_refuses_from_the_top_album(project):
+    """The top album has nothing above it, and an empty path must not be read
+    as naming the root itself."""
+    c = client_as(project, "boss")
+    assert c.post("/cover/up",
+                  data={"album": "", "csrf": _token(c, "/a/")}).status_code == 400
+
+
+def test_only_an_admin_may_copy_a_cover_up(project):
+    """It changes what everyone sees."""
+    c = client_as(project, "sis")
+    assert "Copy cover up" not in c.get("/a/trip/junk/deep/").get_data(as_text=True)
+    r = c.post("/cover/up", data={"album": "trip/junk/deep",
+                                  "csrf": _token(c, "/a/trip/junk/deep/")})
+    assert r.status_code == 403
+    assert overrides.get(project, "trip/junk").cover is None
+
+
+def test_copying_a_cover_up_needs_the_csrf_token(project):
+    c = client_as(project, "boss")
+    r = c.post("/cover/up", data={"album": "trip/junk/deep", "csrf": "wrong"})
+    assert r.status_code == 400
+    assert overrides.get(project, "trip/junk").cover is None
+
+
+def test_the_copy_up_item_appears_on_every_album_but_the_top(project):
+    """It was conditioned on `album.cover` at first and so appeared nowhere:
+    `Index.album` does not resolve a cover, because covers are looked up for
+    the *cards* of subalbums rather than for the album being displayed."""
+    c = client_as(project, "boss")
+    assert "Copy cover up" not in c.get("/a/").get_data(as_text=True)
+    assert "Copy cover up" in c.get("/a/trip/").get_data(as_text=True)
+    assert "Copy cover up" in c.get("/a/trip/junk/deep/").get_data(as_text=True)
