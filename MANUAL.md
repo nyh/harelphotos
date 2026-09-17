@@ -240,8 +240,8 @@ landmark names and village-level detail — see
 [`init --geonames`](#harelphotos-init---geonames) for what each costs:
 
 ```sh
-harelphotos init --geonames --landmarks     # add --villages for hamlets
-harelphotos scan                            # geocodes as it goes
+harelphotos init --geonames --villages --landmarks   # or just --geonames, if
+harelphotos scan                                     # disk is tight
 ```
 
 The reason to decide first is that a scan only resolves photographs that have
@@ -632,11 +632,40 @@ before this, `harelphotos geocode --force` refreshes the stored names.
 
 ### `harelphotos init --geonames`
 
-Download and build the offline place-name dataset that `geocode` uses. Run it
-once:
+Download and build the offline place-name dataset that place names come from.
+Run it once, before your first scan.
+
+**There are three flags and really only two answers.** `--villages` and
+`--landmarks` want the *same* 421 MB download, and it is cached and shared — so
+once you have paid for it, having only one of the two saves a download and
+costs you the other's detail for nothing. Pick by how much disk you can spare:
 
 ```sh
+# Small: towns only. 14 MB to fetch, 18 MB on disk.
 harelphotos init --geonames
+
+# Everything: villages and landmarks too. One 421 MB download, ~410 MB on disk.
+harelphotos init --geonames --villages --landmarks
+```
+
+The small one names the nearest town, which in a city is exactly right and in
+the countryside can be kilometres off. The full one adds hamlets with no
+recorded population — 88% of Germany's villages are missing from the small
+dataset — and names parks, airports, museums and theme parks rather than the
+town they sit in. On a server with a small disk take the first; on a machine
+with room, the second is the one that produces "Muggenbrunn" and "Europa-Park"
+instead of "Todtnau" and "Rust".
+
+Each flag is described in full below. To see which you actually installed —
+easy to forget months later — ask:
+
+```sh
+harelphotos check --env
+```
+
+```
+[  ok  ] place names   414 MB, 2,013,297 places including villages
+[  ok  ] landmarks     1,982,441
 ```
 
 It fetches about 14 MB from [geonames.org](https://www.geonames.org/) —

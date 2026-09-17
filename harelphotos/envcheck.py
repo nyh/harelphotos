@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 import shutil
 import socket
+import sqlite3
 import ssl
 import subprocess
 import urllib.request
@@ -260,10 +261,44 @@ def _index(r: Report, cfg: Config) -> None:
     r.add(OK if ready == photos else WARN, "images generated",
           f"{ready:,}/{photos:,}" + ("" if ready == photos else " — run 'harelphotos scan'"))
 
+    _place_dataset(r, cfg)
+
+
+def _place_dataset(r: Report, cfg: Config) -> None:
+    """Say which of the optional datasets are actually installed.
+
+    "I am not even sure what I used in my own setup" is a fair thing to say
+    about three flags run once, months ago. The database has recorded the
+    answer all along -- `meta` holds the place count, whether the villages dump
+    was used, and the landmark count -- and nothing ever showed it.
+    """
     geo = cfg.state_dir / "geonames.sqlite"
-    r.add(OK if geo.exists() else INFO, "place names",
-          f"{geo.stat().st_size / 1e6:.0f} MB" if geo.exists()
-          else "not installed (harelphotos init --geonames)")
+    if not geo.exists():
+        r.add(INFO, "place names",
+              "not installed (harelphotos init --geonames)")
+        return
+
+    size = f"{geo.stat().st_size / 1e6:.0f} MB"
+    meta: dict[str, str] = {}
+    try:
+        conn = sqlite3.connect(f"file:{geo}?mode=ro", uri=True)
+        meta = {k: v for k, v in conn.execute("SELECT key, value FROM meta")}
+        conn.close()
+    except sqlite3.Error as e:
+        r.add(WARN, "place names", f"{size}, but unreadable: {e}")
+        return
+
+    places = int(meta.get("places", 0))
+    villages = meta.get("villages") == "1"
+    landmarks = int(meta.get("landmarks", 0))
+    r.add(OK, "place names",
+          f"{size}, {places:,} places"
+          + (" including villages" if villages else " (towns only; --villages "
+             "adds hamlets)"))
+    r.add(OK if landmarks else INFO, "landmarks",
+          f"{landmarks:,}" if landmarks
+          else "none (harelphotos init --landmarks adds parks, airports "
+               "and the like)")
 
 
 def _apache(r: Report, cfg: Config | None) -> None:
