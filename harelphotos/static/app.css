@@ -59,11 +59,22 @@ body {
    * recorded the guess as though it were the finding, which then misled two
    * later investigations.
    *
-   * What `100%` is actually for is the thing being chased now: text inflating
-   * on *rotation*, which is in every CSS boilerplate for a reason. `auto`
-   * hands the browser permission to rescale, and a browser that recomputes
-   * that scale wrongly after the screen turns has been given the rope to do
-   * it with. */
+   * What `100%` is actually for is text inflating on *rotation*, which is in
+   * every CSS boilerplate for a reason. `auto` hands the browser permission to
+   * rescale text, and a browser that recomputes that scale wrongly when the
+   * screen turns has been given the rope to do it with.
+   *
+   * Confirmed on 2026-09-17: with `auto`, turning the phone left the whole
+   * single-photo page scaled wrongly -- text and photograph together, too
+   * large one way and too small the other, correct again after any fresh page
+   * load. Restoring `100%` fixed it. An earlier attempt scoped the same
+   * property to the top bar alone and did nothing, which was the clue that the
+   * inflation was not confined to the text we could see.
+   *
+   * So: leave this at `100%`. It was changed to `auto` once already, on a
+   * theory about accessibility text-scaling that turned out to be wrong in
+   * both of its premises, and the rotation fault it caused took most of a day
+   * to track down. */
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
