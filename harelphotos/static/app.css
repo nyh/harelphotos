@@ -49,17 +49,23 @@ body {
   background: var(--bg);
   color: var(--fg);
   font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  /* `100%` here -- "browser, never adjust my text" -- is in every CSS
-     boilerplate, for a real iOS Safari bug where text inflates on rotation.
-     That bug needs a page with no `width=device-width` viewport to bite, and
-     base.html has had one since the first commit, so we were paying for a fix
-     we did not need. What we were paying was Android's Accessibility "Text
-     scaling" setting, which Chrome applies through this same mechanism: a
-     reader who had asked their phone for larger text got ours at 15px anyway,
-     which is exactly why the site read smaller than everything else on the
-     device. `auto` is the initial value and simply gets out of the way. */
-  -webkit-text-size-adjust: auto;
-  text-size-adjust: auto;
+  /* "Browser, do not rescale my text."
+   *
+   * This was `auto` for a while, on the theory that it was blocking Android's
+   * Accessibility text-scaling and so making the site read smaller than the
+   * rest of the phone. That theory was wrong twice over: the site read small
+   * because Chrome was in "Request desktop site" mode, which is what actually
+   * fixed it, and the reader has no text-scaling set at all. The comment here
+   * recorded the guess as though it were the finding, which then misled two
+   * later investigations.
+   *
+   * What `100%` is actually for is the thing being chased now: text inflating
+   * on *rotation*, which is in every CSS boilerplate for a reason. `auto`
+   * hands the browser permission to rescale, and a browser that recomputes
+   * that scale wrongly after the screen turns has been given the rope to do
+   * it with. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 a { color: inherit; text-decoration: none; }
