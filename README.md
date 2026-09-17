@@ -135,12 +135,15 @@ JavaScript framework, and no database server.
 
 - [`MANUAL.md`](MANUAL.md) — **how to use it.** Start here.
 - [`INSTALL.md`](INSTALL.md) — putting it on a server with TLS.
+- [`tests/README.md`](tests/README.md) — the three test suites, what belongs in
+  each, and how to run them. Worth reading before changing anything: two of the
+  three do not run by default.
 
 Of secondary interest, kept for the record:
 
 - [`IDEAS.md`](IDEAS.md) — what might come next, and what deliberately should not.
-- [`DESIGN.md`](DESIGN.md) — the design it was built from, including the
-  measurements behind the decisions.
+- [`DESIGN.md`](DESIGN.md) — a historical record of how the design was reasoned
+  out, deliberately not kept current. Read it for why, never for what.
 - [`PLAN`](PLAN) — the original statement of intent, before any of it existed.
 
 ## Licence
