@@ -199,7 +199,24 @@ h2.section:first-child { margin-block-start: 0.25rem; }
 .grid { display: flex; flex-wrap: wrap; gap: var(--gap); }
 
 .grid .tile {
-  flex: 1 1 calc(var(--ar, 1) * 180px);
+  /* The shape comes from the aspect ratio, never from flex.
+   *
+   * This was `flex: 1 1 calc(var(--ar) * 180px)`, and `flex-grow: 1` hands
+   * every tile in a line an *equal* share of the leftover space -- so a narrow
+   * portrait tile was stretched by the same number of pixels as a panorama
+   * beside it. Measured on a mixed album: the shapes were out by 21% at the
+   * median and 139% at the worst, a photograph of true aspect 0.50 drawn at
+   * 1.19 and then cropped by `object-fit: cover` to fit. That is what showed
+   * for the moment before app.js laid the rows out properly, and on a reload,
+   * with the thumbnails already cached, it was long enough to see.
+   *
+   * `aspect-ratio` against a definite height gives every tile exactly its own
+   * shape, with no arithmetic and nothing to get wrong. The cost is that rows
+   * no longer stretch to the full width, so without JavaScript the right edge
+   * is ragged rather than flush -- a fair trade for never showing a
+   * photograph in the wrong shape. */
+  flex: none;
+  aspect-ratio: var(--ar, 1);
   block-size: 180px;
   overflow: hidden;
   border-radius: 3px;
@@ -495,7 +512,7 @@ h2.section:first-child { margin-block-start: 0.25rem; }
 }
 
 @media (max-width: 600px) {
-  .grid .tile { block-size: 120px; flex-basis: calc(var(--ar, 1) * 120px); }
+  .grid .tile { block-size: 120px; }
 
   /* Two columns of album cards, never three. At a 140px minimum a 480px-wide
      phone fitted a third column, giving 141px covers with a title beneath

@@ -114,6 +114,39 @@ def main():
             for r in over:
                 print(f"           {r['n']} tiles totalling {r['total']}px "
                       f"in a {v['gw']}px grid")
+        # The grid before app.js runs must already show every photograph in
+        # its own shape.
+        #
+        # It did not. `flex: 1 1 <basis>` hands each tile in a line an equal
+        # share of the leftover space, so a narrow portrait tile was stretched
+        # by as many pixels as a panorama beside it: 21% out at the median and
+        # 139% at the worst, a photograph of true aspect 0.50 drawn at 1.19 and
+        # cropped to fit. Invisible until the site got fast enough that the
+        # first paint finished before the script ran, and then plainly visible
+        # on every reload.
+        send("Emulation.setScriptExecutionDisabled", value=True)
+        send("Emulation.setDeviceMetricsOverride", width=1280, height=900,
+             deviceScaleFactor=1, mobile=False)
+        send("Page.navigate", url=URL)
+        time.sleep(3.0)
+        worst = send("Runtime.evaluate", returnByValue=True, expression="""
+          (function(){
+          var w=0, t=document.querySelectorAll('#grid .tile');
+          for (var i=0;i<t.length;i++){
+            var r=t[i].getBoundingClientRect();
+            if(!r.height) continue;
+            var want=parseFloat(t[i].dataset.ar);
+            if(!want) continue;
+            w=Math.max(w, Math.abs((r.width/r.height)/want - 1));
+          }
+          return Math.round(w*1000)/10;})()""").get("result", {}).get("value")
+        send("Emulation.setScriptExecutionDisabled", value=False)
+        ok = worst is not None and worst < 2
+        failures += not ok
+        print(f"[{'  ok  ' if ok else ' FAIL '}] without JavaScript, the worst "
+              f"tile is {worst}% off its true shape"
+              + ("" if ok else "  (expected under 2%)"))
+
     finally:
         chrome.terminate()
         try:
