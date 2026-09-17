@@ -476,6 +476,18 @@
     // reader an implementation of it.
     var stage = document.querySelector(".stage");
     var img = document.getElementById("main");
+
+    // The stylesheet hides this image's alt text, so that the filename does
+    // not flash in the corner while the photograph loads. If it never loads,
+    // put it back: an empty frame that does not say what is missing is worse
+    // than a moment of text. Registered before the guard below, because it has
+    // nothing to do with zooming and should work without PointerEvent.
+    if (img) {
+      img.addEventListener("error", function () {
+        img.classList.add("load-failed");
+      });
+    }
+
     if (!stage || !window.PointerEvent) return;
 
     /* How far in a zoom may go.

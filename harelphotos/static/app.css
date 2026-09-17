@@ -298,6 +298,20 @@ h2.section:first-child { margin-block-start: 0.25rem; }
  * fetch, and the geometry is settled before the first paint.
  */
 .stage img {
+  /* The `alt` text must not flash before the photograph arrives.
+   *
+   * A browser paints alt text inside the image's box while the image is still
+   * loading, and paging is a whole page load, so every arrow press showed the
+   * filename in the top corner for a moment before the picture replaced it.
+   *
+   * Hidden by making the element's text transparent rather than by removing
+   * the alt text, which is the part that matters: `alt` is what a screen
+   * reader announces and what a search of the page finds, and neither cares
+   * about colour. The one case this would cost is an image that genuinely
+   * fails, where the filename is worth seeing -- app.js restores the colour
+   * then, through the class below. It cannot be an inline `onerror`, because
+   * the Content-Security-Policy here allows no inline script. */
+  color: transparent;
   position: absolute;
   inset: 0.5rem;
   inline-size: calc(100% - 1rem);
@@ -319,6 +333,9 @@ h2.section:first-child { margin-block-start: 0.25rem; }
    exactly the edges a thumb reaches for when panning, and a tap that lands on
    one pages away from the photograph being examined. */
 .stage.zoomed .nav { opacity: 0; pointer-events: none; }
+
+/* A photograph that really did fail to load still says which one it was. */
+.stage img.load-failed { color: var(--fg); }
 
 /* The way back out of a photograph, for a window with no browser chrome.
  *

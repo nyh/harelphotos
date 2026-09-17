@@ -302,6 +302,32 @@ def main():
         failures += not check("...and returns to the album a second time",
                               b.eval("location.pathname"), album)
 
+        # The filename must not flash in the corner before the photograph
+        # arrives. A browser paints alt text inside the image's box while it
+        # loads, and paging is a whole page load, so every arrow press showed
+        # it for a moment.
+        b.goto(URL)
+        b.eval("(function(){document.querySelector('#grid a').click();})()")
+        b.settle()
+        failures += not check(
+            "the alt text is invisible while the photograph loads",
+            b.eval("getComputedStyle(document.getElementById('main')).color"),
+            "rgba(0, 0, 0, 0)")
+        failures += not check(
+            "...and the alt text is still there for a screen reader",
+            b.eval("!!document.getElementById('main').getAttribute('alt')"), True)
+
+        # But an image that genuinely fails must say which one it was, rather
+        # than leaving an empty frame.
+        b.eval("(function(){var i=document.getElementById('main');"
+               "i.removeAttribute('srcset');i.removeAttribute('sizes');"
+               "i.src='/i/512/definitely/not/here.jpg';})()")
+        b.settle()
+        failures += not check("a photograph that fails shows its name again",
+                              b.eval("getComputedStyle("
+                                     "document.getElementById('main')).color"
+                                     " !== 'rgba(0, 0, 0, 0)'"), True)
+
         # And it stays hidden where it would be lying: a photograph reached
         # from a shared link has no album behind it to pop, so backToAlbum
         # would fall through to a fresh navigation and an arrow meaning "back"
