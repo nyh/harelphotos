@@ -286,6 +286,13 @@ h2.section:first-child { margin-block-start: 0.25rem; }
      On a desktop, and in an installed application with no chrome at all, the
      three are the same number.
 
+     `dvh` was tried again on 2026-09-17 and put both faults back at once: the
+     photograph sat under the navigation bar in portrait and overflowed the
+     bottom in landscape. It was tried because this page alone is laid out
+     wrongly after a *rotation*, and a static unit was the obvious suspect --
+     but `dvh` rotates just as badly, so the unit is not the cause and swapping
+     it only costs the two things it fixes. Do not swap it again.
+
      The padding is the other half: `viewport-fit=cover` in base.html asks the
      browser to lay out *behind* the system bars, which is what gives an
      installed site the whole screen -- and it means nothing is kept clear of
