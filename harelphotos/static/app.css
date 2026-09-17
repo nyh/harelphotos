@@ -299,28 +299,6 @@ h2.section:first-child { margin-block-start: 0.25rem; }
 .photo-page .viewer { flex: 1; min-block-size: 0; }
 .viewer-bar { background: var(--bg); }
 
-/* EXPERIMENT, to be judged on a real phone and kept or reverted.
- *
- * Chrome on Android scales text by a multiplier of its own. `text-size-adjust:
- * auto` on `body` grants that -- deliberately, so an Android text-scaling
- * preference reaches this site -- and the same permission lets Chrome
- * recompute the multiplier, which it gets wrong after a rotation: the previous
- * orientation's value is kept. Portrait earns a larger multiplier than
- * landscape, so turning the phone one way makes this bar's text too big and
- * the other way too small, and a fresh page load is always right.
- *
- * It matters beyond the text. A taller bar leaves less height for the
- * photograph, so the picture is drawn at the wrong size too -- both reported
- * symptoms from one cause.
- *
- * Pinned here only. The rest of the site keeps `auto`, so album titles,
- * captions and the info panel still follow the reader's own setting. What this
- * costs is that the breadcrumb and the date line stop following it, and those
- * are already the two pieces of text sized by hand for a phone. Whether that
- * is a fair trade is a question for the phone, not for me. */
-.viewer .topbar { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
-
-
 .stage {
   position: relative;
   flex: 1;
