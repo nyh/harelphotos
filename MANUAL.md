@@ -1,6 +1,6 @@
-# harelphotos — manual
+# harelphotos
 
-**harelphotos turns a directory tree of photographs into a private web album.**
+**A private web album over a directory tree of photographs.**
 
 You point it at a directory. It reads the photographs where they are, without
 moving, renaming or writing to a single one of them, and records what it finds
