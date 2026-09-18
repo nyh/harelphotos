@@ -780,10 +780,48 @@ album simply will not appear:
   photo tree".
 
 So the counting has to learn about links: a directory's links count towards its
-subalbum count, and a directory with links is not empty. Decide deliberately
-whether a link's *photographs* also count towards `n_photos_rec` — counting them
-makes "trips — 1,240 photos" read correctly on the card, and means the same
-photograph is counted twice in the collection's total.
+subalbum count, and a directory with links is not empty.
+
+**"trips — 1,240 photos" without double-counting anything.** The obvious way —
+letting a link's photographs flow into `n_photos_rec` — breaks the moment the
+links and the albums they point at share an ancestor, which is the normal case:
+that ancestor counts them twice, and so does everything above it, up to the
+collection's own total.
+
+Keep two numbers instead:
+
+- **`n_photos_rec` stays exactly what it is** — the bottom-up tree sum, every
+  photograph counted once, links contributing nothing. Ancestors keep summing
+  only this, so nothing above a links directory can double-count, including the
+  case where the links and their targets sit under one parent.
+- **`n_photos_linked` is new**, and is only ever *displayed*. For a directory
+  with links it is the sum of each target's `n_photos_rec`; the card shows
+  `n_photos_rec + n_photos_linked`, so `trips` reads 1,240 while contributing
+  zero upwards.
+
+This is exactly right rather than merely convenient, because every link target
+is itself somewhere under `photo_root` and so is already counted, once, by every
+ancestor that really contains it. The collection's total stays the true number
+of photographs. What a reader gives up is that `special/` holding a `trips/`
+whose targets live under `2026/` does not include those in its own total — which
+is correct: they are not beneath it.
+
+Two things that make it easy:
+
+- **A second pass, after the rollup.** `rollup()` works deepest-first so each
+  parent can add up children that are already final; a link may point anywhere,
+  including somewhere not yet finalized. Compute `n_photos_linked` in a sweep
+  of its own once every `n_photos_rec` is settled.
+- **Cycles cannot recurse.** The linked count sums targets' *tree* counts, never
+  their linked counts, so a link to a directory of links adds that directory's
+  real photographs and stops. No depth limit is needed for the arithmetic — only
+  for walking links in the interface.
+
+One honest wrinkle, inherited rather than introduced: these counts are
+permission-blind. `rollup()` counts every photograph in a directory regardless of
+who is asking, so the number on a card can already exceed what a particular
+reader may see, and a linked count would be no different. Worth knowing before
+someone reports it as a bug in links.
 
 **And a link to something the reader may not see must not appear at all**,
 exactly as `subalbums()` already drops what `_may_view` refuses. Otherwise the
