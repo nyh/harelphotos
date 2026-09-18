@@ -230,3 +230,139 @@ def test_a_read_only_open_of_an_older_index_asks_for_a_scan_rather_than_a_delete
         db_mod.open_index(path, read_only=True)
     assert "scan" in str(e.value)
     assert "delete" not in str(e.value).lower()
+
+
+def test_the_migration_does_not_cost_a_single_re_encode(tmp_path, capfd):
+    """The whole reason the migration exists, asserted end to end.
+
+    Re-encoding this collection is over a week of work on the machine it runs
+    on, so "adding a column is free" cannot be left as an argument about which
+    code paths do what. This builds a version 1 index with real derived images
+    beside it, runs the actual `harelphotos scan` command with no arguments,
+    and requires that afterwards every derived file on disk is byte for byte
+    the file that was there before -- down to its modification time, so that a
+    re-encode producing identical output would still be caught.
+    """
+    import hashlib
+    import sqlite3
+
+    from harelphotos import cli, db as db_mod
+
+    from . import fixtures
+
+    photos = tmp_path / "pictures"
+    for name in ("a.jpg", "b.jpg"):
+        fixtures.make_jpeg(photos / "2019" / name, size=(900, 600))
+    fixtures.make_jpeg(photos / "2019" / "sub" / "c.jpg", size=(900, 600))
+    state = tmp_path / "state"
+    state.mkdir()
+    (tmp_path / "secret_key").write_bytes(b"0" * 32)
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text(
+        f'photo_root = "{photos}"\n'
+        f'derived_root = "{state / "derived"}"\n'
+        f'index_db = "{state / "index.sqlite"}"\n'
+        f'users_file = "{tmp_path / "users.toml"}"\n'
+        f'secret_key_file = "{tmp_path / "secret_key"}"\n'
+        f'[scan]\njobs = 1\n'
+        f'[encode]\nspeed = 10\n', encoding="utf-8")
+    db_mod.create_index(state / "index.sqlite").close()      # what `init` does
+
+    assert cli.main(["-q", "-c", str(cfg_path), "scan"]) == 0
+
+    def snapshot():
+        out = {}
+        for p in sorted((state / "derived").rglob("*")):
+            if p.is_file():
+                st = p.stat()
+                out[str(p.relative_to(state))] = (
+                    st.st_mtime_ns, hashlib.sha256(p.read_bytes()).hexdigest())
+        return out
+
+    before = snapshot()
+    assert len(before) >= 3, "the fixture must actually have produced derivatives"
+
+    index = state / "index.sqlite"
+    conn = sqlite3.connect(index)
+    conn.row_factory = sqlite3.Row
+    keys_before = {r["id"]: r["deriv_key"]
+                   for r in conn.execute("SELECT id, deriv_key FROM photos")}
+    assert all(keys_before.values()), "every photo should have been derived"
+
+    # Put the index back to version 1, the state every existing index is in.
+    import re
+    for sql in db_mod.MIGRATIONS[1]:
+        conn.execute(f"ALTER TABLE dirs DROP COLUMN {re.search(r'ADD COLUMN (\w+)', sql).group(1)}")
+    conn.execute("UPDATE meta SET value = '1' WHERE key = 'schema_version'")
+    conn.commit()
+    conn.close()
+
+    # Exactly what the upgrade instructions say to run. Not --full, which is
+    # the one documented way to ask for the re-encode this test forbids.
+    capfd.readouterr()
+    assert cli.main(["-q", "-c", str(cfg_path), "scan"]) == 0
+
+    # And it says so, rather than upgrading silently inside whichever command
+    # happened to open the index first.
+    said = capfd.readouterr().err
+    assert "schema version 1 to 2" in said
+    assert "no derived image was regenerated" in said.replace("\n", " ")
+
+    conn = sqlite3.connect(index)
+    conn.row_factory = sqlite3.Row
+    assert db_mod.schema_version(conn) == db_mod.SCHEMA_VERSION      # it migrated
+    keys_after = {r["id"]: r["deriv_key"]
+                  for r in conn.execute("SELECT id, deriv_key FROM photos")}
+    conn.close()
+
+    assert keys_after == keys_before
+    assert snapshot() == before
+
+
+def test_an_interrupted_migration_leaves_nothing_half_done(tmp_path):
+    """Killed halfway, the upgrade must roll back rather than leave a database
+    that says version 1 and already has the new columns: the next attempt would
+    fail on "duplicate column name", and the obvious way out of that is to
+    delete an index that costs a week of encoding to rebuild.
+    """
+    import sqlite3
+
+    from harelphotos import db as db_mod
+
+    path = tmp_path / "index.sqlite"
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        "CREATE TABLE dirs (id INTEGER PRIMARY KEY);"
+        "CREATE TABLE photos (id INTEGER PRIMARY KEY, deriv_key TEXT);"
+        "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);"
+    )
+    conn.execute("INSERT INTO meta VALUES ('schema_version', '1')")
+    conn.execute("INSERT INTO photos (deriv_key) VALUES ('expensive')")
+    conn.commit()
+    conn.close()
+
+    # The last statement of the upgrade fails, standing in for the process
+    # being killed at the worst possible moment.
+    doomed = dict(db_mod.MIGRATIONS)
+    doomed[1] = db_mod.MIGRATIONS[1] + ("ALTER TABLE nonexistent ADD COLUMN x",)
+    real = db_mod.MIGRATIONS
+    db_mod.MIGRATIONS = doomed
+    try:
+        with pytest.raises(sqlite3.OperationalError):
+            db_mod.open_index(path)
+    finally:
+        db_mod.MIGRATIONS = real
+
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    assert db_mod.schema_version(conn) == 1                  # still version 1
+    assert [r["name"] for r in conn.execute("PRAGMA table_info(dirs)")] == ["id"]
+    assert conn.execute("SELECT deriv_key FROM photos").fetchone()[0] == "expensive"
+    conn.close()
+
+    # ...and so the real upgrade still works afterwards, rather than being
+    # stuck on a column that is already there.
+    conn = db_mod.open_index(path)
+    assert db_mod.schema_version(conn) == db_mod.SCHEMA_VERSION
+    assert conn.execute("SELECT deriv_key FROM photos").fetchone()[0] == "expensive"
+    conn.close()

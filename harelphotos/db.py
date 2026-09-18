@@ -95,8 +95,10 @@ CREATE INDEX photos_stale ON photos(hdr_stale) WHERE hdr_stale = 1;
 -- Unused. Login throttling moved to its own auth.sqlite: it was the only
 -- thing the web process wrote, and SQLite permits one writer at a time, so in
 -- here it collided with a running scan and logging in failed with "database is
--- locked". Left in place only because removing it would mean a schema bump and
--- a full re-index; it should go the next time the version changes anyway.
+-- locked". Kept only because it costs an empty table. (It was left here when a
+-- schema bump still meant re-indexing the whole collection; now that MIGRATIONS
+-- exists a DROP TABLE would be safe, and it can go whenever the schema next
+-- changes for a reason of its own.)
 CREATE TABLE login_attempts (
   key       TEXT PRIMARY KEY,
   failures  INTEGER NOT NULL DEFAULT 0,
@@ -222,6 +224,22 @@ MIGRATIONS: dict[int, tuple[str, ...]] = {
 }
 
 
+def _announce_migration(path: Path, was, now: int) -> None:
+    """Say that the index was upgraded, and that it did not cost anything.
+
+    This module otherwise prints nothing -- it is a library, and the commands
+    do their own output. It is worth the exception because the upgrade happens
+    silently inside whichever command opened the index first, and because the
+    question it answers ("has this just thrown away a week of encoding?") is
+    the one worth answering before it is asked.
+    """
+    import sys
+
+    print(f"upgraded {path} from schema version {was} to {now}. This only added "
+          f"columns: no photograph was re-read and no derived image was "
+          f"regenerated or removed.", file=sys.stderr)
+
+
 def open_index(path: Path, *, read_only: bool = False) -> sqlite3.Connection:
     """Open an existing index, migrating it forward where that is possible.
 
@@ -240,13 +258,34 @@ def open_index(path: Path, *, read_only: bool = False) -> sqlite3.Connection:
         version = -1
 
     if not read_only and version in MIGRATIONS:
-        while version in MIGRATIONS:
-            for statement in MIGRATIONS[version]:
-                conn.execute(statement)
-            version += 1
-            set_meta(conn, "schema_version", str(version))
-        conn.commit()
+        # The whole upgrade in one transaction, version bump included.
+        #
+        # SQLite's DDL is transactional, but Python's sqlite3 runs each ALTER
+        # in autocommit, so without this a process killed between the last
+        # ALTER and the bump leaves a database that says version 1 and already
+        # has the columns. The next attempt then fails on "duplicate column
+        # name" and the obvious way out is to delete an index that costs a week
+        # to rebuild, which is the one outcome this whole mechanism exists to
+        # prevent. Either the database comes out upgraded or it comes out
+        # untouched.
+        previous = conn.isolation_level
+        conn.isolation_level = None
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                while version in MIGRATIONS:
+                    for statement in MIGRATIONS[version]:
+                        conn.execute(statement)
+                    version += 1
+                    set_meta(conn, "schema_version", str(version))
+                conn.execute("COMMIT")
+            except BaseException:
+                conn.execute("ROLLBACK")
+                raise
+        finally:
+            conn.isolation_level = previous
         if version == SCHEMA_VERSION:
+            _announce_migration(path, found, version)
             return conn
 
     conn.close()

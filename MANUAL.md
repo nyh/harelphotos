@@ -983,6 +983,53 @@ So: **mtime decides whether to look. The signature decides whether to work.**
 `--full` forces all metadata to be re-read and all images regenerated — useful
 after upgrading, or when you want to be certain everything is current.
 
+### When an upgrade needs a new column in the index
+
+The index records a schema version. When a new release of the software needs to
+store something it did not store before — `[links]` was the first — the first
+command that opens the index for writing adds the columns in place and says so:
+
+```
+upgraded /var/lib/harelphotos/index.sqlite from schema version 1 to 2. This
+only added columns: no photograph was re-read and no derived image was
+regenerated or removed.
+```
+
+That sentence is the whole point of the mechanism. Rebuilding the index from
+scratch would set every photograph's `deriv_key` to NULL, and the next scan
+would then re-encode the entire collection — a week of work on a slow machine
+to add a column. So an upgrade that only *adds* to the schema is applied to the
+index you already have, and every row, including the expensive ones, is left
+untouched.
+
+Some practical notes:
+
+- **`serve` cannot do it.** The web process opens the index read-only, which is
+  what lets it keep serving pages while a scan writes. Meeting an older index it
+  says so and refuses to start, naming `scan` as the fix and deliberately *not*
+  suggesting you delete anything. So run `harelphotos scan` first, then restart
+  the server — not the other way round.
+- **It is all or nothing.** The columns and the new version number are written
+  in one transaction, so a machine that loses power halfway leaves an index that
+  is exactly as it was, and the next attempt succeeds.
+- **It is instant.** Adding a column is a change to the schema, not a rewrite of
+  the rows; the scan that follows is an ordinary scan.
+- **Not every change can work this way.** A change to what existing rows *mean*
+  still ends with "delete the index and rescan", and the message you get says so
+  in those words, including the warning that rebuilding re-encodes everything.
+
+If you want to see for yourself that nothing was lost, count the photographs
+that have images generated, before and afterwards:
+
+```sh
+sqlite3 /var/lib/harelphotos/index.sqlite \
+  'SELECT count(*) FROM photos WHERE deriv_key IS NOT NULL'
+```
+
+This works on an index of either version. `harelphotos stats` prints the same
+number more readably, but only once the index has been upgraded, since it too
+opens the index read-only.
+
 ---
 
 ## Per-directory settings: `.album.toml`
