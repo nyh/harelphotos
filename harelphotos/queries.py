@@ -354,8 +354,13 @@ class Index:
         if picked and not picked.startswith("auto"):
             # A bare name means a photo of this album; a path reaches into a
             # descendant, which is the only way to give a cover to a directory
-            # that holds nothing but subdirectories.
-            rel = f"{album.path}/{picked}" if album.path else picked
+            # that holds nothing but subdirectories. A leading '/' reaches from
+            # the top of the tree instead, for an album whose descendants hold
+            # no photographs either -- see _split_cover.
+            if picked.startswith("/"):
+                rel = picked.lstrip("/")
+            else:
+                rel = f"{album.path}/{picked}" if album.path else picked
             found = self.photo(rel, viewer)
             if found is not None:
                 return found

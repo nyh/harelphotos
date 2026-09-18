@@ -867,7 +867,15 @@ class Scanner:
 
 
 def _split_cover(dir_path: str, spec: str) -> tuple[str, str]:
-    """'kids/IMG_9.jpg' relative to '2019' -> ('2019/kids', 'IMG_9.jpg')."""
+    """'kids/IMG_9.jpg' relative to '2019' -> ('2019/kids', 'IMG_9.jpg').
+
+    A leading '/' means from the top of the photo tree instead. That is the
+    only way to give a cover to an album that holds no photographs anywhere
+    beneath it -- one whose `.album.toml` is nothing but `[links]`, where every
+    relative path names something that does not exist.
+    """
+    if spec.startswith("/"):
+        dir_path, spec = "", spec.lstrip("/")
     sub, _, name = spec.rpartition("/")
     if not sub:
         return dir_path, name

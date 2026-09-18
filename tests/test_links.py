@@ -241,3 +241,114 @@ def test_check_names_a_dead_link_and_leaves_a_links_album_off_the_empty_list(tmp
     assert r.dead_links == [("trips", "Greece", "2019/07/naxos")]
     assert r.problems >= 1                      # and it counts as a problem
     assert "trips" not in r.empty_dirs          # not a scratch directory
+
+
+# ------------------------------------------------------------------- covers
+
+def test_a_links_album_has_no_cover_of_its_own(tree):
+    """Deliberately, and worth an assertion so it is a decision rather than an
+    accident: a links album shows the placeholder card.
+
+    Borrowing the first target's cover was considered. It puts one trip's
+    photograph on a card labelled "Trips", which is rarely the one anybody
+    would have chosen, and there is no way to overrule it without inventing the
+    very setting below.
+    """
+    conn, ix = index_for(tree)
+    assert ix.cover_photo(ix.album("trips", admin()), admin()) is None
+    conn.close()
+
+
+def test_a_cover_can_name_a_photograph_from_the_top_of_the_tree(tmp_path):
+    """The escape hatch for an album with no photographs beneath it, where
+    every relative path names something that does not exist."""
+    photos = tmp_path / "pictures"
+    fixtures.make_jpeg(photos / "2026" / "07" / "thailand" / "a.jpg")
+    (photos / "trips").mkdir(parents=True, exist_ok=True)
+    (photos / "trips" / ".album.toml").write_text(
+        'cover = "/2026/07/thailand/a.jpg"\n'
+        '[links]\n"Thailand" = "2026/07/thailand"\n', encoding="utf-8")
+    cfg = fixtures.make_config(tmp_path, photos)
+    conn = fixtures.fresh_index(cfg)
+    scanner.scan(cfg, conn)
+    conn.close()
+
+    conn, ix = index_for(cfg)
+    cover = ix.cover_photo(ix.album("trips", admin()), admin())
+    assert cover is not None and cover.name == "a.jpg"
+    conn.close()
+
+    # And it reaches the page, rather than resolving and then being dropped.
+    app = create_app(cfg, require_login=False)
+    app.config.update(TESTING=True)
+    body = app.test_client().get("/a/").get_data(as_text=True)
+    assert "card-blank" not in body
+
+
+def test_a_cover_from_elsewhere_cannot_show_what_a_viewer_may_not_see(tmp_path):
+    """A cover reaching across the tree is a new way to point at a restricted
+    album, so the permission check has to be the target's own. Otherwise
+    anyone could put someone else's private photograph on a public card."""
+    photos = tmp_path / "pictures"
+    fixtures.make_jpeg(photos / "private" / "secret.jpg")
+    (photos / "private" / ".album.toml").write_text(
+        'allow = ["nyh"]\n', encoding="utf-8")
+    (photos / "trips").mkdir(parents=True, exist_ok=True)
+    (photos / "trips" / ".album.toml").write_text(
+        'cover = "/private/secret.jpg"\n'
+        '[links]\n"Private" = "private"\n', encoding="utf-8")
+    cfg = fixtures.make_config(tmp_path, photos)
+    conn = fixtures.fresh_index(cfg)
+    scanner.scan(cfg, conn)
+    conn.close()
+
+    conn, ix = index_for(cfg)
+    stranger = queries.Viewer(token="nobody", name="nobody", is_admin=False)
+    assert ix.cover_photo(ix.album("trips", stranger), stranger) is None
+    assert ix.cover_photo(ix.album("trips", admin()), admin()).name == "secret.jpg"
+    conn.close()
+
+
+def test_a_cover_path_using_dot_dot_is_reported_rather_than_silently_ignored(tmp_path):
+    (tmp_path / ".album.toml").write_text(
+        'cover = "../2026/a.jpg"\n', encoding="utf-8")
+    cfg = album.load(tmp_path)
+    assert cfg.cover == "auto"
+    assert any("'/'" in e for e in cfg.errors)
+
+
+def test_the_cover_command_accepts_a_path_from_the_top_of_the_tree(tmp_path, capsys):
+    """The same syntax as `.album.toml`, because an album with no photographs
+    beneath it cannot be given a cover any other way."""
+    from harelphotos import cli
+
+    photos = tmp_path / "pictures"
+    fixtures.make_jpeg(photos / "2026" / "07" / "thailand" / "a.jpg")
+    (photos / "trips").mkdir(parents=True, exist_ok=True)
+    (photos / "trips" / ".album.toml").write_text(
+        '[links]\n"Thailand" = "2026/07/thailand"\n', encoding="utf-8")
+    cfg = fixtures.make_config(tmp_path, photos)
+    conn = fixtures.fresh_index(cfg)
+    scanner.scan(cfg, conn)
+    conn.close()
+
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text(
+        f'photo_root = "{photos}"\n'
+        f'derived_root = "{tmp_path / "state" / "derived"}"\n'
+        f'index_db = "{cfg.index_db}"\n'
+        f'users_file = "{tmp_path / "users.toml"}"\n'
+        f'secret_key_file = "{tmp_path / "secret_key"}"\n', encoding="utf-8")
+
+    assert cli.main(["-c", str(cfg_path), "cover", "trips",
+                     "/2026/07/thailand/a.jpg"]) == 0
+    assert "showing: a.jpg" in capsys.readouterr().out
+
+    # Stored with the slash, so it still means "from the top" when read back.
+    conn, ix = index_for(cfg)
+    assert ix.cover_photo(ix.album("trips", admin()), admin()).name == "a.jpg"
+    conn.close()
+
+    # And a relative path still means relative: this one does not exist.
+    assert cli.main(["-c", str(cfg_path), "cover", "trips",
+                     "2026/07/thailand/a.jpg"]) == 1

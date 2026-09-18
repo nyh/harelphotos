@@ -183,6 +183,14 @@ def parse(text: str) -> AlbumConfig:
     if cover.startswith("auto") and cover not in COVER_AUTO:
         c.bad(f"'cover' must be a photo path or one of {', '.join(COVER_AUTO)}")
         cover = "auto"
+    elif ".." in cover.split("/"):
+        # Nothing unsafe would come of it -- the path is matched against a
+        # directory row, so it simply finds nothing -- but silently showing no
+        # cover is a poor answer to someone reaching for the syntax they know
+        # from a shell. A path from the top of the tree starts with '/'.
+        c.bad("'cover' must not contain '..'; to name a photo elsewhere in the "
+              "tree, start the path with '/'")
+        cover = "auto"
 
     photos: dict[str, PhotoMeta] = {}
     photos_raw = raw.get("photos")

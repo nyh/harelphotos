@@ -318,7 +318,7 @@ nothing. To exercise the real login page instead:
 harelphotos serve --login
 ```
 
-You will need an account first — see [`user add`](#harelphotos-user--creating-accounts).
+You will need an account first — see [`user add`](#harelphotos-user---creating-accounts).
 Pages served without a login carry a banner saying so, so a window left open
 for a week cannot be mistaken for the real thing.
 
@@ -427,7 +427,7 @@ A photo's date and place are shown next to its filename, without opening
 anything: they are what you want to know while looking at a photo, whereas the
 camera settings are for when you go looking. On a narrow screen they wrap onto
 their own line rather than squeezing the filename. The place comes from the
-photo's own GPS, turned into a place name by [`geocode`](#harelphotos-geocode);
+photo's own GPS, turned into a place name by [`geocode`](#harelphotos-geocode---force);
 for photos with no GPS it falls back to `location` in the album's `.album.toml`,
 and `show_gps = false` in `config.toml` suppresses both.
 
@@ -801,9 +801,11 @@ else. `revoke` is what to reach for if a phone is lost or a relative should
 stop having access; it invalidates their existing sessions everywhere without
 deleting the account.
 
-Three commands are still stubs and will say so: `cover` (set an album's cover
-photo from the command line), `acl` (inspect or set who may see a directory),
-and `sync` (copy the generated images to the server).
+Three more commands have sections of their own further down:
+[`cover`](#harelphotos-cover--which-photo-an-album-shows) sets an album's cover
+photo, [`acl`](#harelphotos-acl--who-may-see-a-directory) inspects or sets who
+may see a directory, and [`sync`](#two-machines) copies the generated images to
+the server.
 
 ---
 
@@ -1041,7 +1043,8 @@ directory with no `.album.toml` behaves sensibly.
 ```toml
 title       = "Summer in Greece"      # default: the directory name
 description = "Two weeks on Naxos."
-cover       = "IMG_1234.jpg"          # or "subdir/IMG_9.jpg"; default: first photo
+cover       = "IMG_1234.jpg"          # or "subdir/IMG_9.jpg", or "/2019/x/IMG_9.jpg"
+                                      # from the top of the tree; default: first photo
 sort        = "date"                  # date | exif | mtime | name; "-" reverses
 dirsort     = "name"                  # order of SUBDIRECTORIES; "-name" = newest first
 order       = ["passover", "summer"]  # pin these subdirectories first, in this order
@@ -1158,6 +1161,27 @@ the order written.
 
 Nothing is copied and nothing is duplicated on disk, so a link costs nothing
 and removing one loses nothing.
+
+**A links album's own card shows the empty placeholder** — the same one an
+album gets while its images are still being generated. It has no photograph of
+its own, and it deliberately does not borrow one from the first album it links
+to: that puts one trip's photograph on a card labelled "Trips", which is rarely
+the picture anybody would have chosen, and you would then have to overrule it.
+
+Choose one yourself with [`cover`](#harelphotos-cover--which-photo-an-album-shows),
+written as a path from the top of the tree:
+
+```toml
+title = "Trips"
+cover = "/2026/07/thailand/PXL_1234.jpg"
+
+[links]
+"Thailand 2026" = "2026/07/thailand"
+```
+
+The leading `/` is not a links-specific rule — it works on any album — but this
+is the case that needs it, since a relative path would name a file that does
+not exist.
 
 **Permissions are the target's own.** A link cannot widen access: someone who
 may not see `2019/private` does not see a card for it either, even if the
@@ -1608,6 +1632,26 @@ harelphotos cover 2003 2003a/IMG_0123.JPG
 
 which is the only way to give a cover to a directory that holds nothing but
 subdirectories — it has no photo of its own to name.
+
+**A path starting with `/` is taken from the top of the photo tree** instead of
+from the album, so any album can be given any photograph in the collection:
+
+```sh
+harelphotos cover trips /2026/07/thailand/PXL_1234.jpg
+```
+
+The same works for `cover` in `.album.toml`. It exists for albums that have no
+photograph anywhere beneath them — a
+[links album](#links--showing-an-album-in-a-second-place) has none, so every
+relative path names something that does not exist — but there is no special
+rule for those: the leading `/` means the same thing on any album. `..` is not
+accepted; use a path from the top instead, and `check` will tell you if you
+write one.
+
+A cover naming a photograph in a **restricted** album is still checked against
+whoever is looking, exactly as the album itself would be. Someone who may not
+see the photograph does not see it on the card either, so reaching across the
+tree cannot be used to put a private photograph on a public album.
 
 An admin can also do this while browsing: open a photo and press **Make cover**
 in the top bar. It takes effect on the next page — no scan. Return to that same

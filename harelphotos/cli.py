@@ -1,8 +1,8 @@
 """Command-line entry point.
 
-Only the M1 subcommands are implemented; the rest are declared so that
-``--help`` describes the whole shape of the tool and so an unimplemented
-command says so plainly instead of "unknown command".
+Every subcommand is implemented. The shape dates from when they were not: they
+were all declared up front so that ``--help`` described the whole tool and an
+unfinished one said so plainly rather than "unknown command".
 """
 
 # Copyright (C) 2026 Nadav Har'El
@@ -597,23 +597,31 @@ def cmd_cover(args: argparse.Namespace) -> int:
         # A path is allowed as well as a bare name, and for a directory holding
         # nothing but subdirectories it is the only possibility -- there is no
         # photo of its own to name.
+        # A leading '/' names a photo from the top of the tree rather than
+        # from this album, which is the only possibility for an album with no
+        # photographs anywhere beneath it -- one holding only `[links]`.
+        from_top = args.photo.startswith("/")
         pick = args.photo.strip("/")
         if ".." in pick.split("/"):
-            print("error: the photo must be inside this album", file=sys.stderr)
+            print("error: the photo must be inside this album, or named from "
+                  "the top of the tree with a leading '/'", file=sys.stderr)
             return 1
         conn = db.open_index(cfg.index_db, read_only=True)
         index = queries.Index(conn, cfg)
-        full = f"{relpath}/{pick}" if relpath else pick
+        full = pick if from_top else (f"{relpath}/{pick}" if relpath else pick)
         found = index.photo(full, queries.Viewer(token=None, name="", is_admin=True))
         conn.close()
         if found is None:
-            print(f"error: {pick!r} is not a photo under /{relpath}\n"
+            where = "the photo tree" if from_top else f"/{relpath}"
+            print(f"error: {args.photo!r} is not a photo under {where}\n"
                   f"  give a file name, or a path relative to this album such as\n"
-                  f"  '2003a/IMG_0123.JPG' for a photo in a subdirectory",
+                  f"  '2003a/IMG_0123.JPG' for a photo in a subdirectory, or a\n"
+                  f"  path from the top of the tree such as '/2003/2003a/IMG_0123.JPG'",
                   file=sys.stderr)
             return 1
-        overrides.set_for(cfg, relpath, cover=pick)
-        print(f"cover for /{relpath} is now {pick}")
+        stored = f"/{pick}" if from_top else pick
+        overrides.set_for(cfg, relpath, cover=stored)
+        print(f"cover for /{relpath} is now {stored}")
 
     conn = db.open_index(cfg.index_db, read_only=True)
     index = queries.Index(conn, cfg)
