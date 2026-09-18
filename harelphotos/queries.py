@@ -56,12 +56,27 @@ class Album:
     n_subdirs: int
     date_min: int | None
     date_max: int | None
+    # `[links]` as written, and how many photographs they reach. The count is
+    # for display only -- see Scanner.count_links for why it is never summed
+    # into an ancestor.
+    links: tuple[tuple[str, str], ...] = ()
+    n_photos_linked: int = 0
     cover: "Photo | None" = None
     group_by: str = "none"
 
     @property
     def url(self) -> str:
         return f"/a/{url_path(self.path)}/" if self.path else "/a/"
+
+    @property
+    def n_photos_shown(self) -> int:
+        """What a card says. Its own photographs plus the ones its links reach.
+
+        The two are added only here, for display. `n_photos_rec` is what
+        ancestors sum, and adding the linked total into that would have any
+        ancestor holding both a links album and its targets count them twice.
+        """
+        return self.n_photos_rec + self.n_photos_linked
 
 
 @dataclass
@@ -181,7 +196,33 @@ def _album_from_row(r: sqlite3.Row) -> Album:
         n_subdirs=r["n_subdirs"],
         date_min=r["date_min"],
         date_max=r["date_max"],
+        links=_links_from_row(r),
+        n_photos_linked=_column(r, "n_photos_linked", 0),
         group_by=r["group_by"] or "none",
+    )
+
+
+def _column(r: sqlite3.Row, name: str, default):
+    """A column that may be absent, for a row read from an older index."""
+    try:
+        v = r[name]
+    except (IndexError, KeyError):
+        return default
+    return default if v is None else v
+
+
+def _links_from_row(r: sqlite3.Row) -> tuple[tuple[str, str], ...]:
+    raw = _column(r, "links_json", None)
+    if not raw:
+        return ()
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        return ()
+    return tuple(
+        (e[0], e[1]) for e in parsed
+        if isinstance(e, list) and len(e) == 2
+        and isinstance(e[0], str) and isinstance(e[1], str)
     )
 
 
@@ -236,7 +277,12 @@ class Index:
             # A directory with no photographs anywhere beneath it is not an
             # album — it is a directory of videos, scripts or scratch files
             # that happens to live in the photo tree.
-            if r["n_photos_rec"] == 0:
+            #
+            # Unless there are links beneath it, which is the whole point of a
+            # links album: `trips/` has nothing of its own and is still
+            # somewhere to go -- and so is a directory whose only content is
+            # subdirectories of links, which is why the question is recursive.
+            if r["n_photos_rec"] == 0 and _column(r, "n_links_rec", 0) == 0:
                 continue
             out.append(_album_from_row(r))
 
@@ -245,6 +291,31 @@ class Index:
         out = sort_albums(out, order, dirsort, self._natkeys(album))
         for a in out:
             a.cover = self.cover_photo(a, viewer)
+        return out
+
+    def linked_albums(self, album: Album, viewer: Viewer) -> list[Album]:
+        """The albums this one links to, as cards, in the order written.
+
+        Resolved here rather than at scan time because the target's cover, its
+        permissions and its very existence can all change without the linking
+        directory being rescanned.
+
+        A target this viewer may not see is dropped silently, exactly as
+        `subalbums` drops what it may not show: the link's own name would
+        otherwise announce that a restricted album exists, which is what
+        answering 404 rather than 403 is for. A target that has gone is dropped
+        the same way, so a stale link is a missing card and never a broken one.
+        """
+        out = []
+        for name, target in album.links:
+            found = self.album(target, viewer)
+            if found is None:
+                continue
+            # Titled by the link, not by the target: the point of writing
+            # `"2026 Thailand" = "2026/07/thailand"` is to call it that here.
+            found.title = name
+            found.cover = self.cover_photo(found, viewer)
+            out.append(found)
         return out
 
     def _explicit_order(self, album: Album) -> list[str]:

@@ -12,6 +12,7 @@ and look at them afterwards.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import dataclass, field
 
@@ -29,6 +30,11 @@ class Report:
     config_errors: list[tuple[str, str]] = field(default_factory=list)
     photo_errors: list[tuple[str, str]] = field(default_factory=list)
     missing_covers: list[str] = field(default_factory=list)
+    # (directory, link name, target) for `[links]` entries pointing at nothing.
+    # A dead link is dropped silently when the page is drawn -- deliberately, so
+    # that a renamed album leaves a missing card rather than a broken one -- so
+    # this report is the only place it is ever mentioned.
+    dead_links: list[tuple[str, str, str]] = field(default_factory=list)
     missing_derivatives: list[str] = field(default_factory=list)
     restricted: list[tuple[str, str]] = field(default_factory=list)
     date_range: tuple[int | None, int | None] = (None, None)
@@ -37,7 +43,8 @@ class Report:
     @property
     def problems(self) -> int:
         return (len(self.config_errors) + len(self.photo_errors)
-                + len(self.missing_covers) + len(self.missing_derivatives))
+                + len(self.missing_covers) + len(self.missing_derivatives)
+                + len(self.dead_links))
 
 
 def run(cfg: Config, conn: sqlite3.Connection, *, sample: int = 10,
@@ -80,12 +87,26 @@ def run(cfg: Config, conn: sqlite3.Connection, *, sample: int = 10,
             "AND cover_spec NOT LIKE 'auto%' AND cover_photo IS NULL ORDER BY path"
         )
     ]
+    known = {d["path"] for d in conn.execute("SELECT path FROM dirs")}
+    for d in conn.execute(
+        "SELECT path, links_json FROM dirs WHERE links_json IS NOT NULL ORDER BY path"
+    ):
+        try:
+            links = json.loads(d["links_json"] or "[]")
+        except ValueError:
+            continue                                   # already a config_error
+        for entry in links:
+            if isinstance(entry, list) and len(entry) == 2 and entry[1] not in known:
+                r.dead_links.append((d["path"] or ".", entry[0], entry[1]))
+
     # Directories holding no photos anywhere beneath them: scripts, backups and
-    # scratch directories that happen to live in the photo tree.
+    # scratch directories that happen to live in the photo tree. A links album
+    # has none of its own and is not one of those -- it is somewhere to go.
     r.empty_dirs = [
         d["path"] or "."
         for d in conn.execute(
-            "SELECT path FROM dirs WHERE n_photos_rec = 0 AND path != '' ORDER BY path"
+            "SELECT path FROM dirs WHERE n_photos_rec = 0 AND n_links_rec = 0 "
+            "AND path != '' ORDER BY path"
         )
     ]
     r.restricted = [

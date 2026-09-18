@@ -430,6 +430,7 @@ class Scanner:
             "order_json": json.dumps(list(cfg.order)) if cfg.order else None,
             "sort_key": cfg.sort_key,
             "natkey": natkey(cfg.sort_key or name),
+            "links_json": json.dumps(list(map(list, cfg.links))) if cfg.links else None,
             "group_by": cfg.group_by,
             "cover_spec": cfg.cover,
             "location": cfg.location,
@@ -777,6 +778,58 @@ class Scanner:
             )
         self.conn.commit()
 
+    def count_links(self) -> None:
+        """How many photographs each links album reaches. Display only.
+
+        A separate sweep, after `rollup()`, for a reason that is not merely
+        tidiness: the rollup works deepest-first so each parent can add up
+        children that are already final, and a link may point *anywhere* --
+        including at a directory the sweep has not reached yet. Everything is
+        settled by the time this runs.
+
+        `n_photos_linked` is never summed into an ancestor, and that is the
+        whole design. A links album and the albums it points at normally share
+        an ancestor; letting linked photographs flow upward would have that
+        ancestor count them twice, and everything above it too, all the way to
+        the collection's total. Kept separate, every ancestor keeps counting
+        the photographs that really are beneath it, exactly once -- and the
+        linked total is still there to display, because every target is itself
+        somewhere under photo_root and so is already counted once elsewhere.
+
+        Sums each target's *tree* count, never its linked count, so a link to
+        an album of links adds that album's real photographs and stops. Cycles
+        therefore cannot recurse, and the arithmetic needs no depth limit.
+        """
+        rows = self.conn.execute("SELECT id, path, links_json FROM dirs").fetchall()
+        # Deepest first, so `n_links_rec` can add up children already final --
+        # the same order, and for the same reason, as the rollup itself.
+        for row in sorted(rows, key=lambda r: r["path"].count("/") if r["path"] else -1,
+                          reverse=True):
+            try:
+                links = json.loads(row["links_json"] or "[]")
+            except ValueError:
+                links = []
+            links = [e for e in links if isinstance(e, list) and len(e) == 2]
+
+            total = 0
+            for _, target_path in links:
+                target = self.conn.execute(
+                    "SELECT n_photos_rec FROM dirs WHERE path = ?", (target_path,)
+                ).fetchone()
+                if target is not None:
+                    total += target["n_photos_rec"]
+
+            beneath = self.conn.execute(
+                "SELECT coalesce(sum(n_links_rec), 0) AS n FROM dirs WHERE parent_id = ?",
+                (row["id"],),
+            ).fetchone()["n"]
+
+            self.conn.execute(
+                "UPDATE dirs SET n_photos_linked = ?, n_links_rec = ? WHERE id = ?",
+                (total, len(links) + beneath, row["id"]),
+            )
+        self.conn.commit()
+
     def _resolve_cover(self, dir_id: int) -> int | None:
         """explicit cover -> first own photo -> first subdirectory's cover.
 
@@ -929,4 +982,5 @@ def scan(
         )
         s.prune_derivatives(orphans)
     s.rollup()
+    s.count_links()
     return s.stats

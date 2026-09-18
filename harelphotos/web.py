@@ -563,6 +563,10 @@ def _register_routes(app: Flask, cfg: Config) -> None:
         if alb is None:
             abort(404)
         subalbums = g.index.subalbums(alb, g.viewer)
+        # Links are listed with the real subalbums, ahead of them: a links
+        # album is usually nothing but links, and where a directory has both,
+        # what was written by hand is the more deliberate of the two.
+        subalbums = g.index.linked_albums(alb, g.viewer) + subalbums
         photos = g.index.photos(alb, g.viewer)
         pager = _paginate(cfg, len(photos), request.args.get("page"))
         # Whether the album above is already showing this album's cover, so the

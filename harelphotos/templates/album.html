@@ -14,7 +14,7 @@
   </nav>
   {% endif %}
   <div class="meta">
-    {%- if album.n_photos_rec %}{{ "{:,}".format(album.n_photos_rec) }} photos{% endif -%}
+    {%- if album.n_photos_shown %}{{ "{:,}".format(album.n_photos_shown) }} photos{% endif -%}
     {%- if album|date_span %} <span class="sep">·</span> {{ album|date_span }}{% endif -%}
     {#- `location` from .album.toml. It already stands in for a place on photos
         with no GPS; saying it here too is what makes setting it feel worth the
@@ -127,7 +127,13 @@
         <div class="card-text">
           <span class="card-title" title="{{ sub.title }}">{{ sub.title }}</span>
           <span class="card-sub">
-            {{ "{:,}".format(sub.n_photos_rec) }} photo{{ '' if sub.n_photos_rec == 1 else 's' }}
+            {#- Only when there is a number worth saying. A directory holding
+                nothing but subdirectories of links counts none of its own --
+                links are counted where they are written, and never summed
+                upwards -- and "0 photos" under such a card is worse than no
+                caption at all. The album's own header has always been guarded
+                this way; the card was not. -#}
+            {%- if sub.n_photos_shown %}{{ "{:,}".format(sub.n_photos_shown) }} photo{{ '' if sub.n_photos_shown == 1 else 's' }}{% endif -%}
             {#- The album's own header still shows its dates; this is only the
                 card in a listing, where on a date-organized tree it repeats the
                 folder name and clutters the page (`[ui] dir_card_dates`). -#}

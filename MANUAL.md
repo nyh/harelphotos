@@ -214,6 +214,10 @@ Read-only report: how much was indexed, how much has EXIF dates and GPS, the
 date range, the biggest directories, restricted directories, directories with
 no photos, and anything that went wrong. Exits non-zero if there are problems.
 
+It is also the only place a [`[links]`](#links--showing-an-album-in-a-second-place)
+entry pointing at a directory that does not exist is mentioned: the page itself
+drops it silently, on purpose.
+
 `--verify-files` additionally checks that every image the database says it
 generated is actually on disk. Worth running if you have deleted part of the
 derived tree, or after an interrupted copy: because the recipe fingerprint
@@ -1001,6 +1005,9 @@ allow_replace = false                 # true = ignore restrictions inherited fro
 location    = "Naxos, Greece"         # shown on the album; also the place for
                                       # photos in it that have no GPS
 
+[links]                               # other albums to show here as well
+"Greece 2019" = "2019/07/naxos"
+
 [photos."IMG_1234.jpg"]
 title  = "Nadav on the beach"
 hidden = true
@@ -1068,6 +1075,70 @@ deliberate exception, discarding what was inherited.
 
 Names come from `users.toml`. `@name` refers to a group defined under
 `[groups]` in `config.toml`; groups may contain other groups.
+
+### `[links]` — showing an album in a second place
+
+A photo tree organized by date answers "when", and answers it well enough that
+there is no reason to give it up. But the trips are then scattered across the
+years, and there is nowhere to go to see them together.
+
+`[links]` makes a directory that shows albums which live elsewhere. In
+`pictures/trips/.album.toml`:
+
+```toml
+title = "Trips"
+
+[links]
+"Thailand 2026"   = "2026/07/thailand"
+"Greece 2019"     = "2019/07/naxos"
+"Across the USA"  = "2024/08/usa"
+```
+
+`trips/` is an ordinary directory and may be empty, or may hold photographs of
+its own; the linked albums appear as cards before whatever else is in it, in
+the order written.
+
+- **The name on the left is the card's title**, replacing the album's own — the
+  reason to write `"Across the USA"` is to call it that here, where `usa` sitting
+  under `2024/08` needs no more explanation.
+- **The path on the right is a directory path** under `photo_root`, the same
+  form the URLs use: `2024/08/usa`, no leading slash, no `..`.
+- **A card behaves exactly like any other**, opening the real album at its real
+  address. There is one copy of the photographs and one album; this is a way to
+  reach it, not a second album.
+- **You can link the same album from several places**, and link to one that
+  itself has links.
+
+Nothing is copied and nothing is duplicated on disk, so a link costs nothing
+and removing one loses nothing.
+
+**Permissions are the target's own.** A link cannot widen access: someone who
+may not see `2019/private` does not see a card for it either, even if the
+linking directory is open to everyone. The card is simply absent, the same way
+a restricted album is absent from an ordinary listing — a link named
+"Sarah's wedding" would otherwise announce that the album exists.
+
+**A link to a directory that no longer exists is silently dropped**, so
+renaming or deleting an album leaves a missing card rather than a broken one.
+`harelphotos check` reports links that point nowhere, which is where to look if
+a card you expected is not there.
+
+**The photo count on a links card** is the target's, and the count on the
+linking album adds up everything its links reach — `trips/` with nothing of its
+own can still say "12,430 photos". Those photographs are *not* added to any
+album above `trips/`, because they are already counted where they really live,
+and an ancestor holding both `trips/` and `2026/` would otherwise count them
+twice. This is also why an album with no photographs anywhere beneath it prints
+no count at all rather than "0 photos".
+
+A links file takes effect at the next scan of that directory:
+
+```sh
+harelphotos scan --dir trips
+```
+
+The link *targets* are resolved fresh on every page view, so a target's cover,
+title or permissions changing needs no rescan of the directory linking to it.
 
 ---
 

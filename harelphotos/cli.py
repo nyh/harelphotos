@@ -856,6 +856,9 @@ def cmd_check(args: argparse.Namespace) -> int:
             print(f"  photo        {path}: {err}")
         for path in r.missing_covers[:20]:
             print(f"  cover        {path}: 'cover' names a photo that does not exist")
+        for path, name, target in r.dead_links[:20]:
+            print(f"  link         {path}: [links] {name!r} points at {target!r}, "
+                  f"which does not exist")
         if r.missing_derivatives:
             print(f"  derivatives  {len(r.missing_derivatives):,} photos have recorded "
                   f"images that are not on disk — run 'harelphotos scan --repair'")

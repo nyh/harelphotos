@@ -51,6 +51,10 @@ class AlbumConfig:
     allow: tuple[str, ...] | None = None   # None = no restriction at this level
     allow_replace: bool = False
     location: str | None = None
+    # `[links]`: a display name for another album, to the path it points at,
+    # relative to photo_root. Ordered as written, since that is the only order
+    # a links album has -- there is nothing on disk to sort.
+    links: tuple[tuple[str, str], ...] = ()
     photos: dict[str, PhotoMeta] = field(default_factory=dict)
     errors: tuple[str, ...] = ()
 
@@ -96,6 +100,34 @@ class _Collector:
             self.bad(f"{key!r} must be true or false, got {type(v).__name__}")
             return default
         return v
+
+    def links(self, raw: dict) -> tuple[tuple[str, str], ...]:
+        """`[links]`: name -> album path, each checked before it is stored.
+
+        A bad entry is dropped and reported rather than failing the file, like
+        every other setting here: one mistyped path must not cost an album its
+        title as well.
+        """
+        table = raw.get("links")
+        if table is None:
+            return ()
+        if not isinstance(table, dict):
+            self.bad(f"'links' must be a table of name = \"path\", "
+                     f"got {type(table).__name__}")
+            return ()
+        out = []
+        for name, target in table.items():
+            if not isinstance(target, str):
+                self.bad(f"[links] {name!r} must be a path string, "
+                         f"got {type(target).__name__}")
+                continue
+            clean = target.strip().strip("/")
+            if not clean or ".." in clean.split("/"):
+                self.bad(f"[links] {name!r}: {target!r} is not a path inside "
+                         f"the photo tree")
+                continue
+            out.append((name, clean))
+        return tuple(out)
 
     def str_list(self, raw: dict, key: str) -> tuple[str, ...] | None:
         v = raw.get(key)
@@ -185,6 +217,7 @@ def parse(text: str) -> AlbumConfig:
         allow=c.str_list(raw, "allow"),
         allow_replace=c.boolean(raw, "allow_replace", False),
         location=c.string(raw, "location"),
+        links=c.links(raw),
         photos=photos,
         errors=tuple(c.errors),
     )

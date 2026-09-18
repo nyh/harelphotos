@@ -738,7 +738,18 @@ for a measurement, not for an opinion.
 
 ---
 
-### 26. Links between albums
+### 26. Links between albums — *done*
+
+Built as described below, and documented in MANUAL.md under
+"`[links]` — showing an album in a second place". The reasoning is kept here
+because it is the record of why it works the way it does.
+
+One thing the plan missed. "A directory with links is not empty" turned out to
+be too local a rule: a directory whose own content is *subdirectories* of links
+has no links of its own either, and vanished from its parent's listing. The
+question had to become recursive, so there is a third column, `n_links_rec`,
+counting links anywhere beneath a directory the way `n_photos_rec` counts
+photographs. Being empty now means neither.
 
 Nadav's idea. An otherwise empty directory — `trips/` — whose `.album.toml`
 names other albums the way a symbolic link names a file:

@@ -1,9 +1,14 @@
 """The index database.
 
 A pure cache: every row here is derived from the filesystem and can be thrown
-away. If the schema version does not match and there is no migration path, the
-right answer is to delete the file and rescan — which is why there is no
-elaborate migration machinery.
+away, which is why there is no elaborate migration machinery.
+
+There is a little, though, and the reason is worth stating: rebuilding the
+index sets every `deriv_key` to NULL, and the next scan therefore re-encodes
+the entire collection. On the machine this was written for that is days of
+work to add a column. So a change that only *adds* to the schema gets a
+migration; anything that changes the meaning of existing rows still ends with
+"delete it and rescan", which is honest for a cache.
 """
 
 # Copyright (C) 2026 Nadav Har'El
@@ -14,7 +19,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE dirs (
@@ -41,6 +46,16 @@ CREATE TABLE dirs (
   n_photos      INTEGER NOT NULL DEFAULT 0,
   n_photos_rec  INTEGER NOT NULL DEFAULT 0,
   n_subdirs     INTEGER NOT NULL DEFAULT 0,
+  links_json    TEXT,                       -- `[links]` from .album.toml, JSON
+  -- Photographs reachable through this directory's links. Display only: it is
+  -- never summed into an ancestor, because a link and the album it points at
+  -- usually share one, and that ancestor would then count them twice.
+  n_photos_linked INTEGER NOT NULL DEFAULT 0,
+  -- Links anywhere beneath, counted recursively the way n_photos_rec counts
+  -- photographs. A directory whose only content is subdirectories of links has
+  -- no photographs of its own and none linked either, and without this it is
+  -- not listed as an album at all.
+  n_links_rec   INTEGER NOT NULL DEFAULT 0,
   date_min      INTEGER,
   date_max      INTEGER,
   seen          INTEGER NOT NULL DEFAULT 0
@@ -196,17 +211,56 @@ def schema_version(conn: sqlite3.Connection) -> int | None:
         return None
 
 
+# Migrations that only *add* to the schema, so every existing row -- and every
+# `deriv_key` on it -- survives. Keyed by the version they upgrade from.
+MIGRATIONS: dict[int, tuple[str, ...]] = {
+    1: (
+        "ALTER TABLE dirs ADD COLUMN links_json TEXT",
+        "ALTER TABLE dirs ADD COLUMN n_photos_linked INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE dirs ADD COLUMN n_links_rec INTEGER NOT NULL DEFAULT 0",
+    ),
+}
+
+
 def open_index(path: Path, *, read_only: bool = False) -> sqlite3.Connection:
-    """Open an existing index and verify its schema version."""
+    """Open an existing index, migrating it forward where that is possible.
+
+    A read-only caller cannot migrate, so it asks for a writable command to be
+    run rather than doing it -- which also means the web process never writes
+    to the index, the property that keeps a running scan from breaking logins.
+    """
     conn = connect(path, read_only=read_only)
     found = schema_version(conn)
-    if found != SCHEMA_VERSION:
-        conn.close()
+    if found == SCHEMA_VERSION:
+        return conn
+
+    try:
+        version = int(found)
+    except (TypeError, ValueError):
+        version = -1
+
+    if not read_only and version in MIGRATIONS:
+        while version in MIGRATIONS:
+            for statement in MIGRATIONS[version]:
+                conn.execute(statement)
+            version += 1
+            set_meta(conn, "schema_version", str(version))
+        conn.commit()
+        if version == SCHEMA_VERSION:
+            return conn
+
+    conn.close()
+    if version in MIGRATIONS or version == SCHEMA_VERSION - len(MIGRATIONS):
         raise SchemaMismatch(
-            f"{path} has schema version {found!r}, expected {SCHEMA_VERSION}. "
-            f"The index is a rebuildable cache: delete it and run 'harelphotos scan'."
+            f"{path} has schema version {found!r}, expected {SCHEMA_VERSION}, and "
+            f"can be upgraded in place. Run 'harelphotos scan' (or any command "
+            f"that writes) once, then start the server."
         )
-    return conn
+    raise SchemaMismatch(
+        f"{path} has schema version {found!r}, expected {SCHEMA_VERSION}. "
+        f"The index is a rebuildable cache: delete it and run 'harelphotos scan'. "
+        f"Note that rebuilding re-encodes every photograph."
+    )
 
 
 def create_index(path: Path) -> sqlite3.Connection:

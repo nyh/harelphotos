@@ -151,3 +151,82 @@ def test_read_only_opens_are_unaffected(tmp_path, monkeypatch):
     db.create_index(path).close()
     monkeypatch.setattr(os, "access", lambda p, m: False)
     db.open_index(path, read_only=True).close()
+
+
+def test_an_older_index_is_upgraded_in_place_and_keeps_its_work(tmp_path):
+    """Rebuilding the index is not a free operation.
+
+    Every `deriv_key` goes with it, so the next scan re-encodes the whole
+    collection -- days of work on a weak machine to add a column. A migration
+    that only *adds* to the schema must therefore leave every existing row
+    alone, and this asserts the one that matters survives.
+    """
+    import re
+    import sqlite3
+
+    from harelphotos import db as db_mod
+
+    path = tmp_path / "index.sqlite"
+    # Version 1's schema is this one minus whatever the migration to 2 adds, so
+    # that adding a column to both does not leave this test comparing today's
+    # schema with itself.
+    added = {re.search(r"ADD COLUMN (\w+)", sql).group(1)
+             for sql in db_mod.MIGRATIONS[1]}
+    kept, pending = [], []
+    for line in db_mod.SCHEMA.splitlines(keepends=True):
+        stripped = line.strip()
+        if stripped.startswith("--"):
+            pending.append(line)                       # may belong to a new column
+            continue
+        if stripped.split(" ")[0] in added:
+            pending.clear()                            # and so did its comment
+            continue
+        kept.extend(pending); pending.clear(); kept.append(line)
+    old = "".join(kept + pending)
+    assert added and not (added & {c for c in re.findall(r"^\s*(\w+)\s+\w", old, re.M)})
+    conn = sqlite3.connect(path)
+    conn.executescript(old)
+    conn.execute("INSERT INTO meta (key, value) VALUES ('schema_version', '1')")
+    conn.execute("INSERT INTO dirs (path, name, natkey) VALUES ('2019', '2019', '2019')")
+    conn.execute("INSERT INTO photos (dir_id, name, size, mtime_ns, deriv_key) "
+                 "VALUES (1, 'a.jpg', 10, 0, 'expensive')")
+    conn.commit()
+    conn.close()
+
+    conn = db_mod.open_index(path)                     # writable: migrates
+    assert db_mod.schema_version(conn) == db_mod.SCHEMA_VERSION
+    assert conn.execute("SELECT deriv_key FROM photos").fetchone()[0] == "expensive"
+    columns = {r[1] for r in conn.execute("PRAGMA table_info(dirs)")}
+    assert added <= columns
+    conn.close()
+
+
+def test_a_read_only_open_of_an_older_index_asks_for_a_scan_rather_than_a_delete(tmp_path):
+    """The web process must never write to the index -- that read-only
+    arrangement is what keeps a running scan from breaking logins. So it cannot
+    migrate, and the message must not tell anyone to delete the file, which
+    would cost them the re-encode this migration exists to avoid.
+    """
+    import re
+    import sqlite3
+
+    import pytest
+
+    from harelphotos import db as db_mod
+
+    path = tmp_path / "index.sqlite"
+    old = db_mod.SCHEMA
+    old = old.replace(
+        "  links_json    TEXT,                       -- `[links]` from .album.toml, JSON\n", "")
+    old = re.sub(r"  -- Photographs reachable.*?n_photos_linked INTEGER NOT NULL DEFAULT 0,\n",
+                 "", old, flags=re.S)
+    conn = sqlite3.connect(path)
+    conn.executescript(old)
+    conn.execute("INSERT INTO meta (key, value) VALUES ('schema_version', '1')")
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(db_mod.SchemaMismatch) as e:
+        db_mod.open_index(path, read_only=True)
+    assert "scan" in str(e.value)
+    assert "delete" not in str(e.value).lower()
