@@ -117,7 +117,20 @@ class NotWritable(Exception):
 
 
 class SchemaMismatch(Exception):
-    """The database on disk was written by a different version of the schema."""
+    """The database on disk was written by a different version of the schema.
+
+    Carries the two version numbers and a one-line instruction as well as the
+    message. The message names the database's path, which belongs in a log and
+    not on a page that anyone who can reach the site may be looking at;
+    `action` is the part that is safe to show.
+    """
+
+    def __init__(self, message: str, *, found: object = None,
+                 expected: int = SCHEMA_VERSION, action: str = "") -> None:
+        super().__init__(message)
+        self.found = found
+        self.expected = expected
+        self.action = action
 
 
 def connect(path: Path, *, create: bool = False, read_only: bool = False) -> sqlite3.Connection:
@@ -289,16 +302,37 @@ def open_index(path: Path, *, read_only: bool = False) -> sqlite3.Connection:
             return conn
 
     conn.close()
-    if version in MIGRATIONS or version == SCHEMA_VERSION - len(MIGRATIONS):
+    if version in MIGRATIONS:
+        action = ("Run 'harelphotos scan' (or any command that writes) once, "
+                  "then restart the server.")
         raise SchemaMismatch(
             f"{path} has schema version {found!r}, expected {SCHEMA_VERSION}, and "
-            f"can be upgraded in place. Run 'harelphotos scan' (or any command "
-            f"that writes) once, then start the server."
+            f"can be upgraded in place. {action}",
+            found=found, action=action,
         )
+    if isinstance(found, int) and found > SCHEMA_VERSION:
+        # Newer than this code, which during an upgrade is the ordinary case
+        # and not a fault in the index at all: a scan run from freshly pulled
+        # code upgrades the index while the server carries on running the code
+        # it started with. Kept well apart from the message below, which would
+        # have this cost a week of re-encoding to fix a missed restart.
+        action = ("This is what a server that was not restarted after an "
+                  "upgrade looks like. Restart it, or update the software to "
+                  "match. Do not delete the index -- there is nothing wrong "
+                  "with it.")
+        raise SchemaMismatch(
+            f"{path} has schema version {found!r}, which is newer than the "
+            f"{SCHEMA_VERSION} this software understands. {action}",
+            found=found, action=action,
+        )
+    action = ("The index cannot be read by this version of the software. The "
+              "server log says what to do.")
     raise SchemaMismatch(
-        f"{path} has schema version {found!r}, expected {SCHEMA_VERSION}. "
-        f"The index is a rebuildable cache: delete it and run 'harelphotos scan'. "
-        f"Note that rebuilding re-encodes every photograph."
+        f"{path} has schema version {found!r}, expected {SCHEMA_VERSION}, and "
+        f"there is no upgrade path from it. The index is a rebuildable cache: "
+        f"delete it and run 'harelphotos scan'. Note that rebuilding re-encodes "
+        f"every photograph, which on a large collection is days of work.",
+        found=found, action=action,
     )
 
 

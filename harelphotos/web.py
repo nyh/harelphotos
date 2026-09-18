@@ -102,10 +102,22 @@ def create_app(cfg: Config, *, require_login: bool = True) -> Flask:
     )
 
     @app.before_request
-    def _open_index() -> None:
-        g.conn = db.open_index(cfg.index_db, read_only=True)
+    def _open_index():
+        try:
+            g.conn = db.open_index(cfg.index_db, read_only=True)
+        except db.SchemaMismatch as mismatch:
+            # An expected state during an upgrade: a scan run from new code
+            # upgrades the index while this process carries on running the code
+            # it started with, and every page then failed with an internal
+            # server error whose cause appeared only in the traceback. 503
+            # rather than 500, so a proxy or a monitor reads it as "not now"
+            # instead of "broken", and so this is never cached.
+            app.logger.error("%s", mismatch)
+            return render_template("unavailable.html", cfg=cfg,
+                                   mismatch=mismatch), 503
         g.index = Index(g.conn, cfg)
         g.viewer = NO_LOGIN_VIEWER if not require_login else auth.current_viewer(cfg)
+        return None
 
     @app.before_request
     def _require_login():

@@ -1006,11 +1006,21 @@ untouched.
 
 Some practical notes:
 
-- **`serve` cannot do it.** The web process opens the index read-only, which is
-  what lets it keep serving pages while a scan writes. Meeting an older index it
-  says so and refuses to start, naming `scan` as the fix and deliberately *not*
-  suggesting you delete anything. So run `harelphotos scan` first, then restart
-  the server — not the other way round.
+- **The running server cannot do it, and must be restarted afterwards.** The web
+  process opens the index read-only, which is what lets it keep serving pages
+  while a scan writes — so it cannot add a column, and it keeps running whatever
+  code it started with until you restart it. Both halves of the mismatch show
+  the same "Just a moment" page in place of every album, with the two version
+  numbers and what to do:
+
+  ```sh
+  harelphotos scan                     # upgrades the index
+  sudo systemctl restart harelphotos   # gets the server onto the new code
+  ```
+
+  In that order. Doing only the first leaves the old code facing a newer index,
+  which is the more confusing way round and the reason that page says which
+  version it found.
 - **It is all or nothing.** The columns and the new version number are written
   in one transaction, so a machine that loses power halfway leaves an index that
   is exactly as it was, and the next attempt succeeds.

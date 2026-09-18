@@ -352,3 +352,37 @@ def test_the_cover_command_accepts_a_path_from_the_top_of_the_tree(tmp_path, cap
     # And a relative path still means relative: this one does not exist.
     assert cli.main(["-c", str(cfg_path), "cover", "trips",
                      "2026/07/thailand/a.jpg"]) == 1
+
+
+def test_an_index_the_server_cannot_read_is_a_plain_page_not_a_500(tmp_path):
+    """The failure mode of the upgrade that introduced all this.
+
+    The index is opened per request, so an index the running code does not
+    understand used to mean an internal server error on every page, with the
+    reason only in the traceback. It should say what is happening instead --
+    without the database's path, since this renders before the login gate.
+    """
+    import sqlite3
+
+    photos = tmp_path / "pictures"
+    fixtures.make_jpeg(photos / "2019" / "a.jpg")
+    cfg = fixtures.make_config(tmp_path, photos)
+    conn = fixtures.fresh_index(cfg)
+    scanner.scan(cfg, conn)
+    conn.close()
+
+    # What a server looks like when it was not restarted after an upgrade.
+    c = sqlite3.connect(cfg.index_db)
+    c.execute("UPDATE meta SET value = ? WHERE key = 'schema_version'",
+              (str(db.SCHEMA_VERSION + 1),))
+    c.commit()
+    c.close()
+
+    app = create_app(cfg, require_login=True)
+    app.config.update(TESTING=True)
+    r = app.test_client().get("/a/")
+    body = r.get_data(as_text=True)
+
+    assert r.status_code == 503                  # not 500: "not now", not "broken"
+    assert "Restart it" in body
+    assert str(cfg.index_db) not in body         # no filesystem path on the page

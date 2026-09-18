@@ -25,9 +25,11 @@ def test_open_missing_raises(tmp_path):
 
 
 def test_schema_mismatch_tells_you_to_delete_it(tmp_path):
+    """A version this code can make no sense of at all. A *newer* one is a
+    different case with a different answer -- see below."""
     path = tmp_path / "index.sqlite"
     conn = db.create_index(path)
-    db.set_meta(conn, "schema_version", "999")
+    db.set_meta(conn, "schema_version", "banana")
     conn.commit()
     conn.close()
     with pytest.raises(db.SchemaMismatch, match="delete it"):
@@ -366,3 +368,32 @@ def test_an_interrupted_migration_leaves_nothing_half_done(tmp_path):
     assert db_mod.schema_version(conn) == db_mod.SCHEMA_VERSION
     assert conn.execute("SELECT deriv_key FROM photos").fetchone()[0] == "expensive"
     conn.close()
+
+
+def test_an_index_newer_than_the_code_is_not_told_to_delete_it(tmp_path):
+    """The message that used to come out here said "delete it and run scan",
+    with the warning that rebuilding re-encodes every photograph.
+
+    That is right for a corrupt or foreign database and badly wrong for this
+    one: an index newer than the code is what a server looks like when it was
+    not restarted after an upgrade, and following the advice would cost a week
+    of encoding to fix a missed restart.
+    """
+    path = tmp_path / "index.sqlite"
+    conn = db.create_index(path)
+    db.set_meta(conn, "schema_version", str(db.SCHEMA_VERSION + 1))
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(db.SchemaMismatch) as caught:
+        db.open_index(path)
+    said = str(caught.value)
+    assert "do not delete" in said.lower()      # the opposite of what it said
+    assert "delete it and run" not in said.lower()
+    assert "restart" in said.lower()
+    assert caught.value.found == db.SCHEMA_VERSION + 1
+
+    # A database this code has no idea about still says what it always said.
+    sqlite3.connect(tmp_path / "foreign.sqlite").execute("CREATE TABLE x (y)")
+    with pytest.raises(db.SchemaMismatch, match="delete it"):
+        db.open_index(tmp_path / "foreign.sqlite")

@@ -1,0 +1,20 @@
+{# Shown when the index cannot be opened because it was written by a different
+   version of the schema. Almost always an upgrade in progress rather than
+   anything broken, so it says so plainly instead of leaving an internal server
+   error on every page with the reason visible only in the log.
+
+   No filesystem path here: this renders before the login gate, so whoever is
+   looking may be anyone who can reach the site. The version numbers and what
+   to run are safe; the full message, path included, goes to the log. #}
+{% extends "base.html" %}
+{% block title %}Unavailable — {{ cfg.ui.site_title }}{% endblock %}
+{% block body %}
+<div class="empty-page">
+  <h1>Just a moment</h1>
+  <p>{{ cfg.ui.site_title }} is being upgraded, and cannot show anything until
+    that finishes. Nothing has been lost — try again shortly.</p>
+  <p class="dim">The index is at schema version {{ mismatch.found }} and this
+    software expects {{ mismatch.expected }}.
+    {%- if mismatch.action %} {{ mismatch.action }}{% endif %}</p>
+</div>
+{% endblock %}
