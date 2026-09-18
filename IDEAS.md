@@ -754,73 +754,49 @@ the photographs stay where they are. This is the natural counterpart to a tree
 organized by date: the same photographs belong to "August 2026" *and* to
 "trips", and nothing today can say so without copying them.
 
-**The question that decides everything else is what a click does.** Two
-answers, and they are not close in cost.
+**A link is a shortcut.** The card's href is the target's own URL, so clicking
+"2026 Thailand" lands on `/a/2026/07/thailand/` with its own breadcrumbs, and
+Back returns to `trips`. Nothing else in the application changes: no new routes,
+no second path to any photograph, and nothing in front of the exact-match path
+lookup.
 
-**A. The link is a shortcut.** The card's href is simply the target's own URL,
-so clicking it leaves `trips/` behind and lands on `/a/2026/07/thailand/` with
-its own breadcrumbs. Nothing else in the application changes: no new routes, no
-new paths, no new way for a URL to reach a photograph.
+*(The alternative — serving the target's contents under `/a/trips/2026
+Thailand/` so the breadcrumb reads `trips / 2026 Thailand` — was considered and
+rejected as far more expensive than it looks. It would put a link-resolving step
+ahead of `SELECT * FROM dirs WHERE path = ?`, which is exactly the exact-match
+lookup that makes path traversal impossible here, and it would have to take the
+target's `acl_chain` rather than the link's, or a link in an unrestricted album
+becomes a way around a restriction.)*
 
-The objection is losing the way back to the other trips — and Back already goes
-there, from a page the reader arrived at by an ordinary link. What is genuinely
-lost is the *breadcrumb* saying you came via `trips`.
+**An album holding only links must stop counting as empty.** This is the part
+most likely to be forgotten, because everything else will look finished and the
+album simply will not appear:
 
-**B. The link is a place.** `/a/trips/2026%20Thailand/` serves the target's
-contents under the link's own path, so the breadcrumb reads `trips / 2026
-Thailand` and the way back is where you expect it.
+- `scanner` counts a directory's children in `_upsert_dir`, writing `n_photos`
+  and `n_subdirs`, and `rollup()` sums `n_photos_rec` upwards from the leaves.
+  A directory holding nothing but links has zero of each.
+- `subalbums()` then drops it — `if r["n_photos_rec"] == 0: continue`, "a
+  directory of videos, scripts or scratch files that happens to live in the
+  photo tree".
 
-This is the one worth being honest about, because it touches the part of the
-code most carefully guarded:
+So the counting has to learn about links: a directory's links count towards its
+subalbum count, and a directory with links is not empty. Decide deliberately
+whether a link's *photographs* also count towards `n_photos_rec` — counting them
+makes "trips — 1,240 photos" read correctly on the card, and means the same
+photograph is counted twice in the collection's total.
 
-- **Path resolution is an exact lookup.** `album()` is
-  `SELECT * FROM dirs WHERE path = ?`, and `dirs.path` is UNIQUE. A virtual
-  path is in no row, so every album, photo, image and API route would have to
-  resolve links before looking anything up — and those routes resolving paths
-  by exact match is precisely the property that makes traversal impossible
-  here. Adding a rewriting step in front of it is the highest-risk change this
-  application could take.
-- **The ACL chain must follow the target, not the link.** Permission is
-  accumulated down the real tree in `dirs.acl_chain`. A link that carried the
-  *linking* album's permissions would be a way around a restriction — put a
-  link in an unrestricted album and the private thing it points at becomes
-  public. Whatever is built must take the target's chain, and a test should
-  say so before any of it works.
-- **Photographs would live at two URLs.** `/p/trips/2026 Thailand/IMG.jpg` and
-  `/p/2026/07/thailand/IMG.jpg` would be the same picture. Derivatives are keyed
-  by the real path so nothing is generated twice, but a browser caches the two
-  separately, "make this the cover" has two spellings of one answer, and a
-  shared link can say either.
-- **Links can make cycles.** `a/.album.toml` pointing at `b`, `b` pointing at
-  `a`, and the path space is infinite. Needs a depth limit, and links that
-  point at an ancestor of themselves need a rule.
+**And a link to something the reader may not see must not appear at all**,
+exactly as `subalbums()` already drops what `_may_view` refuses. Otherwise the
+link's own name — "2026 Thailand" — leaks the existence of a restricted album,
+which is what the 404-instead-of-403 rule exists to prevent. That check has to
+happen at request time against the *target*, even though the link itself is read
+from `.album.toml` at scan time, because the target's permissions and its very
+existence can change without `trips/` being rescanned.
 
-**What is true whichever is chosen:**
-
-- **An empty directory is not currently an album at all.** `subalbums()` skips
-  any directory with `n_photos_rec == 0` — "a directory of videos, scripts or
-  scratch files that happens to live in the photo tree". A `trips/` holding
-  nothing but links has zero photographs beneath it and would never be listed.
-  That rule has to learn about links, and it is the first thing that will be
-  forgotten.
-- **A link to something the reader may not see must not appear**, exactly as
-  `subalbums()` already drops what `_may_view` refuses. Otherwise the link's
-  own name — "2026 Thailand" — leaks the existence of a restricted album, which
-  is the thing the 404-instead-of-403 rule exists to prevent.
-- **Links are read at scan time** like every other `.album.toml` key, but the
-  target's cover, its permissions and its very existence have to be resolved at
-  *request* time, because the target can change without the linking directory
-  being rescanned.
-
-**The recommendation, for whenever this is picked up:** build A first. It is a
-few lines — a `[links]` table in the album config, cards rendered from it, the
-empty-album rule taught about links — and it delivers the whole point of the
-feature, which is that "trips" exists at all. Live with it, and find out whether
-the missing breadcrumb is actually a problem. If it is, the cheap next step is
-not B but a middle one: keep the single real path and let the target page show
-where you came from, so `trips` is one click away without any virtual path
-existing. B should be reached for only if that is genuinely not enough, and with
-the ACL test written first.
+Two smaller things: a link naming a directory that has gone should disappear
+quietly rather than render a broken card, the way a cover naming a deleted photo
+already falls back; and links pointing at each other need a depth limit, or a
+cycle is an infinite tree.
 
 ---
 
