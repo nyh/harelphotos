@@ -983,7 +983,14 @@ operation costs a few minutes of reading and regenerates nothing.
 So: **mtime decides whether to look. The signature decides whether to work.**
 
 `--full` forces all metadata to be re-read and all images regenerated — useful
-after upgrading, or when you want to be certain everything is current.
+after upgrading, or when you want to be certain everything is current. On a
+large collection the regenerating half is the expensive one: expect it to take
+as long as the first scan did.
+
+**`--full --headers-only` re-reads the metadata without touching a single
+image**, which is what to reach for when a new release extracts something from
+the photographs that it did not before. It leaves every generated image, and
+every record of one, exactly as it was.
 
 ### When an upgrade needs a new column in the index
 

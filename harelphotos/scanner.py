@@ -950,7 +950,17 @@ def scan(
     if full:
         # Force every header to be re-read, e.g. to pick up a new EXIF field.
         conn.execute("UPDATE photos SET hdr_stale = 1")
-        conn.execute("UPDATE photos SET deriv_key = NULL")
+        if not headers_only:
+            # ...and every image regenerated. Clearing the key is how that is
+            # asked for, and it is why this is guarded: `--headers-only` is
+            # also spelled `--no-images` and promises to generate none. Doing
+            # it anyway would skip the encoding in *this* run and leave the
+            # whole collection looking un-encoded, so the next ordinary scan --
+            # one with no flags at all, run by someone who asked for nothing of
+            # the kind -- would re-encode every photograph. On a large
+            # collection that is days of work, arrived at by having asked for
+            # the opposite.
+            conn.execute("UPDATE photos SET deriv_key = NULL")
     if repair:
         s.stats.repaired = len(find_missing_derivatives(cfg, conn, repair=True))
     s.walk(subpath, progress=walk_progress)

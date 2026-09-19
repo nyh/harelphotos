@@ -537,3 +537,37 @@ def test_the_scan_nice_level_is_applied_to_whatever_does_the_encoding():
     assert code != 1, "nice_this_process did not set this process's own priority"
     assert code != 2, "applying the level twice stacked; it must be absolute"
     assert code == 0, f"child failed with {code}"
+
+
+def test_full_with_headers_only_does_not_arm_a_re_encode(tmp_path):
+    """`--headers-only` is also spelled `--no-images` and promises to generate
+    none. Combined with `--full` it used to clear every `deriv_key` anyway:
+    nothing was encoded in that run, and the next *ordinary* scan -- no flags,
+    nobody having asked for anything -- re-encoded the entire collection.
+    """
+    photos = tmp_path / "pictures" / "a"
+    fixtures.make_jpeg(photos / "one.jpg", size=(900, 600))
+    fixtures.make_jpeg(photos / "two.jpg", size=(900, 600))
+    cfg = fixtures.make_config(tmp_path, tmp_path / "pictures")
+    conn = fixtures.fresh_index(cfg)
+    scanner.scan(cfg, conn)
+
+    keys = lambda: [r[0] for r in conn.execute("SELECT deriv_key FROM photos ORDER BY name")]
+    before = keys()
+    assert all(before), "the fixture should have been derived"
+
+    # Re-read every header, generate no images.
+    stats = scanner.scan(cfg, conn, full=True, headers_only=True)
+    assert stats.photos_derived == 0
+    assert keys() == before, "the keys must survive, or the next scan re-encodes"
+
+    # ...and the next ordinary scan is a no-op for encoding, which is the
+    # property that actually matters.
+    assert scanner.scan(cfg, conn).photos_derived == 0
+
+    # `--full` on its own still means what it always meant.
+    scanner.scan(cfg, conn, full=True, headers_only=True)   # keys intact
+    conn.execute("UPDATE photos SET hdr_stale = 1")
+    stats = scanner.scan(cfg, conn, full=True)
+    assert stats.photos_derived == 2
+    conn.close()
