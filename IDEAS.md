@@ -572,16 +572,36 @@ a phone and on a desktop, rather than reasoning from the margin. A narrower
 window trades a little scrolling latency for a lot of unrequested data, and
 which way that trade falls depends on a number nobody has yet looked at.
 
-### 23. Serve the album page's first screenful without waiting for the index
+### 23. Send the album page before the whole of it is built
 
-Not investigated, and listed so it is not forgotten: a page of five thousand
-photographs does five thousand rows of work before the first byte, and only the
-first thirty are looked at. Whether that actually costs anything is a question
-for a measurement, not for an opinion.
+A large album is assembled in full before Flask sends a byte: the index query
+returns every row, a `Photo` is built for each, and the template renders a tile
+for each — three and a half thousand of them for `2026/07/thailand` — when the
+first screenful is thirty. Flask can stream a template, so in principle the top
+of the page could go out while the rest is still being built.
 
----
+**Measured, so it is a real number and not a worry.** Against the live server,
+five requests each, median time to first byte:
 
----
+    the root album, 3 KB           510 ms
+    3505 photographs, 111 KB       754 ms
+
+Both include a fresh connection and TLS, which is why even the small page takes
+half a second from another country; subtracting cancels it and leaves **about
+244 ms** of extra work for the large page. That is what streaming could recover
+part of.
+
+**But the grid could not appear any sooner for it**, which is the part worth
+knowing before anyone starts. The justified rows are computed by `layoutGrid`
+on `DOMContentLoaded`, from the aspect ratios of every tile, and the grid is
+hidden until it has run. Streaming the HTML earlier would deliver markup the
+page still could not lay out. Getting a first screenful *visible* sooner means
+laying out rows incrementally as well, which is a much larger change to app.js
+than streaming is to the view.
+
+So: a quarter of a second, recoverable only in part, and only alongside an
+incremental layout. Not worth it at this size — worth reconsidering if albums
+ever reach a size where that 244 ms grows into something felt.
 
 ### 27. A 768 tier, to close the gap between 512 and 1280
 
