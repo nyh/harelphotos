@@ -25,7 +25,60 @@ poster frame is easy, playback and transcoding are not — and might reasonably
 be answered with "the album shows a thumbnail and offers the original".
 
 This is the largest functional gap in the project. Worth checking what the
-family actually has before doing anything.
+family actually has before doing anything. PNG is a separate and much smaller
+question — see item 28.
+
+### 28. PNG, and whether pictures that are not photographs belong here
+
+`PHOTO_EXTENSIONS = {".jpg", ".jpeg"}`, so a PNG is not indexed and simply does
+not appear. Nadav has `2026/AI` full of them — images made by an AI rather than
+a camera — and the question is really two questions.
+
+**Reading them is nearly free, unlike HEIC.** Pillow decodes PNG out of the
+box, so there is no new dependency and nothing to install; the derivative
+pipeline would work by adding one extension to that set. Three things behave
+differently from JPEG and are worth knowing before flipping it on:
+
+- **`im.draft()` does nothing.** The 1/2, 1/4, 1/8 decode trick in `derive` is
+  a libjpeg feature, and the comment beside it — decode from ~450 ms to ~93 ms,
+  "the single biggest win here" — applies to JPEG alone. On PNG the call
+  returns `None` and the whole image is decoded. Measured on one of Nadav's at
+  1408x768: about 30 ms, so it does not matter at these sizes, and it would at
+  much larger ones.
+- **Transparency is silently flattened.** `derive` does `im.convert("RGB")`,
+  and a fully transparent pixel keeps whatever colour is under the alpha rather
+  than being composited onto anything — a logo on transparency comes out with
+  garbage behind it instead of white. AVIF supports alpha, so this is a choice
+  to make rather than a limit to accept.
+- **The quality ladder is tuned for photographs.** Lossy encoding of flat
+  colour, text and hard edges is its weak case, and a screenshot is exactly
+  that. AI art is usually photographic enough not to care; a screenshot of a
+  conversation would not be.
+
+Storage is not a concern either way. One of these PNGs is 1951 KB, and its
+AVIF derivatives come to 6 KB, 16 KB and 63 KB at the 256, 512 and 1280 tiers.
+
+**Dates are the real wrinkle, and it is the WhatsApp problem again.** These
+files have no EXIF date. Pillow reports zero tags, and although there *is* a
+`Raw profile type APP1` text chunk holding a genuine 6762-byte TIFF block —
+complete with a "Picasa" software tag — there is no date in that either. The
+file dates are all 29 August, the day the folder was copied.
+
+The names carry it, though: `1784536337126.png` is a millisecond epoch, 20 July
+2026 at 11:32. Four of the five are named that way and one is
+`file_00000000230c820b86a55c3e92e8067b.png`, which is not. So
+`contrib/fixup_whatsapp_dates.py` has an obvious sibling, or an obvious second
+pattern — the same trick of putting the date where the scanner already looks,
+with no change to the application at all.
+
+**The second question is whether they belong in the album**, and it is not a
+technical one. Nadav: "I don't know if I really want to save these AI creations
+as photos, but maybe I will want to show art together with the photos." If the
+answer is yes, the machinery already exists to keep them apart without keeping
+them out — a directory of their own, with `hidden` if they should not appear in
+listings, or an `allow` list, or simply a title that says what they are. Worth
+deciding before turning the extension on, because afterwards they arrive
+wherever they happen to sit in the tree.
 
 ### 2. Search
 
