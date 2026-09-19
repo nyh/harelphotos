@@ -549,64 +549,28 @@ window in miniature.
 carousel, prefetching becomes trivial, and the zoom resets naturally between
 photographs.
 
-### 22. The album page, measured
+### 22. How wide should the lazy-load window be?
 
-Reported as slow: `/a/2021/08/`, 312 photographs. Measured against the live
-server while signed in, rather than guessed at.
+`limitLoading` observes each tile with `rootMargin: "200% 0px"` — two viewports
+of slack above and below — so that scrolling never waits for an image. That was
+chosen against an album of a few hundred photographs, not one of three and a
+half thousand.
 
-**The image sizes are right, and that was the worry.** A browser really does
-get AVIF -- checked by sending Chrome's, Firefox's and Safari's own `Accept`
-headers, which is all the negotiation looks at. A typical grid thumbnail is
-**15.8 KB**. The tiers, for one real photograph:
+On a phone, two viewports either side of a 700 px screen is a 3500 px band,
+which at a 130 px row height is around 27 rows, or roughly 90 tiles requested
+before anybody has scrolled at all. At a median thumbnail of about 12 KB that
+is on the order of a megabyte fetched up front. A desktop's wider rows make the
+tile count higher still.
 
-    256   5.8 KB     512   15.8 KB     1280   87 KB     1600   133 KB
+Against that: `loading="lazy"` is on every tile as well, so the browser applies
+its own heuristics too, and the rows carry `content-visibility: auto`, so
+nothing off-screen is laid out or painted regardless. The cost is bandwidth and
+request count, not rendering.
 
-(An earlier measurement of this said 34 KB, because `curl` sends `Accept: */*`
-and gets the JPEG fallback. Worth knowing before measuring this again.)
-
-**What costs the time is per-image latency, not bytes** -- and specifically the
-distance, since the server is in another country. On a connection that is
-already open, a thumbnail's first byte arrives 117 ms after the request against
-a round trip of about 105, so the server costs roughly ten milliseconds. (An
-earlier version of this entry said 250 ms of server time, arrived at by
-subtracting the round trip from a figure that still had the TLS handshake
-inside it. There was never a server-side problem.)
-
-Over HTTP/1.1 and six connections that meant an album's hundred-odd thumbnails
-in serialized batches, which was the wait. Turning on HTTP/2 fixed it -- the
-vhost in contrib/ carries `Protocols h2 http/1.1` and the reasoning.
-Everything remaining here was written against the old behaviour.
-
-Three further things, found while looking:
-
-**The ladder has a hole between 512 and 1280, and at today's sizes nothing
-falls into it.** Measured on a real 412px phone at 2.625 device pixels per
-point: a portrait tile is 95 CSS px and wants 250 device px, a landscape one is
-191 and wants 500 — and both take the 512 copy, 16 KB. So 512 is the
-interesting size and the hole is theoretical.
-
-It stops being theoretical in two cases, neither of them present: a phone at a
-full 3x density, where a landscape tile wants 585 and jumps to the 1280 file at
-87 KB; or the grid thumbnails being made larger, which puts a landscape tile
-past 674. If either ever happens, a 768 tier is the answer and is cheap — the
-tier list is deliberately not part of the recipe fingerprint, so adding one
-costs a single extra encode per photograph and re-encodes nothing.
-
-Recorded because it was nearly acted on twice. Both times the reasoning was
-about a device nobody here owns.
-
-**~~`sendfile_header = "auto"` does nothing.~~** Resolved, and not in the
-direction anyone expected: the setting turned out to be a trap rather than a
-missing feature, and the whole handoff was measured and removed. The
-measurements and what could and could not be concluded from them are in
-`images.send`, next to the code that no longer hands off.
-
-**The lazy-load window may be too wide for a 312-photo page.** `limitLoading`
-uses `rootMargin: "200% 0px"` -- two viewports of slack in each direction --
-which on a tall album is a great many thumbnails requested before anybody has
-scrolled. It was chosen so scrolling never waits, which is right, but it was
-not chosen against a page this long. Worth measuring how many images a first
-paint actually asks for before changing it.
+Worth measuring before changing: count what a first paint actually asks for, on
+a phone and on a desktop, rather than reasoning from the margin. A narrower
+window trades a little scrolling latency for a lot of unrequested data, and
+which way that trade falls depends on a number nobody has yet looked at.
 
 ### 23. Serve the album page's first screenful without waiting for the index
 
