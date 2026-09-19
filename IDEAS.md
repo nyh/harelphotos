@@ -59,10 +59,14 @@ Storage is not a concern either way. One of these PNGs is 1951 KB, and its
 AVIF derivatives come to 6 KB, 16 KB and 63 KB at the 256, 512 and 1280 tiers.
 
 **Dates are the real wrinkle, and it is the WhatsApp problem again.** These
-files have no EXIF date. Pillow reports zero tags, and although there *is* a
-`Raw profile type APP1` text chunk holding a genuine 6762-byte TIFF block —
-complete with a "Picasa" software tag — there is no date in that either. The
-file dates are all 29 August, the day the folder was copied.
+files have no EXIF date. Pillow reports zero tags, and there *is* a
+`Raw profile type APP1` text chunk that it does not surface as EXIF, holding a
+genuine TIFF block — but walking its IFDs finds no date field either. What it
+holds is `Orientation`, `Software = "Picasa"`, an `ImageUniqueID`, and a JPEG
+thumbnail that is 96% of its size. (Picasa was discontinued in 2016. Google's
+imaging code descends from it and still signs its work that way, so this says
+the file passed through a Google surface rather than that anyone ran Picasa.)
+The file dates are all 29 August, the day the folder was copied.
 
 The names carry it, though: `1784536337126.png` is a millisecond epoch, 20 July
 2026 at 11:32. Four of the five are named that way and one is
