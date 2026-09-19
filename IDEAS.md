@@ -366,11 +366,6 @@ over twenty years from several cameras and backups certainly contains the same
 photograph in several places. `harelphotos check --duplicates` would be a
 report, not a delete button — the deleting should stay manual.
 
-### ~~13. Zoom on a photo~~ — done
-
-Pinch, double-tap and drag to pan, and the sharper copy fetched behind the
-gesture. Kept here only because the item below refers to it.
-
 ### 14. A thumbnail size control, like Picasa's
 
 Picasa's desktop window had a slider that ran from a great many tiny thumbnails
@@ -432,60 +427,6 @@ Everything below follows from that number being large and the files being
 small. A 1280px AVIF of a real 12-megapixel photograph is **34 KB**. The
 sizes are not the problem and have not been for a while.
 
-### ~~18. Turn on HTTP/2~~ — done, 2026-09-13
-
-Was: `curl -w '%{http_version}'` said **1.1** and the vhost never mentioned
-otherwise, so a browser opened about six connections per origin and fetched an
-album's thumbnails six at a time, each batch costing a round trip.
-
-Done. `Protocols h2 http/1.1` is in the shipped vhost behind an `IfModule`,
-`mod_http2` is in INSTALL.md's package list and in `check --env`, and the live
-server negotiates `h2` with HTTP/1.1 still working as a fallback.
-
-**Reported immediately as feeling much better**, which is the result that
-counts. The mechanism: the server costs about ten milliseconds per request and
-the distance — it is in another country — costs about 105, so an album's
-hundred-odd thumbnails over six connections was something like seventeen
-serialized round trips of pure waiting. One connection and one handshake
-removes nearly all of it.
-
-Benchmarking it from a third machine was less tidy than that, and is recorded
-because the tidy number would have been wrong. Forty thumbnails, twice: HTTP/2
-took 12.63 s and 12.65 s, HTTP/1.1 took 149.8 s and then 16.7 s. The honest
-reading is not "twelve times faster" but **"consistent where six connections
-are not"** — one bad moment costs a multiplexed connection little and costs six
-separate ones a great deal. The absolute figures are a slow path between two
-countries and say nothing about what anyone else sees.
-
-Everything below was written against the old behaviour and should be re-judged
-against the new one before any of it is attempted.
-
-`Protocols h2 http/1.1` in the TLS vhost, with `mod_http2` loaded. It is the
-cheapest item on this list by a wide margin and probably the largest single
-improvement, and it should be measured before anything else here is attempted,
-because it changes what the rest are worth.
-
-**HTTP/3 would be better still, and is not available to us.** It is a real
-standard, and phones support it well — Chrome on Android and Safari on iOS
-both. It would help more than HTTP/2 here for two reasons that are exactly this
-site's problems. QUIC folds the transport and crypto handshakes together, which
-is worth about the 120 ms that TLS costs on top of TCP in the measurements
-above; and its streams are independent, so a single lost packet does not stall
-every other one. HTTP/2 over TCP has that flaw, and fifty thumbnails all
-waiting on one retransmit is what a lossy mobile link does to an album page.
-
-The blocker is the web server. Apache 2.4 ships no HTTP/3 — `mod_http2` and
-nothing beyond it — and Rocky 9 ships Apache. nginx has had it since 1.25 and
-Caddy does it by default, so this means replacing or fronting the web server,
-against two deliberate choices: INSTALL.md assumes an Apache already serving
-other sites and takes care not to disturb it. The second reason listed here —
-that the X-Sendfile handoff was Apache's and knew nothing of nginx's
-`X-Accel-Redirect` — is gone: the handoff was removed in September 2026 (item
-20), so nothing in the application is tied to a particular web server any more.
-
-Worth revisiting if Apache ever ships it, or if this site ever moves off a
-shared httpd for other reasons. Not worth moving *for*.
-
 ### 19. Prefetch the neighbouring *pages*, not only their images
 
 The next and previous photographs' images are already fetched ahead of time,
@@ -510,71 +451,6 @@ Do this before item 21, which addresses the same waiting far more elaborately.
 This is a few lines; if it is enough, the argument about 21 never has to be
 had — and if it is not, 21's case rests on how paging *feels* rather than on
 what it saves.
-
-### ~~20. Stop the thumbnails appearing one at a time~~ — closed, 2026-09-14
-
-Nadav's idea, and it was two ideas. The packing half is now closed, for a
-reason nobody guessed. Kept in full because the *instinct* was right twice and
-the *explanation* was wrong twice, which is worth remembering.
-
-**What it was slow for.** Not the request count, and not the disk. The album
-page was slow because the `X-Sendfile` handoff to Apache was slow. Measured
-against the live server:
-
-| 24 thumbnails, 344 KB | X-Sendfile | Python |
-|---|---|---|
-| over HTTP/2 | 6.56 s | **0.84 s** |
-| over HTTP/1.1 | 2.52 s | 0.87 s |
-| 240 sequential, stalled >300 ms | 38% | **0%** |
-
-Removing the handoff made a screenful 7.8x faster and made the stalls — a third
-of all requests, hanging for about a second on a one-second clock — vanish
-entirely. See `images.send` for the numbers and for what can and cannot be
-concluded about *why*; the mechanism was never found.
-
-**The spinning-disk argument, measured.** The last version of this idea was
-that the server has a spinning disk, so three thumbnails in one file would cost
-one seek instead of three and a screenful could be 3x faster. Sound reasoning,
-false premise. 120 thumbnails from albums nothing had ever fetched, then the
-same 120 again:
-
-```
-COLD  median 104.7 ms      WARM  median 103.2 ms       ->  ~1 ms
-```
-
-A cold screenful in parallel came out at 769 ms against 865 ms warm — cold
-*faster*, i.e. the difference is noise. The scanner writes an album's
-derivatives in directory order, so they land adjacent on the platter and
-readahead collects a run of them in one go. The filesystem is already doing the
-packing, for free.
-
-So the awkward costs below are now being paid for a benefit measured at
-approximately zero, and the idea is closed:
-
-- **The geometry.** The grid is justified with true aspect ratios and never
-  crops, so a pack holds fifty rectangles of differing shapes — a packing pass
-  at scan time, per-tile coordinates in the index, and `object-view-box` to
-  slice them out.
-- **Cache sharing.** A thumbnail fetched once is reused wherever it appears,
-  including as a cover on a parent page. Packs break that.
-- **Two ladders.** `srcset` offers 256 and 512; packs would need both.
-
-Two objections raised against packing *here* were wrong, and are still recorded
-as wrong, because they would be wrong again for the next idea of this shape:
-
-- **Lazy loading is not lost.** Packs of about fifty make a 5000-photo album a
-  hundred packs; you fetch the one or two on screen and the rest as they are
-  scrolled to — *fewer* things to observe, not more.
-- **Invalidation is only fatal if packs are cut by page position.** Cut them by
-  *directory* and adding a photograph rebuilds that directory's packs and
-  nothing else.
-
-**Still open, and now the only part worth doing:** the cheap *appearance* fix —
-hold a row until its images have decoded, or fade them in together, so a grid
-arrives as a grid rather than as popcorn. Tens of lines, no new files, no
-invalidation. Worth looking at once more first: with the handoff gone a
-screenful now lands in under a second, and this may have stopped being
-annoying on its own.
 
 ### 21. Page between photographs without loading a page
 
@@ -697,7 +573,8 @@ subtracting the round trip from a figure that still had the TLS handshake
 inside it. There was never a server-side problem.)
 
 Over HTTP/1.1 and six connections that meant an album's hundred-odd thumbnails
-in serialized batches, which was the wait. **Item 18 fixed it and is done.**
+in serialized batches, which was the wait. Turning on HTTP/2 fixed it -- the
+vhost in contrib/ carries `Protocols h2 http/1.1` and the reasoning.
 Everything remaining here was written against the old behaviour.
 
 Three further things, found while looking:
@@ -720,7 +597,9 @@ about a device nobody here owns.
 
 **~~`sendfile_header = "auto"` does nothing.~~** Resolved, and not in the
 direction anyone expected: the setting turned out to be a trap rather than a
-missing feature, and the whole handoff was measured and removed. See item 20.
+missing feature, and the whole handoff was measured and removed. The
+measurements and what could and could not be concluded from them are in
+`images.send`, next to the code that no longer hands off.
 
 **The lazy-load window may be too wide for a 312-photo page.** `limitLoading`
 uses `rootMargin: "200% 0px"` -- two viewports of slack in each direction --
@@ -737,115 +616,6 @@ first thirty are looked at. Whether that actually costs anything is a question
 for a measurement, not for an opinion.
 
 ---
-
-### 26. Links between albums — *done*
-
-Built as described below, and documented in MANUAL.md under
-"`[links]` — showing an album in a second place". The reasoning is kept here
-because it is the record of why it works the way it does.
-
-One thing the plan missed. "A directory with links is not empty" turned out to
-be too local a rule: a directory whose own content is *subdirectories* of links
-has no links of its own either, and vanished from its parent's listing. The
-question had to become recursive, so there is a third column, `n_links_rec`,
-counting links anywhere beneath a directory the way `n_photos_rec` counts
-photographs. Being empty now means neither.
-
-Nadav's idea. An otherwise empty directory — `trips/` — whose `.album.toml`
-names other albums the way a symbolic link names a file:
-
-```toml
-[links]
-"2026 Thailand" = "2026/07/thailand"
-"Greece"        = "2019/08/naxos"
-```
-
-`trips/` then lists those as albums, each showing the target's own cover, and
-the photographs stay where they are. This is the natural counterpart to a tree
-organized by date: the same photographs belong to "August 2026" *and* to
-"trips", and nothing today can say so without copying them.
-
-**A link is a shortcut.** The card's href is the target's own URL, so clicking
-"2026 Thailand" lands on `/a/2026/07/thailand/` with its own breadcrumbs, and
-Back returns to `trips`. Nothing else in the application changes: no new routes,
-no second path to any photograph, and nothing in front of the exact-match path
-lookup.
-
-*(The alternative — serving the target's contents under `/a/trips/2026
-Thailand/` so the breadcrumb reads `trips / 2026 Thailand` — was considered and
-rejected as far more expensive than it looks. It would put a link-resolving step
-ahead of `SELECT * FROM dirs WHERE path = ?`, which is exactly the exact-match
-lookup that makes path traversal impossible here, and it would have to take the
-target's `acl_chain` rather than the link's, or a link in an unrestricted album
-becomes a way around a restriction.)*
-
-**An album holding only links must stop counting as empty.** This is the part
-most likely to be forgotten, because everything else will look finished and the
-album simply will not appear:
-
-- `scanner` counts a directory's children in `_upsert_dir`, writing `n_photos`
-  and `n_subdirs`, and `rollup()` sums `n_photos_rec` upwards from the leaves.
-  A directory holding nothing but links has zero of each.
-- `subalbums()` then drops it — `if r["n_photos_rec"] == 0: continue`, "a
-  directory of videos, scripts or scratch files that happens to live in the
-  photo tree".
-
-So the counting has to learn about links: a directory's links count towards its
-subalbum count, and a directory with links is not empty.
-
-**"trips — 1,240 photos" without double-counting anything.** The obvious way —
-letting a link's photographs flow into `n_photos_rec` — breaks the moment the
-links and the albums they point at share an ancestor, which is the normal case:
-that ancestor counts them twice, and so does everything above it, up to the
-collection's own total.
-
-Keep two numbers instead:
-
-- **`n_photos_rec` stays exactly what it is** — the bottom-up tree sum, every
-  photograph counted once, links contributing nothing. Ancestors keep summing
-  only this, so nothing above a links directory can double-count, including the
-  case where the links and their targets sit under one parent.
-- **`n_photos_linked` is new**, and is only ever *displayed*. For a directory
-  with links it is the sum of each target's `n_photos_rec`; the card shows
-  `n_photos_rec + n_photos_linked`, so `trips` reads 1,240 while contributing
-  zero upwards.
-
-This is exactly right rather than merely convenient, because every link target
-is itself somewhere under `photo_root` and so is already counted, once, by every
-ancestor that really contains it. The collection's total stays the true number
-of photographs. What a reader gives up is that `special/` holding a `trips/`
-whose targets live under `2026/` does not include those in its own total — which
-is correct: they are not beneath it.
-
-Two things that make it easy:
-
-- **A second pass, after the rollup.** `rollup()` works deepest-first so each
-  parent can add up children that are already final; a link may point anywhere,
-  including somewhere not yet finalized. Compute `n_photos_linked` in a sweep
-  of its own once every `n_photos_rec` is settled.
-- **Cycles cannot recurse.** The linked count sums targets' *tree* counts, never
-  their linked counts, so a link to a directory of links adds that directory's
-  real photographs and stops. No depth limit is needed for the arithmetic — only
-  for walking links in the interface.
-
-One honest wrinkle, inherited rather than introduced: these counts are
-permission-blind. `rollup()` counts every photograph in a directory regardless of
-who is asking, so the number on a card can already exceed what a particular
-reader may see, and a linked count would be no different. Worth knowing before
-someone reports it as a bug in links.
-
-**And a link to something the reader may not see must not appear at all**,
-exactly as `subalbums()` already drops what `_may_view` refuses. Otherwise the
-link's own name — "2026 Thailand" — leaks the existence of a restricted album,
-which is what the 404-instead-of-403 rule exists to prevent. That check has to
-happen at request time against the *target*, even though the link itself is read
-from `.album.toml` at scan time, because the target's permissions and its very
-existence can change without `trips/` being rescanned.
-
-Two smaller things: a link naming a directory that has gone should disappear
-quietly rather than render a broken card, the way a cover naming a deleted photo
-already falls back; and links pointing at each other need a depth limit, or a
-cycle is an infinite tree.
 
 ---
 
