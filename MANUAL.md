@@ -927,9 +927,39 @@ brought up to date at the end of every scan, so a completed `harelphotos scan`
 makes it right.
 
 A date that looks wrong usually is: a photo with no date recorded falls back to
-the file's timestamp, which for a scan is when it was scanned rather than when
-it was taken. `harelphotos check` reports what fraction of your photos have a
-real date.
+the file's timestamp, which is when the file was last copied rather than when
+the photograph was taken. `harelphotos check` reports what fraction of your
+photos have a real date.
+
+#### Photos from WhatsApp, which have no date at all
+
+WhatsApp strips the metadata out of everything it sends — not just the date
+field, the whole EXIF block. So a photograph a relative sent you arrives with
+nothing inside it to read, and falls back to the file's timestamp. Copy a
+folder of them off a phone and every one carries the date you copied it,
+clumping a holiday's worth of pictures onto one instant at the end of the
+album.
+
+The date survives in the *name*, though: `IMG-20260716-WA0011.jpg` is 16 July
+2026. A script in `contrib/` puts it back where the software can see it, by
+setting each file's modification time from its own name:
+
+```sh
+python3 contrib/fixup_whatsapp_dates.py ~/pictures/2026/07/thailand
+python3 contrib/fixup_whatsapp_dates.py --apply ~/pictures/2026/07/thailand
+harelphotos scan --dir 2026/07/thailand
+```
+
+It writes nothing without `--apply`, so the first run just says what it would
+do. It only touches files whose names are WhatsApp's — anything from a camera
+has a real date inside it and is left alone. **The scan that follows costs
+nothing**: it notices the changed timestamps, re-reads those files' headers,
+finds the image bytes unchanged and keeps every generated image.
+
+Read the top of the script before running it. It explains what time of day it
+picks and why, and that a WhatsApp filename records when WhatsApp *saved* the
+file — the same day it was taken if it was shared promptly, and the day it was
+forwarded if it was not.
 
 ### Very wide photos in the grid
 
