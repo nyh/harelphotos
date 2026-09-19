@@ -849,6 +849,77 @@ cycle is an infinite tree.
 
 ---
 
+### 27. A 768 tier, to close the gap between 512 and 1280
+
+The ladder is `256, 512, 1280, 1600`. Every step is 2× except one, which is
+2.5×, and the album grid asks for widths that land inside it.
+
+A tier is the **longest edge** of the stored file, while the justified grid
+fixes the row *height* — 130 px on a phone, 180 on a desktop. So a tile's width
+is its aspect ratio times that height, and what it needs is that times the
+screen's pixel ratio. A 16:9 photograph on a 2.625× phone wants 231 × 2.625 =
+607 px of width: past the 512, so it fetches the 1280 and gets four times the
+pixels it can show.
+
+**Who benefits, and who does not.** The requirement is `aspect × row × dpr`
+falling between 512 and 1280, which is:
+
+- **Wide photographs only.** On a 2× screen the threshold is `aspect > 1.42`,
+  so 3:2 and 16:9 qualify and 4:3 does not — it asks for 478 px and the 512
+  covers it. Nothing narrower than 3:2 is ever affected.
+- **On 2× screens and above.** At 1× a 16:9 tile is 320 px wide and picks the
+  512 anyway; it would take `aspect > 2.84` for a 1× screen to reach the 1280,
+  and nothing in the collection is that wide.
+
+On the 3505-photo Thailand album that is **228 photographs, 6.5%** — 177 at
+16:9 and 47 at 3:2. Measured medians over 15 of each, fetched from the live
+site:
+
+| shape | 512 tier | 1280 tier | with a 768 (estimated) |
+|---|---|---|---|
+| 16:9 | 7 KB | 24 KB | ~12 KB |
+| 3:2 | 22 KB | 92 KB | ~41 KB |
+
+So roughly **6 MB saved across that whole album** — and only for a reader who
+scrolls all of it on a high-density screen. Per screenful, where it is actually
+felt, it is about one wide tile in twenty and some 20 KB.
+
+**It would do nothing for the single-photo view.** There `view_sizes` claims
+`min(100vw, calc(100dvh * aspect))`, which on a 390 px phone at 2.625× is 1024
+device px — past the 768, so it still fetches the 1280. The 768 only helps when
+the rendered width lands between 512 and 768, which needs a window narrower than
+about 384 CSS px at 2×. Nearly nothing lands there.
+
+**The cost is collection-wide and the benefit is not.** `expected_tiers`
+generates every configured tier for every photograph, so a 768 tier is one more
+file for all ~98,000 of them, including the 93.5% whose shape can never use it.
+From the two measured points, file size grows roughly as pixel count to the
+power 0.7, so a 768 file is about **1.8× its 512** — meaning the 768 tier would
+occupy a little under twice whatever the 512 tier occupies today.
+`harelphotos stats` prints that per tier, so the real figure is one command
+away; a rough guess is 2–4 GB.
+
+Encoding it is the cheap part, by design: `deriv_key` excludes the tier list,
+so adding a size re-encodes nothing and generates only the new size, and 768 has
+no `DEFAULT_QUALITY` entry so it would use `quality_default` — which is exactly
+the arrangement that makes trying a size and discarding it inexpensive.
+
+**The honest summary:** this buys a few megabytes for 6.5% of photographs on
+high-density screens, and costs a few gigabytes of storage for all of them, at a
+point where nothing is visibly slow — the thumbnails are `loading="lazy"` inside
+rows with `content-visibility: auto`, so a reader only ever fetches a screenful
+at a time. Worth doing if wide tiles ever look slow to arrive on a phone, and
+not before.
+
+*(If it is ever wanted and the storage is the objection, the sharper version is
+to generate 768 only for photographs wide enough to use it — `expected_tiers`
+already decides per photo which tiers to make, and it has the dimensions to hand.
+That confines the cost to the same 6.5% that gets the benefit, at the price of a
+tier whose presence varies by photograph, which nothing else in the design
+currently assumes.)*
+
+---
+
 ## Things I would not do
 
 - **A database other than SQLite.** Nothing here has come close to needing one,
