@@ -97,6 +97,25 @@ class Photo:
     size: int
     exif: dict
 
+    # How much of `deriv_key` goes in a URL. The key itself is a 24-character
+    # blake2b digest and stays that length where it does its real work --
+    # deciding whether a photograph needs re-encoding. In a URL it does a much
+    # smaller job: making the address change when the image does, so a browser
+    # holding a year-long cached copy fetches the new one. Eight hex characters
+    # is four billion values for that, and a collision would have to be between
+    # two versions of the *same* photograph to matter at all.
+    #
+    # The length is not free. Every tier of every photograph carries one, four
+    # times over in a grid's srcset, and the digests are high-entropy hex that
+    # compresses badly -- on a 3505-photo album the full-length key was 38% of
+    # the gzipped page.
+    CACHE_TAG_CHARS = 8
+
+    @property
+    def cache_tag(self) -> str:
+        """The part of `deriv_key` that appears in an image URL."""
+        return (self.deriv_key or "")[:self.CACHE_TAG_CHARS]
+
     @property
     def relpath(self) -> str:
         return f"{self.dir_path}/{self.name}" if self.dir_path else self.name

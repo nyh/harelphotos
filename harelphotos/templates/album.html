@@ -177,6 +177,13 @@
              grid of those would be far worse than a blank tile. #}
           <span class="pending-mark" aria-label="not generated yet">⋯</span>
         {%- else %}
+        {#- Every tier, not just the thumbnail ones, because a tile's width is
+            its aspect ratio times the row height and not one shared figure:
+            `grid_sizes` says as much, and a 3:1 panorama at a 180px row is
+            540 CSS px wide before the pixel ratio is even applied. Cutting
+            this to the thumb tiers upscales every panorama, on a plain 1x
+            desktop as much as anywhere. `sizes` is what keeps a small tile
+            from fetching a large file. -#}
         <img src="{{ p|img_src(256) }}"
              {% if p.tiers %}srcset="{{ p|srcset(all_tiers) }}"
              sizes="{{ p|grid_sizes }}"{% endif %}

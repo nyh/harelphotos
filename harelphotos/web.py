@@ -829,7 +829,7 @@ def _register_filters(app: Flask, cfg: Config) -> None:
             if tier not in photo.tiers:
                 continue
             w, _ = photo.size_at(tier)
-            parts.append(f"/i/{tier}/{photo.url_relpath}?v={photo.deriv_key} {w}w")
+            parts.append(f"/i/{tier}/{photo.url_relpath}?v={photo.cache_tag} {w}w")
         return ", ".join(parts)
 
     @app.template_filter("view_sizes")
@@ -883,7 +883,7 @@ def _register_filters(app: Flask, cfg: Config) -> None:
         if tier is None:
             # No derivative at all: fall back to the original, inline.
             return f"/i/orig/{photo.url_relpath}"
-        return f"/i/{tier}/{photo.url_relpath}?v={photo.deriv_key}"
+        return f"/i/{tier}/{photo.url_relpath}?v={photo.cache_tag}"
 
     @app.template_filter("exposure")
     def exposure(exif: dict) -> str:

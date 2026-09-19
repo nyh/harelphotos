@@ -973,3 +973,39 @@ def test_the_source_link_can_point_at_a_fork(scanned):
     assert "my-fork" in body
     assert "github.com/nyh/harelphotos" not in body
 
+
+def test_image_urls_carry_a_short_fingerprint(client):
+    """`?v=` exists only to make the URL change when the image does, so that a
+    copy frozen in a browser for a year is replaced when it should be. The full
+    24-character digest was doing that job at eight times the necessary length,
+    four times per tile in a grid's srcset, in high-entropy hex that compresses
+    badly -- 38% of the gzipped HTML of a 3505-photo album.
+    """
+    import re
+
+    body = client.get("/a/2019/01/").get_data(as_text=True)
+    # Only the /i/ URLs: the stylesheet and script carry their own, longer
+    # tag from `asset()`, which is a hash of the file rather than of a photo.
+    tags = set(re.findall(r"/i/\d+/[^\s\"]*?\?v=([0-9a-f]+)", body))
+    assert tags, "no fingerprinted image URLs on the page"
+    assert all(len(t) == 8 for t in tags), sorted(tags)
+
+    # Still a fingerprint, not a constant: it comes from the photo's deriv_key,
+    # so a re-encoded photograph gets a URL the browser has not seen.
+    conn = db.open_index(client.harelphotos_cfg.index_db, read_only=True)
+    from harelphotos.queries import Index, Viewer
+    photo = Index(conn, client.harelphotos_cfg).photo(
+        "2019/01/a.jpg", Viewer(token=None, name="", is_admin=True))
+    conn.close()
+    assert photo.deriv_key.startswith(photo.cache_tag)
+    assert len(photo.deriv_key) > len(photo.cache_tag)
+
+
+def test_the_image_route_ignores_the_fingerprint(client):
+    """It is a cache key, not a credential: the route never reads it, which is
+    what makes shortening it safe and what keeps an out-of-date page working
+    rather than showing holes."""
+    ok = client.get("/i/256/2019/01/a.jpg")
+    assert ok.status_code == 200
+    assert client.get("/i/256/2019/01/a.jpg?v=deadbeef").status_code == 200
+    assert client.get("/i/256/2019/01/a.jpg?v=").status_code == 200
