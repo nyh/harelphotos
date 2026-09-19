@@ -100,6 +100,26 @@
     {% endif %}
   {%- endmacro %}
 
+  {#- The card of an album with no picture to show: one whose images have not
+      been generated yet, or one that has no photograph anywhere beneath it,
+      which is what an album of links is.
+
+      Drawn rather than written. This was the character U+1F5C0 FOLDER, which
+      renders on a desktop and nowhere else: it is not in the emoji set that
+      phones ship fonts for, so Android had no glyph and drew the missing
+      character box -- a rectangle with a cross through it -- on every album
+      without a cover. An inline SVG is the same everywhere and takes its color
+      from the text, as the rest of the icons here already do. -#}
+  {%- macro blank_card() -%}
+  <div class="card-blank" aria-hidden="true">
+    <svg class="icon" viewBox="0 0 24 24" focusable="false">
+      <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2h9A1.5 1.5 0 0 1 21 9.5v8
+               A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5Z"
+            stroke-linejoin="round"/>
+    </svg>
+  </div>
+  {%- endmacro %}
+
   {{ pager(pager_data) }}
 
   {# Albums and photos are different kinds of thing, so they get different
@@ -111,7 +131,7 @@
       <a class="card" href="{{ sub.url }}">
         <div class="card-img">
           {% if sub.cover %}
-            {% if sub.cover.pending %}<div class="card-blank" aria-hidden="true">🗀</div>
+            {% if sub.cover.pending %}{{ blank_card() }}
             {% else %}<img src="{{ sub.cover|img_src(512) }}"
                  srcset="{{ sub.cover|srcset(all_tiers) }}"
                  sizes="(max-width: 600px) 45vw, 240px"
@@ -121,7 +141,7 @@
                  loading="lazy"
                  style="background: {{ sub.cover.color }}" alt="">{% endif %}
           {% else %}
-            <div class="card-blank" aria-hidden="true">🗀</div>
+            {{ blank_card() }}
           {% endif %}
         </div>
         <div class="card-text">

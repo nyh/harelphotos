@@ -386,3 +386,29 @@ def test_an_index_the_server_cannot_read_is_a_plain_page_not_a_500(tmp_path):
     assert r.status_code == 503                  # not 500: "not now", not "broken"
     assert "Restart it" in body
     assert str(cfg.index_db) not in body         # no filesystem path on the page
+
+
+def test_the_placeholder_card_is_drawn_not_written(tmp_path):
+    """It used to be the character U+1F5C0 FOLDER, which a desktop has a font
+    for and a phone does not -- Android drew the missing-character box on every
+    album without a cover. The bug was invisible on the machine it was written
+    on, which is the reason for a test rather than a comment.
+    """
+    photos = tmp_path / "pictures"
+    fixtures.make_jpeg(photos / "2026" / "a.jpg")
+    (photos / "trips").mkdir(parents=True, exist_ok=True)
+    (photos / "trips" / ".album.toml").write_text(
+        '[links]\n"X" = "2026"\n', encoding="utf-8")
+    cfg = fixtures.make_config(tmp_path, photos)
+    conn = fixtures.fresh_index(cfg)
+    scanner.scan(cfg, conn)
+    conn.close()
+
+    app = create_app(cfg, require_login=False)
+    app.config.update(TESTING=True)
+    body = app.test_client().get("/a/").get_data(as_text=True)
+
+    assert "card-blank" in body
+    assert "<svg" in body.split("card-blank", 1)[1][:300]
+    # Nothing on the page depends on a font having an astral-plane glyph.
+    assert [c for c in body if ord(c) > 0xFFFF] == []

@@ -186,8 +186,16 @@ h2.section:first-child { margin-block-start: 0.25rem; }
   display: grid;
   place-items: center;
   block-size: 100%;
-  font-size: 2.5rem;
   color: var(--dim);
+}
+/* Sized here rather than inheriting `.icon`'s 1.25em, which is a rule for an
+ * icon sitting beside text and this one stands alone. The stroke is thinner
+ * than `.icon`'s 2 because the same weight drawn at twice the size looks
+ * twice as heavy: at 40px a 2 in a 24-unit viewBox comes out over 3px. */
+.card-blank .icon {
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  stroke-width: 1.5;
 }
 
 /* Fixed height, so one long album name cannot shove its neighbors out of
