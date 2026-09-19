@@ -34,10 +34,6 @@ def test_full_file(tmp_path):
         allow       = ["dad@gmail.com", "@family"]
         allow_replace = true
         location    = "Naxos, Greece"
-
-        [photos."IMG_1234.jpg"]
-        title  = "Nadav on the beach"
-        hidden = true
         """,
         encoding="utf-8",
     )
@@ -54,8 +50,6 @@ def test_full_file(tmp_path):
     assert cfg.allow == ("dad@gmail.com", "@family")
     assert cfg.allow_replace
     assert cfg.location == "Naxos, Greece"
-    assert cfg.photos["IMG_1234.jpg"].title == "Nadav on the beach"
-    assert cfg.photos["IMG_1234.jpg"].hidden
 
 
 def test_malformed_toml_is_reported_not_raised(tmp_path):
@@ -132,16 +126,24 @@ def test_cover_may_be_a_path_into_a_subdirectory():
     assert cfg.cover == "kids/IMG_9.jpg"
 
 
-def test_photos_table_must_be_tables():
-    cfg = album.parse('photos = "nope"')
+def test_an_unknown_setting_is_reported_rather_than_ignored():
+    """A key that is quietly dropped looks exactly like one that works, which
+    is how `[photos."x.jpg"] hidden = true` came to be accepted and discarded
+    for a long time: a photograph could be marked hidden, draw no complaint,
+    and stay visible. Every key is now either understood or reported."""
+    cfg = album.parse('titel = "typo"\n')
     assert not cfg.ok
-    assert cfg.photos == {}
+    assert "titel" in cfg.error_text
+    assert album.parse('title = "fine"\n').ok
 
 
-def test_bad_per_photo_key_is_reported_with_the_photo_name():
-    cfg = album.parse('[photos."a.jpg"]\ntitle = 5\n')
+def test_the_old_per_photo_table_says_what_to_do_instead():
+    """Hiding one photograph by name was too easy to get wrong -- a rename
+    silently un-hides it. Moving it into a subdirectory and hiding that is the
+    supported way, so a file still carrying the old table is told so."""
+    cfg = album.parse('[photos."a.jpg"]\nhidden = true\n')
     assert not cfg.ok
-    assert "a.jpg" in cfg.error_text
+    assert "subdirectory" in cfg.error_text
 
 
 def test_non_utf8_file_is_reported(tmp_path):

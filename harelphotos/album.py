@@ -24,13 +24,11 @@ GROUP_BY_VALUES = ("none", "day", "month")
 # cover = "auto:first" | "auto:middle" | "auto:hash", or a photo path.
 COVER_AUTO = ("auto", "auto:first", "auto:middle", "auto:hash")
 
-
-@dataclass
-class PhotoMeta:
-    """Per-photo overrides from a [photos."NAME"] table."""
-
-    title: str | None = None
-    hidden: bool = False
+# Every setting a .album.toml may contain; anything else is reported.
+KNOWN_KEYS = frozenset({
+    "title", "description", "cover", "sort", "dirsort", "order", "sort_key",
+    "group_by", "hidden", "allow", "allow_replace", "location", "links",
+})
 
 
 @dataclass
@@ -55,7 +53,6 @@ class AlbumConfig:
     # relative to photo_root. Ordered as written, since that is the only order
     # a links album has -- there is nothing on disk to sort.
     links: tuple[tuple[str, str], ...] = ()
-    photos: dict[str, PhotoMeta] = field(default_factory=dict)
     errors: tuple[str, ...] = ()
 
     @property
@@ -192,23 +189,15 @@ def parse(text: str) -> AlbumConfig:
               "tree, start the path with '/'")
         cover = "auto"
 
-    photos: dict[str, PhotoMeta] = {}
-    photos_raw = raw.get("photos")
-    if photos_raw is not None:
-        if not isinstance(photos_raw, dict):
-            c.bad("'photos' must be a table of per-photo tables")
-        else:
-            for name, meta in photos_raw.items():
-                if not isinstance(meta, dict):
-                    c.bad(f"[photos.{name!r}] must be a table")
-                    continue
-                pc = _Collector()
-                photos[name] = PhotoMeta(
-                    title=pc.string(meta, "title"),
-                    hidden=pc.boolean(meta, "hidden", False),
-                )
-                for err in pc.errors:
-                    c.bad(f"[photos.{name!r}]: {err}")
+    # Anything not in KNOWN_KEYS is reported rather than ignored. A key that
+    # is quietly dropped looks exactly like one that works: `[photos."x.jpg"]
+    # hidden = true` was accepted and discarded for a long time, so a
+    # photograph could be marked hidden, draw no complaint, and stay visible.
+    for key in raw:
+        if key not in KNOWN_KEYS:
+            c.bad(f"unknown setting {key!r}"
+                  + (". To keep a photograph out of an album, move it into a "
+                     "subdirectory and hide that" if key == "photos" else ""))
 
     return AlbumConfig(
         title=c.string(raw, "title"),
@@ -226,7 +215,6 @@ def parse(text: str) -> AlbumConfig:
         allow_replace=c.boolean(raw, "allow_replace", False),
         location=c.string(raw, "location"),
         links=c.links(raw),
-        photos=photos,
         errors=tuple(c.errors),
     )
 

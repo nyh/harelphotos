@@ -22,9 +22,11 @@
   --line: #e2e2e2;
   --card: #f6f6f6;
   --accent: #2d6cdf;
-  /* Text on an accent-colored button. White fails on the lighter accent the
-     dark scheme uses -- 2.53:1, against the 4.5:1 that ordinary text needs --
-     so the dark scheme puts dark text on it instead, at 6.79:1. */
+  /* Text on an accent-colored button, which is a variable only because white
+     does not work in both schemes: Here in the light scheme it does clear the
+     WCAG AA for body text: 4.86:1 - over the 4.5:1 minimum. (That ratio
+     compares the two colors' relative luminance and runs from 1:1 for
+     identical colors to 21:1 for black on white.) */
   --on-accent: #ffffff;
   --gap: 4px;
   --radius: 6px;
@@ -38,6 +40,9 @@
     --line: #2c2c2c;
     --card: #1c1c1c;
     --accent: #6ba3ff;
+    /* Not white, which is the obvious choice and fails: on this lighter accent
+       it is 2.53:1, against the 4.5:1 ordinary text needs. Dark text on the
+       same background is 6.79:1. */
     --on-accent: #0b1b36;
   }
 }
@@ -49,32 +54,19 @@ body {
   background: var(--bg);
   color: var(--fg);
   font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  /* "Browser, do not rescale my text."
+  /* `100%` declines the phone browser's own text-inflation algorithm, so the
+   * sizes in this file are the sizes that get used. The initial value is
+   * `auto`, which permits it.
    *
-   * This was `auto` for a while, on the theory that it was blocking Android's
-   * Accessibility text-scaling and so making the site read smaller than the
-   * rest of the phone. That theory was wrong twice over: the site read small
-   * because Chrome was in "Request desktop site" mode, which is what actually
-   * fixed it, and the reader has no text-scaling set at all. The comment here
-   * recorded the guess as though it were the finding, which then misled two
-   * later investigations.
+   * A page declaring `width=device-width`, as base.html does, is largely
+   * exempt from that algorithm to begin with, so this may never come into
+   * play. It stays because the inflation is applied silently and the sizes in
+   * this file were each chosen against a measurement: there is nothing to be
+   * gained by letting a browser multiply them by a factor of its own.
    *
-   * What `100%` is actually for is text inflating on *rotation*, which is in
-   * every CSS boilerplate for a reason. `auto` hands the browser permission to
-   * rescale text, and a browser that recomputes that scale wrongly when the
-   * screen turns has been given the rope to do it with.
-   *
-   * Confirmed on 2026-09-17: with `auto`, turning the phone left the whole
-   * single-photo page scaled wrongly -- text and photograph together, too
-   * large one way and too small the other, correct again after any fresh page
-   * load. Restoring `100%` fixed it. An earlier attempt scoped the same
-   * property to the top bar alone and did nothing, which was the clue that the
-   * inflation was not confined to the text we could see.
-   *
-   * So: leave this at `100%`. It was changed to `auto` once already, on a
-   * theory about accessibility text-scaling that turned out to be wrong in
-   * both of its premises, and the rotation fault it caused took most of a day
-   * to track down. */
+   * Set on `body` and not on whichever element looks wrong: the adjustment is
+   * inherited, so anything left out keeps it. It suppresses only the
+   * browser's automatic inflation, not a font size the reader chose. */
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
@@ -216,20 +208,23 @@ h2.section:first-child { margin-block-start: 0.25rem; }
 .card-sub { color: var(--dim); font-size: 0.8rem; }
 
 /* ------------------------------------------------- photo grid (11.1c)
- * Justified rows: true aspect ratios, never cropped. The flexbox rule below
- * is the no-JS fallback and the first-paint layout; app.js then replaces it
- * with exact rows.
+ * Justified rows: true aspect ratios, never cropped. app.js computes the
+ * rows; the flexbox rule below is the fallback for when it does not run.
  */
 
 
 /* Nothing is shown until the rows have been laid out.
  *
- * The grid is drawn twice: the flexbox rule below is what the browser can
- * manage on its own, and app.js then replaces it with exact justified rows.
- * Both intermediate layouts were worse than showing none. Flex stretched the
- * tiles and drew photographs in the wrong shape; sizing them by aspect-ratio
- * instead fixed the shapes but left the rows short of the width, which reads
- * as broken and still jumped when the real layout arrived.
+ * What the browser manages on its own is only an approximation of this
+ * layout, and showing it is worse than showing nothing: the photographs
+ * appear, and a fraction of a second later every one of them moves as the
+ * real rows take over. Watching a page rearrange itself is what makes it feel
+ * unfinished. Better to show the photographs once, already where they belong.
+ *
+ * Waiting for that costs almost nothing, because app.js needs only the HTML
+ * to work it out. Every tile carries its own aspect ratio in the markup as
+ * `data-ar`, so the arithmetic runs as soon as the document is parsed,
+ * without waiting for a single thumbnail to arrive.
  *
  * Hiding costs nothing in loading time: `visibility: hidden` keeps the boxes
  * in the layout, so the page reserves its full height and the thumbnails are
@@ -252,20 +247,17 @@ h2.section:first-child { margin-block-start: 0.25rem; }
 .grid .tile {
   /* The shape comes from the aspect ratio, never from flex.
    *
-   * This was `flex: 1 1 calc(var(--ar) * 180px)`, and `flex-grow: 1` hands
-   * every tile in a line an *equal* share of the leftover space -- so a narrow
-   * portrait tile was stretched by the same number of pixels as a panorama
-   * beside it. Measured on a mixed album: the shapes were out by 21% at the
-   * median and 139% at the worst, a photograph of true aspect 0.50 drawn at
-   * 1.19 and then cropped by `object-fit: cover` to fit. That is what showed
-   * for the moment before app.js laid the rows out properly, and on a reload,
-   * with the thumbnails already cached, it was long enough to see.
+   * This is the layout a reader without JavaScript gets, so the choice it
+   * makes is: ragged rows, true shapes. Every tile is its own aspect ratio at
+   * a fixed height, and a row simply stops wherever it stops rather than
+   * reaching the right-hand edge.
    *
-   * `aspect-ratio` against a definite height gives every tile exactly its own
-   * shape, with no arithmetic and nothing to get wrong. The cost is that rows
-   * no longer stretch to the full width, so without JavaScript the right edge
-   * is ragged rather than flush -- a fair trade for never showing a
-   * photograph in the wrong shape. */
+   * `flex: none` is what holds that. `flex-grow` divides the leftover space
+   * on a line *equally*, stretching a narrow portrait tile by the same number
+   * of pixels as a panorama beside it, and `object-fit: cover` then crops
+   * every photograph to fit a box of the wrong proportions. A flush right
+   * edge is not worth that: it is the kind of wrong a reader feels without
+   * being able to name, where a short row is merely a short row. */
   flex: none;
   aspect-ratio: var(--ar, 1);
   block-size: 180px;
@@ -288,38 +280,47 @@ h2.section:first-child { margin-block-start: 0.25rem; }
 
 /* ------------------------------------------------------ single photo view */
 
-/* The photo page is one screenful: bar, photo, footer, nothing scrolls.
-   The whole page has to be the flex column, not just .viewer -- the footer
-   lives outside .viewer, so a `.viewer { min-block-size: 100dvh }` made the
-   document 100dvh PLUS the footer and the page always scrolled.
+/* The photo page is one screenful, and nothing on it scrolls.
+
+   `.photo-page` is the `body`; `.viewer` inside it holds everything you see
+   -- the top bar, the stage with the photograph and its arrows, and the
+   information panel. The flex column is the body rather than `.viewer`
+   because anything rendered after `.viewer` falls outside it -- today only
+   the "running without a login" banner -- and a screenful given to `.viewer`
+   alone means a screenful *plus* whatever follows, so the page scrolls.
+
    A definite height here is also what makes `max-block-size: 100%` on the
-   photo mean anything: against an auto height it resolves to nothing at all,
-   and the image sizes the stage instead of the stage bounding the image. */
+   photograph mean anything: against an auto height it resolves to no
+   constraint at all, and the image sizes the stage instead of the stage
+   bounding the image. */
 .photo-page {
-  /* `svh`, not `dvh`: the *smallest* viewport, the one that remains when every
-     retractable piece of browser chrome is showing. This page cannot scroll,
-     so a retractable toolbar never retracts, and sizing to `dvh` -- which
-     tracks whatever the viewport happens to be at that instant -- can leave
-     the page taller than what is actually on screen, pushing the bottom of the
-     photograph past the edge. `svh` is the conservative one and always fits.
-     On a desktop, and in an installed application with no chrome at all, the
-     three are the same number.
+  /* `svh` is the *small* viewport: what remains when every retractable piece
+     of browser or system chrome (the browser's address bar, Android's
+     navigation bar) is showing. `lvh` is the viewport with that chrome gone,
+     and `dvh` is whichever of the two applies at this instant.
 
-     `dvh` was tried again on 2026-09-17 and put both faults back at once: the
-     photograph sat under the navigation bar in portrait and overflowed the
-     bottom in landscape. It was tried because this page alone is laid out
-     wrongly after a *rotation*, and a static unit was the obvious suspect --
-     but `dvh` rotates just as badly, so the unit is not the cause and swapping
-     it only costs the two things it fixes. Do not swap it again.
+     `svh` is the right one here precisely because this page cannot scroll.
+     Retractable chrome retracts as you scroll down, so on a page that never
+     scrolls it never goes away -- the viewport stays at its small size, and a
+     height of `100dvh` or `100lvh` would be taller than the screen actually
+     offers, pushing the foot of the photograph out of sight. `100svh` is the
+     height that is always genuinely there. On a desktop, where nothing
+     retracts, the three are the same number.
 
-     The padding is the other half: `viewport-fit=cover` in base.html asks the
-     browser to lay out *behind* the system bars, which is what gives an
-     installed site the whole screen -- and it means nothing is kept clear of
-     them unless we do it. Every inset was applied in the inline direction and
-     none in the block, so on a phone held upright the foot of this page sat
-     underneath the navigation bar. `box-sizing: border-box` keeps the total at
-     one screenful; the padding comes out of the content, which is the point.
-     Zero on a desktop, so nothing there moves. */
+     Installing the site to the home screen does not make a phone behave like
+     a desktop. There is no address bar left to retract, but the navigation
+     bar plays the same part and the unit still has to be `svh`: with `dvh`
+     the photograph runs under the navigation bar in portrait and off the
+     bottom of the screen in landscape.
+
+     The padding is the other half of fitting the screen. `viewport-fit=cover`
+     in base.html asks the browser to lay the page out *behind* the system
+     bars, which is what gives an installed site the whole screen -- and it
+     means nothing is kept clear of them unless we do it. `safe-area-inset-
+     bottom` is how much of the foot the navigation bar covers, so that much
+     of it is padding. `box-sizing: border-box` keeps the total at exactly one
+     screenful, taking the padding out of the content rather than adding to
+     it. The inset is zero wherever there are no system bars. */
   block-size: 100svh;
   padding-block-end: env(safe-area-inset-bottom, 0px);
   display: flex;
@@ -547,7 +548,7 @@ h2.section:first-child { margin-block-start: 0.25rem; }
  * that lays the page out at 980px and scales the result down, so no media query
  * sees anything but a wide screen and the page simply arrives shrunk.
  *
- * 125% is not a guess. The smallest relative size anywhere in this file is
+ * 125% is not a guess. The smallest relative *font* size in this file is
  * 0.8rem (`h2.section`, `.card-sub`), and the rule being applied is that on a
  * phone nothing may fall below 16px -- the browser's own default body size,
  * and the floor below which text stops looking like an application and starts
@@ -880,7 +881,8 @@ form.login button {
 }
 @media (max-height: 520px) { .viewer .usermenu .source { display: none; } }
 .usermenu form, form.inline { display: inline; }
-/* Icons, drawn inline in _chrome.html.
+/* Icons, drawn inline in the templates -- _chrome.html, and the photo and
+ * album pages.
  *
  * Sized in `em` so they follow the type scale rather than being a fixed number
  * of pixels: 1.25em is about 19px beside desktop body text and about 22px

@@ -1067,15 +1067,16 @@ location    = "Naxos, Greece"         # shown on the album; also the place for
 
 [links]                               # other albums to show here as well
 "Greece 2019" = "2019/07/naxos"
-
-[photos."IMG_1234.jpg"]
-title  = "Nadav on the beach"
-hidden = true
 ```
 
 **A mistake in one of these files never breaks anything.** A malformed file, an
 unknown value, a wrong type — each is reported by `check`, the affected setting
-falls back to its default, and the directory is scanned normally.
+falls back to its default, and the directory is scanned normally. A key that is
+not one of the above is reported too, rather than ignored: a setting that is
+silently dropped looks exactly like one that works.
+
+**Settings are per directory. There is nothing here for a single photograph**
+— see [keeping one photograph out of an album](#keeping-one-photograph-out-of-an-album).
 
 #### Ordering, and `sort_key`
 
@@ -1626,6 +1627,29 @@ it. The files are untouched on disk.
 This is tidiness, not privacy: anyone with filesystem access still has the
 photos, and un-hiding is one command. Use `acl` for anything that actually
 matters.
+
+#### Keeping one photograph out of an album
+
+There is no setting that hides a single photograph, and that is deliberate.
+Hiding by file name means the name is what holds the photograph out of sight:
+rename the file, or copy it somewhere else, and it silently comes back. The
+`.album.toml` sits in one directory while the name it protects can move.
+
+Move it instead:
+
+```sh
+mkdir -p 2011/holiday/redacted
+mv 2011/holiday/IMG_1234.jpg 2011/holiday/redacted/
+harelphotos hide 2011/holiday/redacted
+harelphotos scan --dir 2011/holiday
+```
+
+Now the photograph's own location is what keeps it out of the album, which is
+a fact about where it is rather than about what it is called, and one glance
+at the directory shows exactly what is being held back. Everything already
+said about `hide` applies: the file is untouched, it stops being reachable by
+URL, and this is tidiness rather than privacy — for that, put an `allow` list
+on the subdirectory, or use [`acl`](#harelphotos-acl--who-may-see-a-directory).
 
 ### `harelphotos cover` — which photo an album shows
 

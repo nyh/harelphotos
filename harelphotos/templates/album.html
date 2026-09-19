@@ -193,7 +193,22 @@
                 there was never a decode blocking the main thread to avoid. #}
              loading="lazy"
              style="background: {{ p.color }}"
-             alt="{{ p.title or p.name }}">
+             {#- Empty, and empty on purpose rather than left out.
+
+                 A browser paints alt text inside the image's box while the
+                 image is still loading, so anything here shows up as a label
+                 on every tile of an album that has not finished arriving. The
+                 file name was going in, which made a long album load as a
+                 grid of little boxes reading IMG_2423.jpg -- ugly, and
+                 telling nobody anything they wanted to know.
+
+                 Omitting the attribute would look identical but read worse:
+                 an <img> with no alt at all is "undescribed", and a screen
+                 reader falls back to announcing the file name out of the URL,
+                 which is the one outcome nothing here wants. `alt=""` is the
+                 way to say there is deliberately nothing to announce. What
+                 the photograph is called is on the page it links to. -#}
+             alt="">
         {%- endif %}
       </a>
       {% endfor %}
