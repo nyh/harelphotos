@@ -247,17 +247,6 @@ def test_no_srcset_entry_for_a_tier_that_was_never_generated(client):
     assert "/i/2048/" not in body
 
 
-def test_grid_offers_the_larger_tiers_too(client):
-    """A wide tile in a justified row can need more than 512 px.
-
-    On a retina screen a 3:1 panorama at a 180 px row height wants 1080
-    device px, so a ladder stopping at the thumbnail tiers would upscale it.
-    The larger tiers already exist and `sizes` stops a small tile fetching one.
-    """
-    body = client.get("/a/2019/01/").get_data(as_text=True)
-    assert "/i/1280/" in body        # 800x600 fixtures have a 1280 tier
-
-
 # ------------------------------------------------------------------- misc
 
 def test_security_headers(client):
@@ -1009,3 +998,47 @@ def test_the_image_route_ignores_the_fingerprint(client):
     assert ok.status_code == 200
     assert client.get("/i/256/2019/01/a.jpg?v=deadbeef").status_code == 200
     assert client.get("/i/256/2019/01/a.jpg?v=").status_code == 200
+
+
+def test_a_tile_is_offered_only_the_tiers_its_shape_can_use(tmp_path):
+    """A tier is the longest edge of the stored file; the grid fixes the row
+    *height*. So which files a tile could possibly choose depends on the shape
+    of the photograph, and listing the whole ladder for every one of them gave
+    most tiles URLs no browser could ever pick.
+
+    The panorama is the case that keeps the larger tiers honest: at a 180px row
+    it is 540 CSS px wide, so it really does need more than the 512.
+    """
+    import re
+
+    photos = tmp_path / "pictures" / "a"
+    fixtures.make_jpeg(photos / "tall.jpg", size=(1200, 1800))       # 2:3
+    fixtures.make_jpeg(photos / "normal.jpg", size=(2000, 1500))     # 4:3
+    fixtures.make_jpeg(photos / "wide.jpg", size=(3000, 1000))       # 3:1
+    cfg = fixtures.make_config(tmp_path, tmp_path / "pictures")
+    conn = fixtures.fresh_index(cfg)
+    scanner.scan(cfg, conn)
+    conn.close()
+
+    app = create_app(cfg, require_login=False)
+    app.config.update(TESTING=True)
+    body = app.test_client().get("/a/a/").get_data(as_text=True)
+
+    tiers = {}
+    for tile in re.findall(r'<a class="tile.*?</a>', body, re.S):
+        name = re.search(r"/p/a/(\w+\.jpg)", tile).group(1)
+        srcset = re.search(r'srcset="([^"]*)"', tile)
+        tiers[name] = sorted(int(t) for t in re.findall(r"/i/(\d+)/", srcset.group(1)))
+
+    assert tiers["normal.jpg"] == [256, 512]     # 239 CSS px wide; 512 covers 2x
+    assert tiers["tall.jpg"] == [256]            # 120 CSS px wide; 256 covers 2x
+    assert 1280 in tiers["wide.jpg"]             # 540 CSS px wide; genuinely needs it
+
+    # Nothing anywhere can use the largest tier: it would take a tile wider
+    # than the clamp allows, at a pixel ratio no device has.
+    assert all(1600 not in t for t in tiers.values()), tiers
+
+    # The single-photo page is a different question and keeps every tier.
+    page = app.test_client().get("/p/a/normal.jpg").get_data(as_text=True)
+    main = re.search(r'<img id="main"[^>]*srcset="([^"]*)"', page).group(1)
+    assert sorted(int(t) for t in re.findall(r"/i/(\d+)/", main)) == [256, 512, 1280, 1600]

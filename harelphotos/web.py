@@ -40,6 +40,30 @@ log = logging.getLogger("harelphotos.web")
 # but has no token, so the chrome can tell the difference and say so.
 NO_LOGIN_VIEWER = Viewer(token=None, name="", is_admin=True)
 
+# The justified grid, as the server must predict it before app.js lays it out.
+# These are the row heights app.js targets, and they belong to `grid_sizes` and
+# `grid_srcset` together: one tells the browser how wide a tile will be and the
+# other decides which files could serve that width, so they have to agree.
+GRID_ROW_DESKTOP = 180
+GRID_ROW_PHONE = 130
+
+# How far a tile's shape is taken at face value. A 10:1 panorama would ask for
+# a file ten times the row height, so the declared width is clamped at both
+# ends: the extremes are rare, and drawn at a size where being a little soft
+# costs less than the file would.
+GRID_AR_MIN, GRID_AR_MAX = 0.4, 3.0
+
+# The largest pixel ratio thumbnails are sized for. At 2 a 3x screen is served
+# the file below the one it would ideally have -- for most shapes that is the
+# 512 against a 519px slot, which is 1.4% short and invisible, and it avoids
+# jumping to a file six times the size for it. Raising this to 3 is a one-line
+# change if those screens ever look soft.
+GRID_MAX_DPR = 2
+
+
+def _grid_ar(photo: Photo) -> float:
+    return max(GRID_AR_MIN, min(GRID_AR_MAX, photo.aspect))
+
 
 class _Sha256Sessions(SecureCookieSessionInterface):
     """Flask's signed-cookie session, with SHA-256 instead of SHA-1.
@@ -872,10 +896,36 @@ def _register_filters(app: Flask, cfg: Config) -> None:
         the rows out; this is the honest estimate until then, and the correct
         value for the no-JS fallback, whose CSS uses the same arithmetic.
         """
-        ar = max(0.4, min(3.0, photo.aspect))
+        ar = _grid_ar(photo)
         return (
-            f"(max-width: 600px) {round(ar * 130)}px, {round(ar * 180)}px"
+            f"(max-width: 600px) {round(ar * GRID_ROW_PHONE)}px, "
+            f"{round(ar * GRID_ROW_DESKTOP)}px"
         )
+
+    @app.template_filter("grid_srcset")
+    def grid_srcset(photo: Photo) -> str:
+        """The tiers this tile could actually choose, and no others.
+
+        A tier is the longest edge of the stored file, while the grid fixes
+        the row *height*, so which files are usable depends on the shape of
+        the photograph. Offering the whole ladder to every tile meant each one
+        carried four URLs when most can only ever use two: at a 180px row a
+        4:3 photograph is 239 CSS px wide and never needs more than the 512,
+        while a 3:1 panorama is 540 px wide and genuinely does need the 1280.
+        On a 3505-photo album that was 78% of tiles carrying at least one file
+        they could not use, and no tile anywhere able to use the 1600.
+
+        The ceiling is the widest this tile is ever *declared* to be -- the
+        same arithmetic `grid_sizes` tells the browser, since the browser
+        chooses from that and not from the real width -- times the largest
+        pixel ratio worth serving. Everything at or below the first tier that
+        covers it stays, so the browser keeps its choice of smaller files for
+        smaller screens.
+        """
+        want = _grid_ar(photo) * GRID_ROW_DESKTOP * GRID_MAX_DPR
+        ladder = sorted(cfg.sizes.tiers)
+        upto = next((t for t in ladder if t >= want), ladder[-1])
+        return srcset(photo, [t for t in ladder if t <= upto])
 
     @app.template_filter("img_src")
     def img_src(photo: Photo, want: int) -> str:
