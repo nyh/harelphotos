@@ -62,12 +62,13 @@ CHECKS = [
     ("check_layout.py", "album"),
     ("check_nav.py", "album"),
     ("check_scroll.py", "album"),
+    ("check_retry.py", "album"),
     ("check_dark.py", "base+path"),
 ]
 
 # Left behind by the checks themselves, which each start their own browser.
 PROFILES = ["/tmp/cdp-profile-nav", "/tmp/cdp-profile", "/tmp/cdp-layout",
-            "/tmp/cdp-dark"]
+            "/tmp/cdp-dark", "/tmp/cdp-retry"]
 
 
 def free_port() -> int:

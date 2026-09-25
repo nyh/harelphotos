@@ -181,40 +181,89 @@
   //
   // Only ever abandons an image that has NOT finished loading: a completed one
   // keeps its srcset, so nothing is fetched twice.
+  //
+  // It also retries images that failed to load. The browser never refetches
+  // a failed image by itself, so without this a tile whose request failed
+  // (say, a server timeout) stays blank until the page is reloaded. On
+  // failure we park the image's URLs, as for a tile that left the range, and
+  // restore them, which fetches the image again:
+  //  * whenever the tile comes back into range, however many times it failed;
+  //  * while it stays in range, after 1, 2, 4, ... seconds, up to RETRIES times
+  //    in a row -- the count and the delay start over once one of them works;
+  //  * when the browser reports that the network is back ("online").
   function limitLoading(grid) {
     if (!("IntersectionObserver" in window)) return;   // native lazy only
+    var RETRIES = 5;
+
+    function park(img) {
+      // Park the URLs rather than dropping them, and clear the attributes,
+      // which is what actually cancels an in-flight request.
+      if (img.getAttribute("srcset")) {
+        img.dataset.srcset = img.getAttribute("srcset");
+        img.removeAttribute("srcset");
+      }
+      if (img.getAttribute("src")) {
+        img.dataset.src = img.getAttribute("src");
+        img.removeAttribute("src");
+      }
+    }
+
+    function restore(img) {
+      if (img.dataset.srcset) {
+        img.setAttribute("srcset", img.dataset.srcset);
+        delete img.dataset.srcset;
+      }
+      if (img.dataset.src) {
+        img.setAttribute("src", img.dataset.src);
+        delete img.dataset.src;
+      }
+      if ("fetchPriority" in img) img.fetchPriority = "high";
+    }
+
     var io = new IntersectionObserver(function (entries) {
       entries.forEach(function (e) {
         var img = e.target.firstElementChild;
         if (!img || img.tagName !== "IMG") return;     // a pending placeholder
-        if (e.isIntersecting) {
-          if (img.dataset.srcset) {
-            img.setAttribute("srcset", img.dataset.srcset);
-            delete img.dataset.srcset;
-          }
-          if (img.dataset.src) {
-            img.setAttribute("src", img.dataset.src);
-            delete img.dataset.src;
-          }
-          if ("fetchPriority" in img) img.fetchPriority = "high";
-        } else if (!img.complete) {
-          // Park the URLs rather than dropping them, and clear the attributes,
-          // which is what actually cancels an in-flight request.
-          if (img.getAttribute("srcset")) {
-            img.dataset.srcset = img.getAttribute("srcset");
-            img.removeAttribute("srcset");
-          }
-          if (img.getAttribute("src")) {
-            img.dataset.src = img.getAttribute("src");
-            img.removeAttribute("src");
-          }
-        }
+        img.hpNear = e.isIntersecting;
+        if (e.isIntersecting) restore(img);
+        else if (!img.complete) park(img);
       });
     // Two viewports of slack: far enough that scrolling normally never waits,
     // near enough that the queue stays short.
     }, { rootMargin: "200% 0px" });
     Array.prototype.forEach.call(grid.querySelectorAll(".tile"), function (t) {
       io.observe(t);
+    });
+
+    // Capturing, because `error` does not bubble.
+    grid.addEventListener("error", function (e) {
+      var img = e.target;
+      if (img.tagName !== "IMG") return;
+      park(img);
+      var tries = (img.hpTries || 0) + 1;
+      img.hpTries = tries;
+      if (tries > RETRIES) return;
+      setTimeout(function () {
+        if (img.hpNear) restore(img);
+      }, 1000 * Math.pow(2, tries - 1));
+    }, true);
+
+    // A retry that worked ends that failure: count from zero, so RETRIES is
+    // five attempts at one failure and not five for the life of the page. A
+    // tile is fetched again long after it loaded when `sizes` changes and the
+    // browser picks a different file out of the srcset -- a rotated phone, a
+    // resized window -- and that fetch deserves its own five. Capturing,
+    // because `load` does not bubble either.
+    grid.addEventListener("load", function (e) {
+      if (e.target.tagName === "IMG") e.target.hpTries = 0;
+    }, true);
+
+    // Back from a dead connection: whatever failed on the way down can come
+    // now, rather than at the next pause or the next scroll.
+    window.addEventListener("online", function () {
+      Array.prototype.forEach.call(grid.querySelectorAll(".tile > img"), function (img) {
+        if (img.hpNear) restore(img);
+      });
     });
   }
 
