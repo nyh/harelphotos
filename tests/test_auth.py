@@ -662,3 +662,63 @@ def test_the_password_field_keeps_autofocus_without_google(project):
     body = app.test_client().get("/login").get_data(as_text=True)
     assert "Sign in with Google" not in body
     assert "autofocus" in body
+
+
+def _logged_in(cfg, who="guest", password="pw"):
+    import re
+    app = create_app(cfg, require_login=True)
+    app.config.update(TESTING=True)
+    c = app.test_client()
+    page = c.get("/").get_data(as_text=True)
+    csrf = re.search(r'name="csrf" value="([^"]*)"', page).group(1)
+    assert c.post("/login", data={"csrf": csrf, "username": who,
+                                  "password": password}).status_code == 302
+    body = c.get("/a/").get_data(as_text=True)
+    return c, re.search(r'name="csrf" value="([^"]*)"', body).group(1)
+
+
+def test_logging_out_twice_is_not_an_error(project):
+    """Reported from the live site: clicking log out left the reader on
+    /logout showing "the browser (or proxy) sent a request that this server
+    could not understand".
+
+    The CSRF token lives in the session, so once the session is gone the check
+    cannot pass -- and a second click, a back button, another tab, or an
+    expired session all arrive in exactly that state. Answering 400 blames the
+    reader, in the language of a fault, for a button that had nothing left to
+    do.
+    """
+    fixtures.add_user(project, token="guest", password="pw")
+    c, token = _logged_in(project)
+
+    assert c.post("/logout", data={"csrf": token}).status_code == 302
+    again = c.post("/logout", data={"csrf": token})
+    assert again.status_code == 302
+    assert "logged_out=1" in again.headers["Location"]
+
+
+def test_logging_out_after_the_account_was_edited_away(project):
+    """The same 400, by the route most likely to be met while setting a guest
+    account up: users.toml is edited, which invalidates the session on the way
+    in, and the log out button then arrives with nothing behind it."""
+    from harelphotos import users as users_mod
+
+    fixtures.add_user(project, token="guest", password="pw")
+    c, token = _logged_in(project)
+
+    us = users_mod.load(project.users_file)
+    users_mod.save(project.users_file, users_mod.Users(
+        by_token={k: v for k, v in us.by_token.items() if k != "guest"}))
+
+    assert c.post("/logout", data={"csrf": token}).status_code == 302
+
+
+def test_a_logged_in_session_still_needs_its_csrf_token(project):
+    """The protection that matters is unchanged: somebody else's page must not
+    be able to end your session."""
+    fixtures.add_user(project, token="guest", password="pw")
+    c, _ = _logged_in(project)
+    assert c.post("/logout", data={"csrf": "forged"}).status_code == 400
+    assert c.post("/logout", data={}).status_code == 400
+    # ...and the session survived the attempt.
+    assert c.get("/a/").status_code == 200

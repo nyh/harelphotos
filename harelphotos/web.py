@@ -524,6 +524,21 @@ def _register_routes(app: Flask, cfg: Config) -> None:
         A GET link would be followed by link prefetchers, mail scanners and
         preview bots, each of which would silently log you out.
         """
+        if not session.get(auth.SESSION_USER):
+            # Already logged out, so there is nothing to clear and nothing to
+            # protect: a second click, another tab that got there first, a
+            # session that expired, or an account edited out of users.toml
+            # since it was issued -- that last one clears the session on the
+            # way in, so the button arrives here with nothing behind it.
+            #
+            # The CSRF check cannot pass in that state, because the token it
+            # compares against lives in the session that is gone. Failing it
+            # answered 400, which a browser renders as "the browser or proxy
+            # sent a request that this server could not understand" -- blaming
+            # the reader, in the words of a fault, for a button that merely had
+            # nothing left to do. What CSRF guards here is somebody else's page
+            # ending *your* session, and there is no session to end.
+            return redirect(url_for("landing", logged_out=1))
         if not auth.check_csrf():
             abort(400)
         auth.log_out()
