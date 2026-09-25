@@ -125,10 +125,15 @@ def create_app(cfg: Config, *, require_login: bool = True) -> Flask:
         SESSION_REFRESH_EACH_REQUEST=False,
     )
 
+    # One read-only connection per thread, kept open. See db.Readers for why,
+    # and for the two things that can change under a kept connection.
+    readers = db.Readers(cfg.index_db)
+    app.extensions["harelphotos_readers"] = readers
+
     @app.before_request
     def _open_index():
         try:
-            g.conn = db.open_index(cfg.index_db, read_only=True)
+            g.conn = readers.connection()
         except db.SchemaMismatch as mismatch:
             # An expected state during an upgrade: a scan run from new code
             # upgrades the index while this process carries on running the code
@@ -162,9 +167,10 @@ def create_app(cfg: Config, *, require_login: bool = True) -> Flask:
 
     @app.teardown_request
     def _close_index(exc) -> None:
-        conn = g.pop("conn", None)
-        if conn is not None:
-            conn.close()
+        # Nothing to close: the connection belongs to the thread, not to the
+        # request, and the next request on this thread reuses it. Dropped from
+        # `g` all the same, so nothing reaches for it between requests.
+        g.pop("conn", None)
 
     @app.context_processor
     def _chrome_context():

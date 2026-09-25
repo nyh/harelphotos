@@ -17,6 +17,7 @@ migration; anything that changes the meaning of existing rows still ends with
 from __future__ import annotations
 
 import sqlite3
+import threading
 from pathlib import Path
 
 SCHEMA_VERSION = 2
@@ -334,6 +335,80 @@ def open_index(path: Path, *, read_only: bool = False) -> sqlite3.Connection:
         f"every photograph, which on a large collection is days of work.",
         found=found, action=action,
     )
+
+
+class Readers:
+    """Read-only connections to the index, kept open, one per thread.
+
+    Opening SQLite costs about 0.9 ms, and the web process was doing it on
+    every request -- a tenth of the server time of a thumbnail, and a page of
+    lazily-loaded thumbnails asks for a hundred of those. Keeping the
+    connection replaces that with a `stat` and one read of the stored schema
+    version, together about 0.025 ms.
+
+    **Per thread**, because gunicorn runs eight of them per worker here and a
+    sqlite3 connection is not safe to share between them.
+
+    **With a bounded page cache**, because this runs on a machine with a
+    gigabyte. SQLite's default is 2 MB per connection, which across two workers
+    of eight threads is 33 MB against the 82 MB the workers themselves cost.
+    Measured at 512 KiB the sixteen of them come to well under a megabyte, and
+    neither a photo lookup nor a 3505-row album query is measurably slower --
+    the operating system's own page cache is what keeps the file warm, and it
+    is shared.
+
+    The two things that can change under a kept connection are both checked
+    for, because between them they are every way an index is replaced:
+
+    * A **scan upgrading the schema in place**, which the version read catches.
+      It has to be caught: it is what serves the "Just a moment" page instead
+      of failing every request with an internal server error.
+    * The file being **deleted and rebuilt**, which leaves a connection reading
+      an unlinked inode that no longer reflects anything. Documented advice for
+      an index this software cannot migrate is to delete it and rescan, so this
+      is a real sequence and not a hypothetical one. The device and inode
+      numbers catch it.
+    """
+
+    CACHE_KIB = 512
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self._local = threading.local()
+
+    def connection(self) -> sqlite3.Connection:
+        try:
+            st = self.path.stat()
+            stamp: tuple[int, int] | None = (st.st_dev, st.st_ino)
+        except OSError:
+            stamp = None            # let open_index say what is wrong
+
+        held = getattr(self._local, "held", None)
+        if held is not None and stamp is not None and held[0] == stamp:
+            conn = held[1]
+            if schema_version(conn) == SCHEMA_VERSION:
+                return conn
+            # Upgraded underneath us. Drop it and take the ordinary path, so
+            # the mismatch is reported by the one piece of code that knows how
+            # to explain it.
+            conn.close()
+            self._local.held = None
+        elif held is not None:
+            held[1].close()
+            self._local.held = None
+
+        conn = open_index(self.path, read_only=True)
+        conn.execute(f"PRAGMA cache_size = -{self.CACHE_KIB}")
+        if stamp is not None:
+            self._local.held = (stamp, conn)
+        return conn
+
+    def close(self) -> None:
+        """Release this thread's connection. For tests and for shutdown."""
+        held = getattr(self._local, "held", None)
+        if held is not None:
+            held[1].close()
+            self._local.held = None
 
 
 def create_index(path: Path) -> sqlite3.Connection:
