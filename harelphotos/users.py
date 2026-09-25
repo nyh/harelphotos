@@ -38,6 +38,25 @@ class User:
     google: str | None = None
     admin: bool = False
     epoch: int = 1
+    # Directories this account may see, and the only ones it may see.
+    #
+    # Absent -- the ordinary case -- means the account is a member of the
+    # household: it sees everything except what an `allow` list keeps from it.
+    # Present, even empty, inverts that: the account sees nothing at all beyond
+    # these subtrees, including anything added to the collection later. That is
+    # the point of it. Someone invited to look at one holiday should not have
+    # to be excluded again from every directory added afterwards.
+    only: tuple[str, ...] = ()
+
+    @property
+    def is_guest(self) -> bool:
+        """Whether this account is confined to `only`. A key that is present
+        but empty is a guest who has been granted nothing, not a household
+        member -- so this asks whether the key was given, not whether it has
+        anything in it."""
+        return self.only is not None and self._only_given
+
+    _only_given: bool = False
 
     @property
     def can_login_locally(self) -> bool:
@@ -107,6 +126,17 @@ def parse(text: str, source: str = "users.toml") -> Users:
                 f"{source}: [users.{token}] has neither 'password' nor 'google', "
                 f"so it can never be used to log in"
             )
+        only_raw = meta.get("only")
+        if only_raw is not None and not (
+                isinstance(only_raw, list) and all(isinstance(x, str) for x in only_raw)):
+            raise UsersError(
+                f"{source}: [users.{token}] only must be a list of directory paths")
+        if only_raw is not None and bool(meta.get("admin", False)):
+            # An admin bypasses every check, so the two together would read as
+            # a restriction and be none.
+            raise UsersError(
+                f"{source}: [users.{token}] cannot be both 'admin' and 'only': "
+                f"an administrator sees everything by definition")
         out[token] = User(
             token=token,
             name=str(meta.get("name", token)),
@@ -114,19 +144,52 @@ def parse(text: str, source: str = "users.toml") -> Users:
             google=google,
             admin=bool(meta.get("admin", False)),
             epoch=int(meta.get("epoch", 1)),
+            only=tuple(x.strip("/") for x in (only_raw or ()) if x.strip("/")),
+            _only_given=only_raw is not None,
         )
     return Users(by_token=out)
 
 
+# Parsed accounts, keyed by path, kept until the file on disk changes.
+#
+# This is read on *every* request -- the session cookie holds only a name, so
+# who that is and what they may see is looked up each time -- and parsing ten
+# accounts costs about a millisecond, against roughly ten for serving a
+# thumbnail. A page of lazily-loaded thumbnails would have spent a tenth of its
+# server time re-reading a file that changes once a month.
+#
+# Keyed on what the file *is* rather than on a timer, so editing users.toml
+# still takes effect on the very next request, with no restart and nothing to
+# remember. The check is a stat(), which is 0.007 ms -- a hundred and forty
+# times cheaper than the parse it avoids.
+_cache: dict[Path, tuple[tuple[int, int, int], Users]] = {}
+
+
 def load(path: Path) -> Users:
     try:
-        return parse(path.read_text(encoding="utf-8"), str(path))
+        st = path.stat()
     except FileNotFoundError:
         # An absent file is an empty allowlist, not an error: it is the state
         # right after 'init' and before the first 'user add'.
         return Users(by_token={})
     except OSError as e:
         raise UsersError(f"{path}: cannot read: {e}") from e
+
+    # Size and inode as well as the timestamp: a replaced file can carry an
+    # older mtime than the one it replaced, and an editor that writes through a
+    # temporary file replaces rather than rewrites.
+    stamp = (st.st_mtime_ns, st.st_size, st.st_ino)
+    hit = _cache.get(path)
+    if hit is not None and hit[0] == stamp:
+        return hit[1]
+    try:
+        users = parse(path.read_text(encoding="utf-8"), str(path))
+    except FileNotFoundError:
+        return Users(by_token={})
+    except OSError as e:
+        raise UsersError(f"{path}: cannot read: {e}") from e
+    _cache[path] = (stamp, users)
+    return users
 
 
 def _quote_key(token: str) -> str:
@@ -158,6 +221,9 @@ def dumps(users: Users) -> str:
             lines.append(f"google = {_quote_value(u.google)}")
         if u.admin:
             lines.append("admin = true")
+        if u.is_guest:
+            inner = ", ".join(_quote_value(p) for p in u.only)
+            lines.append(f"only = [{inner}]")
         if u.epoch != 1:
             lines.append(f"epoch = {u.epoch}")
         lines.append("")

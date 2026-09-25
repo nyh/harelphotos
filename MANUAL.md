@@ -1822,6 +1822,92 @@ so the hand-written one applies again.
 
 ---
 
+## Guest accounts: sharing one album with somebody
+
+`allow` answers "who may *not* see this". The opposite question — "this person
+may see *only* this" — needs the opposite default, and that is what a guest
+account is.
+
+Say a colleague should see one holiday and nothing else. You could restrict
+every other directory to the family, but then you have to remember to restrict
+every directory you add afterwards, for ever, and the day you forget is the day
+they can see it. A guest account inverts the default instead: **it sees nothing
+at all except the subtrees you list**, so anything added later is invisible
+without anyone having had to think about it.
+
+### Setting one up
+
+Give the account an `only` list in `users.toml`:
+
+```toml
+[users."someone@example.com"]
+name   = "Someone"
+google = "someone@example.com"
+only   = ["2026/07/thailand"]
+```
+
+That is the whole setup. Nothing else in the tree changes, and no `.album.toml`
+is touched.
+
+**The change takes effect on the next request** — no restart, no scan, not even
+for somebody already logged in. The file is re-read whenever it changes, and
+the session cookie holds only the account name and a revocation counter — never
+what that account may see, which is looked up fresh on every request. Adding a path shares an album immediately; removing
+one takes it back just as fast.
+
+`only` may list as many directories as you like, and `only = []` is a valid
+account that can see nothing yet.
+
+### What such an account sees
+
+- **The listed directories and everything inside them.** `2026/07/thailand`
+  grants `2026/07/thailand/day1` too.
+- **A front page listing exactly those albums**, wherever they sit in the tree.
+  This is the part that makes it pleasant rather than merely possible: the
+  guest opens the site and sees the albums they were given, instead of an empty
+  page or an error.
+- **Nothing else.** Not the other albums, not the directories *above* the ones
+  they were given, and not the loose photographs at the top of the collection.
+  Everything else answers "not found" — the same answer as for something that
+  does not exist, so the shape of the rest of your collection is not revealed.
+
+The breadcrumb on a granted album reads `Home / Thailand 2026`, skipping the
+levels they may not see, so nothing on the page leads anywhere they cannot go.
+
+### Two rules worth knowing
+
+**A grant reaches into a restricted tree.** If `2026` is limited to the family
+and you grant `2026/07/thailand` to a guest, they get it. Naming the path was
+a deliberate act, and the alternative — the grant silently doing nothing — is
+the worse failure.
+
+**A grant does not blind the `allow` lists inside it.** If
+`2026/07/thailand/day1` carries `allow = ["nyh"]`, the guest does not see
+`day1`, even though they were granted the album above it. A grant opens a
+subtree; restrictions within it still apply.
+
+### Cautions
+
+- **An account cannot be both `admin` and `only`.** An administrator bypasses
+  every check, so the combination would read as a restriction and be none at
+  all. It is refused when the file is read, rather than quietly ignored.
+- **Paths are matched by whole segments**, so `2026/07` grants
+  `2026/07/thailand` and not `2026/07b`.
+- **A path that does not exist grants nothing**, and a typo looks exactly like
+  an account you have not shared anything with yet. `harelphotos check` names
+  them:
+
+  ```
+  grant        someone@example.com: 'only' names /2026/07/thialand, which does
+               not exist — that account is granted nothing by it
+  ```
+- **Renaming a granted directory silently revokes the grant**, because the
+  path in `users.toml` no longer matches anything. Unlike an `allow` list,
+  which lives in the photo tree and moves with it, this lives in one file
+  outside it.
+
+---
+
 ## What gets logged, and what deliberately does not
 
 The web application logs to stderr, which under systemd means the journal:

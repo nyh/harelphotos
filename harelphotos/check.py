@@ -13,10 +13,13 @@ and look at them afterwards.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from dataclasses import dataclass, field
 
 from .config import Config
+
+log = logging.getLogger("harelphotos.check")
 
 
 @dataclass
@@ -35,6 +38,10 @@ class Report:
     # that a renamed album leaves a missing card rather than a broken one -- so
     # this report is the only place it is ever mentioned.
     dead_links: list[tuple[str, str, str]] = field(default_factory=list)
+    # (account, path) for a guest account granted a directory that is not
+    # there. The grant simply matches nothing, which looks exactly like an
+    # account that has been given nothing, so it needs saying out loud.
+    dead_grants: list[tuple[str, str]] = field(default_factory=list)
     missing_derivatives: list[str] = field(default_factory=list)
     restricted: list[tuple[str, str]] = field(default_factory=list)
     date_range: tuple[int | None, int | None] = (None, None)
@@ -44,7 +51,7 @@ class Report:
     def problems(self) -> int:
         return (len(self.config_errors) + len(self.photo_errors)
                 + len(self.missing_covers) + len(self.missing_derivatives)
-                + len(self.dead_links))
+                + len(self.dead_links) + len(self.dead_grants))
 
 
 def run(cfg: Config, conn: sqlite3.Connection, *, sample: int = 10,
@@ -98,6 +105,16 @@ def run(cfg: Config, conn: sqlite3.Connection, *, sample: int = 10,
         for entry in links:
             if isinstance(entry, list) and len(entry) == 2 and entry[1] not in known:
                 r.dead_links.append((d["path"] or ".", entry[0], entry[1]))
+
+    try:
+        from . import users as users_mod
+
+        for u in users_mod.load(cfg.users_file):
+            for grant in u.only:
+                if grant not in known:
+                    r.dead_grants.append((u.token, grant))
+    except Exception as e:                  # a broken users.toml is check's job
+        log.warning("cannot check guest grants: %s", e)
 
     # Directories holding no photos anywhere beneath them: scripts, backups and
     # scratch directories that happen to live in the photo tree. A links album

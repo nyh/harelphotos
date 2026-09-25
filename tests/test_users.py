@@ -114,3 +114,40 @@ def test_saved_file_is_not_world_readable(tmp_path):
 def test_dummy_check_returns_false_and_does_work():
     # Used so an unknown username costs the same time as a known one.
     assert users_mod.waste_time_like_a_real_check("anything") is False
+
+
+def test_an_edit_to_users_toml_takes_effect_without_a_restart(tmp_path):
+    """The file is parsed once and kept until it changes on disk, because it is
+    read on every request and parsing it costs about a hundred times what the
+    check does. The cache must not cost the property that makes hand-editing
+    the file reasonable: no restart, no rescan, effective immediately.
+    """
+    p = tmp_path / "users.toml"
+    p.write_text('[users.g]\npassword = "x"\nonly = ["a/b"]\n', encoding="utf-8")
+    assert users_mod.load(p).get("g").only == ("a/b",)
+
+    p.write_text('[users.g]\npassword = "x"\nonly = ["c/d"]\n', encoding="utf-8")
+    assert users_mod.load(p).get("g").only == ("c/d",)
+
+    # Replaced rather than rewritten, as an editor writing through a temporary
+    # file does. The replacement is contrived to defeat a cache keyed on the
+    # timestamp alone: identical mtime, identical length, different contents.
+    # Coarse filesystem timestamps make that collision plausible rather than
+    # theoretical, and only the inode tells the two files apart.
+    import os
+    st = p.stat()
+    other = tmp_path / "other.toml"
+    other.write_text('[users.g]\npassword = "x"\nonly = ["e/f"]\n', encoding="utf-8")
+    assert other.stat().st_size == st.st_size, "the decoy must be the same length"
+    os.utime(other, ns=(st.st_atime_ns, st.st_mtime_ns))
+    os.replace(other, p)
+    assert p.stat().st_mtime_ns == st.st_mtime_ns and p.stat().st_size == st.st_size
+    assert users_mod.load(p).get("g").only == ("e/f",)
+
+
+def test_a_deleted_users_file_is_an_empty_allowlist_not_a_crash(tmp_path):
+    p = tmp_path / "users.toml"
+    p.write_text('[users.g]\npassword = "x"\n', encoding="utf-8")
+    assert len(users_mod.load(p)) == 1
+    p.unlink()
+    assert len(users_mod.load(p)) == 0

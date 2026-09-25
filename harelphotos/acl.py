@@ -121,3 +121,37 @@ def can_view(
     if user is None:
         return False
     return all(matches_link(user, link, groups) for link in chain)
+
+
+def granting(path: str, grants: Sequence[str]) -> str | None:
+    """Which grant covers this directory, or None.
+
+    A grant is a subtree: naming `2026/07/thailand` gives that album and
+    everything inside it. Matching is on whole path segments, so a grant of
+    `2026/07` covers `2026/07/thailand` and not `2026/07b`.
+    """
+    for g in grants:
+        if path == g or path.startswith(g + "/"):
+            return g
+    return None
+
+
+def below(chain: Chain, grant_chain: Chain) -> Chain:
+    """The part of a directory's chain contributed at or below its grant.
+
+    A grant makes the directory it names a root for that account, so the
+    restrictions on the way *down to* it are not applied -- naming the path was
+    a deliberate act, and requiring the account to satisfy its ancestors too
+    would mean a grant inside a restricted tree silently did nothing, which is
+    the failure this whole mechanism exists to avoid.
+
+    Restrictions at or below the grant do still apply: a private subdirectory
+    inside a shared album stays private. They are the tail of the chain, since
+    a chain is built by extending the parent's -- unless something below used
+    `allow_replace`, which starts afresh and so is no longer an extension. In
+    that case the shorter, already-reset chain is the whole truth and is
+    returned as it stands.
+    """
+    if grant_chain and chain[:len(grant_chain)] == grant_chain:
+        return chain[len(grant_chain):]
+    return chain

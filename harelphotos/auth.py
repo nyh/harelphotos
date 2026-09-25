@@ -106,7 +106,8 @@ def current_viewer(cfg: Config) -> Viewer | None:
                  token, session.get(SESSION_EPOCH), user.epoch)
         session.clear()
         return None
-    return Viewer(token=user.token, name=user.name, is_admin=user.admin)
+    return Viewer(token=user.token, name=user.name, is_admin=user.admin,
+                  only=user.only, is_guest=user.is_guest)
 
 
 def log_in(user: users_mod.User, via: str = "local") -> None:

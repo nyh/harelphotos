@@ -41,6 +41,11 @@ class Viewer:
     token: str | None = None
     name: str = ""
     is_admin: bool = False
+    # A guest account's granted subtrees; empty for an ordinary member of the
+    # household. `is_guest` is what distinguishes "granted nothing" from "not
+    # a guest at all", since both have nothing in the tuple.
+    only: tuple[str, ...] = ()
+    is_guest: bool = False
 
 
 @dataclass
@@ -258,13 +263,41 @@ class Index:
     def __init__(self, conn: sqlite3.Connection, cfg: Config) -> None:
         self.conn = conn
         self.cfg = cfg
+        self._grant_chains: dict[str, acl.Chain] = {}
 
     # ------------------------------------------------------------------ ACL
 
-    def _may_view(self, chain_json: str, viewer: Viewer) -> bool:
-        return acl.can_view(
-            acl.loads(chain_json), viewer.token, self.cfg.groups, viewer.is_admin
-        )
+    def _may_view(self, chain_json: str, path: str, viewer: Viewer) -> bool:
+        """Whether this viewer may see this directory.
+
+        Two rules, not one. An ordinary account sees everything except what an
+        `allow` list keeps from it. A guest account sees nothing except the
+        subtrees it has been granted -- so a directory added to the collection
+        tomorrow is invisible to it without anyone having to remember.
+        """
+        chain = acl.loads(chain_json)
+        if viewer.is_admin:
+            return True
+        if viewer.is_guest:
+            grant = acl.granting(path, viewer.only)
+            if grant is None:
+                return False
+            # Inside the grant the ordinary rules resume: a private
+            # subdirectory of a shared album stays private.
+            chain = acl.below(chain, self._grant_chain(grant))
+        return acl.can_view(chain, viewer.token, self.cfg.groups, viewer.is_admin)
+
+    def _grant_chain(self, grant: str) -> acl.Chain:
+        """The allow-chain of a granted directory, cached for the request.
+
+        Needed to tell restrictions above the grant, which a grant overrides,
+        from those at or below it, which it does not.
+        """
+        if grant not in self._grant_chains:
+            r = self.conn.execute(
+                "SELECT acl_chain FROM dirs WHERE path = ?", (grant,)).fetchone()
+            self._grant_chains[grant] = acl.loads(r["acl_chain"]) if r else ()
+        return self._grant_chains[grant]
 
     # --------------------------------------------------------------- albums
 
@@ -275,8 +308,16 @@ class Index:
         album is indistinguishable from one that does not exist.
         """
         r = self.conn.execute("SELECT * FROM dirs WHERE path = ?", (path,)).fetchone()
-        if r is None or not self._may_view(r["acl_chain"], viewer):
+        if r is None:
             return None
+        # The top of the tree is a doorway for a guest account. It is above
+        # every grant and so fails the rule, but refusing it would leave such
+        # an account with no page to land on -- only deep links, and an error
+        # anywhere else. It opens; what it *lists* is the grants, and it offers
+        # none of its own loose photographs.
+        if not (viewer.is_guest and path == ""):
+            if not self._may_view(r["acl_chain"], path, viewer):
+                return None
         # Hidden means gone, not merely unlisted. It used to leave the album
         # reachable by typing its URL, which makes a setting called "hidden" a
         # trap. The flag is propagated down the tree at scan time, so this
@@ -286,12 +327,23 @@ class Index:
         return _album_from_row(r)
 
     def subalbums(self, album: Album, viewer: Viewer) -> list[Album]:
+        # A guest's front page is their grants, wherever those sit in the tree.
+        # Listing the real children would show nothing, since a grant is
+        # normally several levels down and its ancestors are not visible.
+        if viewer.is_guest and album.path == "":
+            out = []
+            for grant in viewer.only:
+                found = self.album(grant, viewer)
+                if found is not None:
+                    found.cover = self.cover_photo(found, viewer)
+                    out.append(found)
+            return out
         rows = self.conn.execute(
             "SELECT * FROM dirs WHERE parent_id = ? AND hidden = 0", (album.id,)
         ).fetchall()
         out = []
         for r in rows:
-            if not self._may_view(r["acl_chain"], viewer):
+            if not self._may_view(r["acl_chain"], r["path"], viewer):
                 continue
             # A directory with no photographs anywhere beneath it is not an
             # album — it is a directory of videos, scripts or scratch files
@@ -392,7 +444,8 @@ class Index:
             f"JOIN dirs d ON d.id = p.dir_id WHERE a.id = ?",
             (album.id,),
         ).fetchone()
-        if r is not None and not r["dir_hidden"] and self._may_view(r["acl_chain"], viewer):
+        if (r is not None and not r["dir_hidden"]
+                and self._may_view(r["acl_chain"], r["dir_path"], viewer)):
             return _photo_from_row(r)
 
         # The scanned cover is one this viewer may not see. It was still being
@@ -420,7 +473,7 @@ class Index:
             (album.path, f"{prefix}%", self.COVER_SEARCH_LIMIT),
         ).fetchall()
         for r in rows:
-            if self._may_view(r["acl_chain"], viewer):
+            if self._may_view(r["acl_chain"], r["dir_path"], viewer):
                 return _photo_from_row(r)
         return None
 
@@ -438,6 +491,12 @@ class Index:
     # --------------------------------------------------------------- photos
 
     def photos(self, album: Album, viewer: Viewer) -> list[Photo]:
+        # Everywhere else the album check has already settled this: whoever may
+        # see the album may see its photographs. The doorway above is the one
+        # exception, so it is refused its own contents explicitly here rather
+        # than by trusting a check that deliberately let it through.
+        if viewer.is_guest and acl.granting(album.path, viewer.only) is None:
+            return []
         rows = self.conn.execute(
             f"SELECT {PHOTO_COLUMNS} FROM photos p JOIN dirs d ON d.id = p.dir_id "
             f"WHERE p.dir_id = ? AND p.hidden = 0",
@@ -454,7 +513,7 @@ class Index:
             f"WHERE d.path = ? AND p.name = ? AND p.hidden = 0 AND d.hidden = 0",
             (dir_path, name),
         ).fetchone()
-        if r is None or not self._may_view(r["acl_chain"], viewer):
+        if r is None or not self._may_view(r["acl_chain"], dir_path, viewer):
             return None
         return _photo_from_row(r)
 
