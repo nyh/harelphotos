@@ -154,7 +154,8 @@ Create configuration and state. Idempotent.
 
 ### `harelphotos scan`
 
-Index the photo tree. Safe to interrupt and re-run.
+Index the photo tree — `.jpg` and `.jpeg` files, either case, and nothing else;
+see [what is not indexed](#what-is-not-indexed). Safe to interrupt and re-run.
 
 | option | |
 |---|---|
@@ -2015,8 +2016,8 @@ A URL reaches a file only by **exact lookup in the index**: the directory and
 file name must match a row the scanner recorded. That is an allowlist by
 construction rather than a filter, which is why a file sitting in the photo
 tree but not indexed — `Picasa.ini`, an `.album.toml`, anything that is not a
-`.jpg` — is a 404 like any other. Path segments of `.` and `..` are refused
-before the lookup, and the access check runs after it.
+`.jpg` or `.jpeg` — is a 404 like any other. Path segments of `.` and `..` are
+refused before the lookup, and the access check runs after it.
 
 Behind that, nothing outside the photo tree and the derived tree can be sent at
 all, whatever a route asks for. Apache used to provide that wall by refusing
