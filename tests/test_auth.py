@@ -23,11 +23,7 @@ from . import fixtures
 
 @pytest.fixture
 def project(tmp_path):
-    photos = fixtures.make_tree(tmp_path / "pictures")
-    cfg = fixtures.make_config(tmp_path, photos)
-    conn = fixtures.fresh_index(cfg)
-    scanner.scan(cfg, conn)
-    conn.close()
+    cfg = fixtures.scanned_tree(tmp_path)
     fixtures.add_user(cfg, "nyh", "nyh", name="Nadav")
     fixtures.add_user(cfg, "sis", "sispw", name="Sis")
     fixtures.add_user(cfg, "boss", "bosspw", name="Boss", admin=True)

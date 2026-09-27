@@ -7,8 +7,8 @@ stopped being true.
 
 | suite | command | time | needs |
 |---|---|---|---|
-| **pytest** | `.venv/bin/python -m pytest tests/ -q` | **~60 s** | nothing |
-| **browser** | `.venv/bin/python tests/browser/run_all.py` | **~4 min** | Chrome, `websocket-client` |
+| **pytest** | `.venv/bin/python -m pytest tests/ -q` | **~95 s**, or ~40 s with `-n 4` | nothing |
+| **browser** | `.venv/bin/python tests/browser/run_all.py` | **~45 s** | Chrome, `websocket-client` |
 | **live place names** | `HARELPHOTOS_GEONAMES_LIVE=1 .venv/bin/python -m pytest tests/test_geonames_live.py` | **~1 min**, plus a first-run download | network, ~80 MB (cached) |
 
 **Always run pytest through `.venv/bin/python -m pytest`**, never a bare
@@ -26,8 +26,24 @@ a network: the scanner, the index, the derivative pipeline, access control,
 authentication, the CLI, config parsing, place-name rules, and the web
 application through Flask's test client.
 
+`-n 4` runs it across four processes, which takes it to about forty seconds
+for roughly half a gigabyte of memory. Four rather than every core on purpose:
+this is expected to run on a laptop somebody is also using. It never starts a
+browser — the browser checks are not pytest files and pytest does not collect
+them — so the number here costs processes and memory, nothing else.
+
+Two things keep the serial number down, and both are worth knowing before
+writing a fixture that undoes them. Tests that want the standard tree call
+`fixtures.scanned_tree`, which copies a tree scanned once per process instead
+of scanning again: a scan is 0.69 s here and 0.66 s of that is AVIF encoding,
+which nothing in the suite asserts anything about. And fixture accounts hash
+their passwords with `fixtures.fast_hash`, not the production scrypt, which is
+deliberately slow and was over a second of every authentication test. Tests
+about scanning, or about password hashing, still do the real thing.
+
 ```sh
 .venv/bin/python -m pytest tests/ -q              # all of it
+.venv/bin/python -m pytest tests/ -q -n 4         # the same, in parallel
 .venv/bin/python -m pytest tests/test_web.py -q   # one file, while working
 .venv/bin/python -m pytest tests/test_web.py -q -k album      # one subject
 .venv/bin/python -m pytest tests/test_web.py::test_photo_page # one test

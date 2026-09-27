@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest"]
+test = ["pytest", "pytest-xdist"]
 
 [project.scripts]
 harelphotos = "harelphotos.cli:main"

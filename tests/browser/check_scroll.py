@@ -57,9 +57,49 @@ try:
         r = cmd("Runtime.evaluate", expression=expr, returnByValue=True, awaitPromise=True)
         return r.get("result", {}).get("value")
 
+    LOADED = "document.readyState === 'complete'"
+
+    def wait_until(expr, seconds=5.0):
+        """Poll for a condition instead of sleeping a fixed time.
+
+        These were blind sleeps, twenty of the thirty seconds this check took,
+        each sized for the slowest case anyone had seen. The time becomes a
+        ceiling rather than a duration: a page that really is slow is still
+        waited for, so nothing that passed before can fail for want of time,
+        but the ordinary case costs a few round trips.
+        """
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            try:
+                if js(expr):
+                    return True
+            except SystemExit:
+                pass        # mid-navigation: no execution context to ask yet
+            time.sleep(0.05)
+        return False
+
+    def wait_still(seconds=3.0):
+        """Until the page stops scrolling itself.
+
+        Arriving back at the album, the position is restored by script after
+        the load, so "loaded" is not yet "where it is going to be".
+        """
+        deadline = time.monotonic() + seconds
+        last = object()
+        while time.monotonic() < deadline:
+            try:
+                now = js("Math.round(window.scrollY)")
+            except SystemExit:
+                now = object()
+            if now == last:
+                return now
+            last = now
+            time.sleep(0.08)
+        return last
+
     def goto(u):
         cmd("Page.navigate", url=u)
-        time.sleep(3.0)
+        wait_until(LOADED)
 
     cmd("Page.enable")
     cmd("Runtime.enable")
@@ -91,7 +131,7 @@ try:
         path no reader ever takes.
         """
         js("document.querySelector('#grid .tile').click()")
-        time.sleep(3.0)
+        wait_until(f"{LOADED} && location.pathname.startsWith('/p/')")
 
     def press(key, vk):
         for kind in ("keyDown", "keyUp"):
@@ -99,7 +139,9 @@ try:
                 windowsVirtualKeyCode=vk, nativeVirtualKeyCode=vk)
 
     js(f"window.scrollTo(0, {mid})")
-    time.sleep(0.6)
+    # Until the page has written the position down: that record is what the
+    # whole check is about, and it is not made on the scroll itself.
+    wait_until("!!sessionStorage.getItem('hp:scroll:' + location.pathname)")
     before = js("Math.round(window.scrollY)")
     print("scrolled to", before)
     print("sessionStorage says",
@@ -109,33 +151,38 @@ try:
     print("on photo page:", js("location.pathname"))
 
     press("Escape", 27)
-    time.sleep(3.5)
+    wait_until(f"{LOADED} && location.pathname === {album_path!r}")
+    after = wait_still()
     where = js("location.pathname")
-    after = js("Math.round(window.scrollY)")
     print(f"after Escape:        at {where}, scrollY = {after} (wanted ~{before})")
     results = [("Escape from one photo",
                 where == album_path and abs(after - before) < 100)]
 
     # ...and after paging through several photos with the arrow keys.
-    js(f"window.scrollTo(0, {low})"); time.sleep(0.6)
+    js(f"window.scrollTo(0, {low})")
+    wait_until("!!sessionStorage.getItem('hp:scroll:' + location.pathname)")
     open_first_photo()
     for _ in range(3):
+        was = js("location.pathname")
         press("ArrowRight", 39)
-        time.sleep(2.5)
+        wait_until(f"{LOADED} && location.pathname !== {was!r}")
     print("paged to:           ", js("location.pathname"))
     press("Escape", 27)
-    time.sleep(3.5)
-    where2, after2 = js("location.pathname"), js("Math.round(window.scrollY)")
+    wait_until(f"{LOADED} && location.pathname === {album_path!r}")
+    after2 = wait_still()
+    where2 = js("location.pathname")
     print(f"after paging+Escape: at {where2}, scrollY = {after2} (wanted ~{low})")
     results.append(("Escape after paging 3 photos",
                     where2 == album_path and abs(after2 - low) < 100))
 
     # And the Back button must still work as it always did.
-    js(f"window.scrollTo(0, {high})"); time.sleep(0.6)
+    js(f"window.scrollTo(0, {high})")
+    wait_until("!!sessionStorage.getItem('hp:scroll:' + location.pathname)")
     open_first_photo()
     cmd("Page.navigateToHistoryEntry", entryId=cmd("Page.getNavigationHistory")["entries"][-2]["id"])
-    time.sleep(3.0)
-    where3, after3 = js("location.pathname"), js("Math.round(window.scrollY)")
+    wait_until(f"{LOADED} && location.pathname === {album_path!r}")
+    after3 = wait_still()
+    where3 = js("location.pathname")
     print(f"after Back:          at {where3}, scrollY = {after3} (wanted ~{high})")
     results.append(("Back button",
                     where3 == album_path and abs(after3 - high) < 200))

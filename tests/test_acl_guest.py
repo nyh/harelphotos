@@ -53,7 +53,7 @@ def build(tmp_path, only, extra=(), groups=None):
     us = users_mod.load(cfg.users_file)
     table = dict(us.by_token)
     table[GUEST] = users_mod.User(token=GUEST, name="Guest",
-                                  password_hash=users_mod.hash_password("pw"),
+                                  password_hash=fixtures.fast_hash("pw"),
                                   only=tuple(only), _only_given=True)
     users_mod.save(cfg.users_file, users_mod.Users(by_token=table))
     return cfg

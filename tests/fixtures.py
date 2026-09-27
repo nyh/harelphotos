@@ -10,7 +10,10 @@ directory, unicode names.
 
 from __future__ import annotations
 
+import atexit
 import io
+import shutil
+import tempfile
 from pathlib import Path
 
 from PIL import Image
@@ -143,6 +146,75 @@ def fresh_index(cfg: config_mod.Config):
     return db.create_index(cfg.index_db)
 
 
+_HASHES: dict[str, str] = {}
+
+
+def fast_hash(password: str) -> str:
+    """A password hash for fixtures: cheap, and remembered.
+
+    `users.hash_password` is Werkzeug's scrypt, deliberately slow at about
+    0.35 s a time, and the auth fixtures make three accounts apiece. That was
+    over a second of every one of those tests, spent on the one property none
+    of them is about -- they test who may see what, not how well a hash
+    resists being cracked. So the work factor goes to its floor and the answer
+    is kept, and the suite pays for one hash per distinct password instead of
+    three per test.
+
+    It is still a real hash in the real format, and `check_password_hash`
+    verifies it by exactly the path a live one takes, because the method is
+    named inside the string. The production setting has its own test.
+    """
+    if password not in _HASHES:
+        from werkzeug.security import generate_password_hash
+
+        _HASHES[password] = generate_password_hash(password,
+                                                   method="pbkdf2:sha256:1")
+    return _HASHES[password]
+
+
+_TEMPLATE: Path | None = None
+
+
+def _template() -> Path:
+    """The standard tree, scanned, built once per process."""
+    global _TEMPLATE
+    if _TEMPLATE is None:
+        from harelphotos import scanner        # here: it imports Pillow slowly
+
+        d = Path(tempfile.mkdtemp(prefix="harelphotos-template-"))
+        photos = make_tree(d / "pictures")
+        cfg = make_config(d, photos)
+        conn = fresh_index(cfg)
+        scanner.scan(cfg, conn)
+        conn.close()
+        _TEMPLATE = d
+        atexit.register(shutil.rmtree, d, ignore_errors=True)
+    return _TEMPLATE
+
+
+def scanned_tree(tmp_path: Path) -> config_mod.Config:
+    """A scanned fixture tree under `tmp_path` -- copied, not scanned again.
+
+    Every test wanting one used to build the tree and scan it, which meant
+    encoding the same nine photographs for each of five hundred tests. Of the
+    0.69 s a scan costs here, 0.66 s is AVIF encoding, and nothing in the
+    suite asserts anything about those bytes beyond which files exist and how
+    large their pixels are. Copying the finished state is 0.016 s: 44 times
+    cheaper, and it is the difference between a run of `test_web.py` taking
+    half a minute and taking three seconds.
+
+    Safe to copy because the index stores paths relative to the photo root,
+    and the config returned points at wherever the copy now lives. `copytree`
+    preserves modification times, so a test that scans again still sees a tree
+    that has not changed -- which is what most of the rescan tests are about.
+
+    Tests that need something other than the standard tree, or that are about
+    scanning itself, still build and scan their own.
+    """
+    shutil.copytree(_template(), tmp_path, dirs_exist_ok=True)
+    return make_config(tmp_path, tmp_path / "pictures")
+
+
 def add_user(cfg: config_mod.Config, token: str = "nyh", password: str = "nyh",
              admin: bool = False, name: str | None = None):
     """Add an account to the fixture's users.toml."""
@@ -153,7 +225,7 @@ def add_user(cfg: config_mod.Config, token: str = "nyh", password: str = "nyh",
     table[token] = users_mod.User(
         token=token,
         name=name or token,
-        password_hash=users_mod.hash_password(password),
+        password_hash=fast_hash(password),
         admin=admin,
     )
     users_mod.save(cfg.users_file, users_mod.Users(by_token=table))

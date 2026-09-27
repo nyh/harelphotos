@@ -190,11 +190,7 @@ def google_app(tmp_path):
     from harelphotos.web import create_app
     from tests import fixtures
 
-    photos = fixtures.make_tree(tmp_path / "pictures")
-    cfg = fixtures.make_config(tmp_path, photos)
-    conn = fixtures.fresh_index(cfg)
-    scanner.scan(cfg, conn)
-    conn.close()
+    cfg = fixtures.scanned_tree(tmp_path)
     fixtures.add_user(cfg, "nyh", "nyh")
 
     object.__setattr__(cfg, "base_url", "https://photos.example.org")

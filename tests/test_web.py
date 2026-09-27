@@ -18,12 +18,7 @@ from . import fixtures
 @pytest.fixture
 def scanned(tmp_path):
     """A scanned fixture tree and its config."""
-    photos = fixtures.make_tree(tmp_path / "pictures")
-    cfg = fixtures.make_config(tmp_path, photos)
-    conn = fixtures.fresh_index(cfg)
-    scanner.scan(cfg, conn)
-    conn.close()
-    return cfg
+    return fixtures.scanned_tree(tmp_path)
 
 
 @pytest.fixture

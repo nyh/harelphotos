@@ -66,12 +66,38 @@ def main():
                 if msg.get("id") == n[0]:
                     return msg.get("result", {})
 
+        def value(expr):
+            return send("Runtime.evaluate", returnByValue=True,
+                        expression=expr)["result"].get("value")
+
+        def wait_until(expr, seconds=5.0):
+            """Poll for a condition rather than sleeping a fixed time.
+
+            The waits here were sized for the slowest case and paid on every
+            page. The time is now a ceiling, not a duration: a page that
+            really is slow is still waited for, so nothing that passed before
+            can fail for want of time.
+            """
+            deadline = time.monotonic() + seconds
+            while time.monotonic() < deadline:
+                try:
+                    if value(expr):
+                        return True
+                except Exception:
+                    pass          # mid-navigation, nothing to ask yet
+                time.sleep(0.05)
+            return False
+
+        LOADED = "document.readyState === 'complete'"
+
         send("Page.enable")
         for width in WIDTHS:
             send("Emulation.setDeviceMetricsOverride", width=width, height=900,
                  deviceScaleFactor=1, mobile=width < 500)
             send("Page.navigate", url=URL)
-            time.sleep(2.5)
+            # `justified` is set by the layout pass itself, so it
+            # is the exact thing being waited for.
+            wait_until("!!document.querySelector('#grid.justified')")
             r = send("Runtime.evaluate", returnByValue=True, expression="""
               (function(){
                 var g = document.getElementById('grid');
@@ -128,7 +154,7 @@ def main():
         send("Emulation.setDeviceMetricsOverride", width=1280, height=900,
              deviceScaleFactor=1, mobile=False)
         send("Page.navigate", url=URL)
-        time.sleep(3.0)
+        wait_until(LOADED)
         worst = send("Runtime.evaluate", returnByValue=True, expression="""
           (function(){
           var w=0, t=document.querySelectorAll('#grid .tile');

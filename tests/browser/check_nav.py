@@ -69,7 +69,32 @@ class Browser:
         self.settle()
 
     def settle(self, seconds=1.2):
-        time.sleep(seconds)
+        """Wait for the page to be done, rather than for a fixed time.
+
+        This used to sleep 1.2 s whatever was happening, and it is called
+        after every navigation, key and gesture -- some forty seconds of a
+        two-minute run, nearly all of it spent watching a page that had
+        finished long before. Now it asks: loaded, and one frame drawn since.
+        `seconds` becomes a ceiling instead of a duration, so a page that
+        really does take that long is still waited for, and nothing that was
+        passing before can start failing for want of time.
+        """
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            try:
+                ready = self.eval(
+                    "document.readyState === 'complete' && !!document.body")
+            except SystemExit:
+                # Mid-navigation the old execution context is gone; that is
+                # not an answer of "no", it is no answer at all.
+                ready = False
+            if ready:
+                break
+            time.sleep(0.03)
+        # One frame, so that anything the load event set going has run.
+        self.send("Runtime.evaluate", awaitPromise=True, expression=(
+            "new Promise(r => requestAnimationFrame(() => "
+            "requestAnimationFrame(r)))"))
 
 
 def _vk(key):

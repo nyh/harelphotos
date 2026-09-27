@@ -446,7 +446,8 @@ It is the natural companion to **Download original**, which saves the same
 bytes to the phone's storage and leaves you to find them again.
 
 **Share a smaller copy**, below it, is usually the one you want. It sends the
-largest generated copy — 1600 pixels on the long side — as a JPEG, which is a
+largest generated copy — normally 1600 pixels on the long side, less for a
+photograph that was never that big — as a JPEG, which is a
 few hundred kilobytes against the original's several megabytes. Keyboard **S**.
 
 **Download a smaller copy** saves that same JPEG to disk instead of handing it

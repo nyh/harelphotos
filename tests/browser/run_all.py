@@ -148,6 +148,7 @@ def main() -> int:
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=ROOT)
 
     failed: list[str] = []
+    timings: list[tuple[str, float]] = []
     try:
         if not wait_for(album):
             sys.exit(f"the server did not come up on {port}")
@@ -163,10 +164,16 @@ def main() -> int:
             else:
                 argv = [base, "/a/album/"]
             print(f"──────── {name}")
+            began = time.monotonic()
             r = subprocess.run([sys.executable, str(HERE / name), *argv], cwd=ROOT)
+            took = time.monotonic() - began
             if r.returncode != 0:
                 failed.append(name)
-            print()
+            # Printed because these are slow enough to be worth watching: a
+            # check that quietly grows a ten-second wait is not otherwise
+            # visible until the whole run has become tiresome.
+            print(f"         {took:.1f}s\n")
+            timings.append((name, took))
     finally:
         serve.terminate()
         try:
@@ -183,6 +190,10 @@ def main() -> int:
         else:
             shutil.rmtree(root, ignore_errors=True)
 
+    if timings:
+        print("  ".join(f"{n.replace('check_', '').replace('.py', '')} {t:.0f}s"
+                        for n, t in timings)
+              + f"  |  total {sum(t for _, t in timings):.0f}s")
     if failed:
         print(f"FAILED: {', '.join(failed)}")
         return 1

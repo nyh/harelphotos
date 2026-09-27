@@ -81,13 +81,35 @@ def main():
             return send("Runtime.evaluate", returnByValue=True,
                         expression=expr)["result"].get("value")
 
+        def wait_until(expr, seconds=5.0):
+            """Poll for a condition rather than sleeping a fixed time.
+
+            The waits here were sized for the slowest case and paid on every
+            page. The time is now a ceiling, not a duration: a page that
+            really is slow is still waited for, so nothing that passed before
+            can fail for want of time.
+            """
+            deadline = time.monotonic() + seconds
+            while time.monotonic() < deadline:
+                try:
+                    if value(expr):
+                        return True
+                except Exception:
+                    pass          # mid-navigation, nothing to ask yet
+                time.sleep(0.05)
+            return False
+
+        LOADED = "document.readyState === 'complete'"
+
         send("Page.enable")
         for scheme in ("light", "dark"):
             send("Emulation.setEmulatedMedia",
                  features=[{"name": "prefers-color-scheme", "value": scheme}])
             for label, path in PAGES:
                 if path is None:
-                    send("Page.navigate", url=BASE + ALBUM); time.sleep(1.5)
+                    send("Page.navigate", url=BASE + ALBUM)
+                    wait_until(f"{LOADED} && !!document"
+                               ".querySelector('#grid a')")
                     path = value("(document.querySelector('#grid a')||{})"
                                  ".getAttribute?"
                                  "document.querySelector('#grid a')"
@@ -96,7 +118,10 @@ def main():
                         print(f"[ note ] {scheme:<5} no photo to check")
                         continue
                 send("Page.navigate", url=BASE + path)
-                time.sleep(2.2)
+                wait_until(LOADED)
+                # Two frames, so what is captured is painted.
+                send("Runtime.evaluate", awaitPromise=True,
+                     expression="new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
                 shot = send("Page.captureScreenshot", format="png")
                 im = Image.open(io.BytesIO(
                     base64.b64decode(shot["data"]))).convert("RGB")

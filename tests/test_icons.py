@@ -39,13 +39,9 @@ def _logo(path, size=48, color=(231, 76, 60, 255)):
 @pytest.fixture
 def site(tmp_path):
     """A scanned tree whose config names an icon."""
-    photos = fixtures.make_tree(tmp_path / "pictures")
-    cfg = fixtures.make_config(tmp_path, photos)
-    cfg = replace(cfg, ui=replace(cfg.ui, icon=_logo(tmp_path / "logo.png")))
-    conn = fixtures.fresh_index(cfg)
-    scanner.scan(cfg, conn)
-    conn.close()
-    return cfg
+    cfg = fixtures.scanned_tree(tmp_path)
+    # The icon is nothing to do with scanning, so it goes on afterwards.
+    return replace(cfg, ui=replace(cfg.ui, icon=_logo(tmp_path / "logo.png")))
 
 
 def _client(cfg):

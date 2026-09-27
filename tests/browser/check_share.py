@@ -94,6 +94,19 @@ try:
                     raise SystemExit(f"{method}: {msg['error']}")
                 return msg.get("result", {})
 
+    def wait_for(expr, seconds=5.0):
+        """Poll rather than sleep: the waits were sized for the slowest case
+        and paid every time. The seconds are a ceiling, not a duration."""
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            try:
+                if js(expr):
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.05)
+        return False
+
     def js(expr):
         r = cmd("Runtime.evaluate", expression=expr, returnByValue=True,
                 awaitPromise=True)
@@ -109,7 +122,17 @@ try:
         r = cmd("Page.addScriptToEvaluateOnNewDocument", source=STUB % answer)
         load.prev = r.get("identifier")
         cmd("Page.navigate", url=URL)
-        time.sleep(2.0)
+        # Until the page is loaded and app.js has had its say about the menu.
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            try:
+                if js("document.readyState === 'complete' && "
+                      "!!document.getElementById('share-original')"):
+                    break
+            except Exception:
+                pass
+            time.sleep(0.05)
+        js("new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
 
     results = []
 
@@ -156,7 +179,7 @@ try:
     # And the label goes back to itself after a share, rather than being left
     # saying "Preparing" for the rest of the page's life.
     js("document.getElementById('share-original').click()")
-    time.sleep(2.0)
+    wait_for("window.__shared.length > 0", 8.0)
     after = js("document.querySelector('#share-original .label').textContent")
     still = js("document.getElementById('share-original').hidden")
     sent = js("window.__shared")
@@ -177,7 +200,7 @@ try:
     #    and it has to be smaller than the original, or it is pure loss. The
     #    first two bytes settle the format: no AVIF starts 0xFF 0xD8.
     js("window.__shared = []; document.getElementById('share-smaller').click()")
-    time.sleep(3.0)
+    wait_for("window.__shared.length > 0", 8.0)
     sent = js("window.__shared")
     copy = sent[0][0] if sent and sent[0] else {}
     magic = js("""(async () => {
@@ -202,7 +225,11 @@ try:
     cmd("Page.setDownloadBehavior", behavior="allow", downloadPath=DOWNLOADS)
     tier = js("JSON.parse(document.getElementById('nav-data').textContent).largeTier")
     js("document.getElementById('save-smaller').click()")
-    time.sleep(3.0)
+    want_name = f"p000-{tier}.jpg"
+    deadline = time.monotonic() + 8.0
+    while time.monotonic() < deadline and not (
+            Path(DOWNLOADS) / want_name).is_file():
+        time.sleep(0.05)
     files = sorted(p.name for p in Path(DOWNLOADS).iterdir()) if \
         Path(DOWNLOADS).is_dir() else []
     want = f"p000-{tier}.jpg"
