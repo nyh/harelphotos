@@ -22,13 +22,18 @@ have, which is why it is not used for either case.
 # Copyright (C) 2026 Nadav Har'El
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-import json, subprocess, time, urllib.request, sys
+import json, shutil, subprocess, time, urllib.request, sys
+from pathlib import Path
 
 import websocket
 
 PORT = 9340
 PROFILE = "/tmp/cdp-share"
+DOWNLOADS = "/tmp/cdp-share-downloads"
 URL = sys.argv[1]
+
+shutil.rmtree(DOWNLOADS, ignore_errors=True)
+Path(DOWNLOADS).mkdir(parents=True)
 
 # Replaces `share`/`canShare` before any of the page's own script runs, and
 # records what the page asked about so the probe itself can be checked.
@@ -111,10 +116,20 @@ try:
     # 1. A browser whose share sheet refuses files: no control at all.
     load("false")
     hidden = js("document.getElementById('share-original').hidden")
+    small = js("document.getElementById('share-smaller').hidden")
     asked = js("window.__asked")
-    print(f"refusing files: hidden={hidden}, canShare asked {len(asked)} time(s)")
+    print(f"refusing files: hidden={hidden}/{small}, "
+          f"canShare asked {len(asked)} time(s)")
     results.append(("hidden where files cannot be shared", hidden is True))
+    results.append(("smaller copy hidden there too", small is True))
     results.append(("asked canShare before deciding", len(asked) == 1))
+
+    # But saving one is something every browser can do, and is the whole
+    # reason the conversion does not live behind the share test: a reader on
+    # Firefox has no share sheet and must still be able to get the small JPEG.
+    saveable = js("document.getElementById('save-smaller').hidden")
+    print(f"                download offered anyway: {saveable is False}")
+    results.append(("smaller copy still downloadable", saveable is False))
 
     # The question has to be about a file that a share sheet would entertain:
     # named like the photograph, typed as an image, and not empty.
@@ -180,6 +195,24 @@ try:
     results.append(("smaller copy label restored",
                     label == "Share a smaller copy"))
 
+    # 4. The same copy, saved instead of shared. It has to arrive under a name
+    #    of its own: dropped beside the original in a downloads folder, two
+    #    files called the same thing are told apart only by the "(1)" the
+    #    browser adds, and by then you cannot tell which is which.
+    cmd("Page.setDownloadBehavior", behavior="allow", downloadPath=DOWNLOADS)
+    tier = js("JSON.parse(document.getElementById('nav-data').textContent).largeTier")
+    js("document.getElementById('save-smaller').click()")
+    time.sleep(3.0)
+    files = sorted(p.name for p in Path(DOWNLOADS).iterdir()) if \
+        Path(DOWNLOADS).is_dir() else []
+    want = f"p000-{tier}.jpg"
+    sizes = {p.name: p.stat().st_size for p in Path(DOWNLOADS).iterdir()} if \
+        Path(DOWNLOADS).is_dir() else {}
+    print(f"downloaded:      {files} (wanted {want!r}), sizes {sizes}")
+    results.append(("smaller copy saved under its own name", want in files))
+    results.append(("saved copy has the original's bytes in it",
+                    sizes.get(want, 0) > 1000))
+
     print()
     for name, ok in results:
         print(f"  {'PASS' if ok else 'FAIL'}  {name}")
@@ -190,3 +223,4 @@ finally:
         chrome.wait(timeout=10)
     except subprocess.TimeoutExpired:
         chrome.kill()
+    shutil.rmtree(DOWNLOADS, ignore_errors=True)

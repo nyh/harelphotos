@@ -568,14 +568,27 @@
      */
     var shareOriginal = null;
     var shareSmaller = null;
+    var saveSmaller = null;
     (function () {
       if (!nav.name) return;
-      if (typeof navigator.share !== "function" ||
-          typeof navigator.canShare !== "function") return;
-      try {
-        var probe = new File([new Uint8Array(1)], nav.name, { type: "image/jpeg" });
-        if (!navigator.canShare({ files: [probe] })) return;
-      } catch (e) { return; }
+
+      // Sharing a file is the part many browsers have not got. Saving one is
+      // the part they all have, so the smaller copy is offered as a download
+      // too and the machinery below sits outside this test -- a reader on
+      // Firefox, which has no share sheet at all, can still get the small
+      // JPEG. The clipboard is not the third way it looks like: it sanitizes
+      // what it is given and the only image format it must accept is PNG,
+      // which for these photographs averages 2.9 MB against the JPEG's 360 KB
+      // -- three quarters of the original, for the copy that exists to be
+      // small.
+      var canShareFiles = false;
+      if (typeof navigator.share === "function" &&
+          typeof navigator.canShare === "function") {
+        try {
+          var probe = new File([new Uint8Array(1)], nav.name, { type: "image/jpeg" });
+          canShareFiles = navigator.canShare({ files: [probe] });
+        } catch (e) { canShareFiles = false; }
+      }
 
       function sheet(file) {
         navigator.share({ files: [file] }).catch(function (err) {
@@ -606,12 +619,27 @@
         });
       }
 
-      /* Wire one of the two items, and hand back the function that runs it so
-       * the keyboard can reach it. `accept` is the header to ask with, and
-       * `convert` re-encodes what arrives; without either, the bytes are
-       * shared exactly as the server sent them.
+      /* Save a blob to disk under a name of our choosing. */
+      function saveAs(file) {
+        var url = URL.createObjectURL(file);
+        var a = document.createElement("a");
+        a.href = url;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        // Not revoked straight away: the download reads from the URL after
+        // the click returns, and pulling it out from under an unfinished one
+        // truncates the file.
+        setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+      }
+
+      /* Wire one item, and hand back the function that runs it so that the
+       * keyboard can reach it. `accept` is the header to ask with, `convert`
+       * re-encodes what arrives, `rename` decides what it is called, and
+       * `act` is what becomes of it.
        */
-      function wire(id, url, accept, convert) {
+      function wire(id, url, accept, convert, rename, act) {
         var item = document.getElementById(id);
         if (!item || !url) return null;
         var label = item.querySelector(".label");
@@ -621,7 +649,7 @@
 
         function run() {
           if (busy) return;
-          if (held) { sheet(held); return; }
+          if (held) { act(held); return; }
           busy = true;
           label.textContent = "Preparing…";
           fetch(url, {
@@ -634,8 +662,9 @@
             })
             .then(function (blob) { return convert ? convert(blob) : blob; })
             .then(function (blob) {
-              held = new File([blob], nav.name, { type: blob.type || "image/jpeg" });
-              sheet(held);
+              held = new File([blob], rename ? rename() : nav.name,
+                              { type: blob.type || "image/jpeg" });
+              act(held);
             })
             .catch(function () { toast("Could not prepare the photograph"); })
             .then(function () { busy = false; label.textContent = said; });
@@ -646,19 +675,35 @@
         return run;
       }
 
-      shareOriginal = wire("share-original", nav.full, null, null);
-      // No canvas to convert with is no smaller copy: sharing the AVIF as it
-      // stands would be the one thing this is here to avoid.
-      //
       // The formats named are the ones a canvas can decode, and naming them
       // matters: a `fetch` sends `Accept: */*` by default, which this server
       // reads as a client that listed nothing it can be sure of and answers
       // by transcoding to JPEG -- an encode on the small machine, and a copy
       // left on its disk, for bytes we were about to re-encode anyway. Asked
       // this way it hands over the stored derivative and does no work.
+      var SMALL_ACCEPT = "image/avif,image/webp,image/jpeg";
+
+      /* `IMG_1234.jpg` saved beside its original wants a name of its own, or
+       * the two are told apart only by the `(1)` a browser adds. The size is
+       * the thing that differs, so it is the thing in the name. Always .jpg,
+       * because that is what came out of the canvas whatever went in.
+       */
+      function smallName() {
+        var base = nav.name.replace(/\.[^.]*$/, "");
+        return base + (nav.largeTier ? "-" + nav.largeTier : "-small") + ".jpg";
+      }
+
+      if (canShareFiles) shareOriginal = wire("share-original", nav.full,
+                                              null, null, null, sheet);
+      // No canvas to convert with is no smaller copy at all: handing over the
+      // AVIF as it stands is the one thing these exist to avoid.
       if (typeof createImageBitmap === "function") {
-        shareSmaller = wire("share-smaller", nav.large,
-                            "image/avif,image/webp,image/jpeg", toJpeg);
+        if (canShareFiles) {
+          shareSmaller = wire("share-smaller", nav.large,
+                              SMALL_ACCEPT, toJpeg, smallName, sheet);
+        }
+        saveSmaller = wire("save-smaller", nav.large,
+                           SMALL_ACCEPT, toJpeg, smallName, saveAs);
       }
     })();
 
@@ -671,11 +716,17 @@
         case "ArrowRight": go(nav.next); break;
         case "Escape":     backToAlbum(); break;
         case "i": case "I": toggleInfo(); break;
-        case "d": case "D": go(nav.download); break;
-        // Only where the sheet exists: elsewhere the items are not shown
-        // either, and a key that silently does nothing is worse than no key.
-        case "s": case "S": if (!shareOriginal) return; shareOriginal(); break;
-        case "c": case "C": if (!shareSmaller) return; shareSmaller(); break;
+        // Shift is the smaller copy, throughout: `d` and `s` do the thing to
+        // the photograph as it is, `D` and `S` to a copy of it. The menu
+        // prints the letter in the case that works, which is the only place
+        // anybody will read it.
+        case "d": go(nav.download); break;
+        case "s": if (!shareOriginal) return; shareOriginal(); break;
+        // Only where the browser can do them: elsewhere the items are not
+        // shown either, and a key that silently does nothing is worse than no
+        // key at all.
+        case "D": if (!saveSmaller) return; saveSmaller(); break;
+        case "S": if (!shareSmaller) return; shareSmaller(); break;
         default: return;
       }
       e.preventDefault();

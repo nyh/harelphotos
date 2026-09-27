@@ -342,14 +342,22 @@ below.
 | **Esc** | back to the album, where you left it — or, if zoomed in, back out first |
 | **i** | camera, exposure, place and the rest |
 | **d** | download the original file |
-| **s** | share the original file, where the browser can (see below) |
-| **c** | share a smaller copy of it, likewise |
+| **D** | download a smaller copy of it — see [sharing the photograph itself](#sharing-the-photograph-itself) |
+| **s** | share the original file, where the browser can (same section) |
+| **S** | share a smaller copy of it, likewise |
 | **0** | zoom back out |
 | **double-click**, **Ctrl+wheel** | zoom in and out, around the pointer |
 | **swipe left / right** | previous and next photo — the photo follows your thumb |
 | **pinch** | zoom, around the point between your fingers |
 | **drag** | pan, while zoomed in |
 | **double-tap** | zoom in, and again to zoom back out |
+
+Shift means the smaller copy throughout: **d** and **s** act on the photograph
+as it is, **D** and **S** on a reduced copy of it. Each key is printed beside
+its own item in the menu, in the case that works, so there is nothing to
+remember. The share keys only exist where the browser can share a file at all,
+which is mostly phones — and a phone has no keyboard, so in practice they are
+there for a desktop that happens to have a share sheet.
 
 A sideways swipe moves the photograph with your thumb rather than waiting for
 you to let go, so you can see the gesture working and change your mind: drag
@@ -439,7 +447,22 @@ bytes to the phone's storage and leaves you to find them again.
 
 **Share a smaller copy**, below it, is usually the one you want. It sends the
 largest generated copy — 1600 pixels on the long side — as a JPEG, which is a
-few hundred kilobytes against the original's several megabytes. Keyboard **c**.
+few hundred kilobytes against the original's several megabytes. Keyboard **S**.
+
+**Download a smaller copy** saves that same JPEG to disk instead of handing it
+to a share sheet, under a name of its own — `IMG_1234-1600.jpg` — so it does
+not become the `(1)` beside an original you already saved. Keyboard **D**. It
+is there in every browser, which matters because sharing a file is the part
+many do not have: on Firefox it is the only way to get the small copy, and on
+a desktop it is often what you wanted anyway, to attach to something yourself.
+
+The clipboard would look like the obvious third option and is not. Writing an
+image to it goes through the browser's sanitizer, which re-encodes whatever it
+is given, and the only image format it is obliged to accept is PNG. Measured
+over photographs from this collection, a 1600-pixel PNG averages **2.9 MB**
+against the JPEG's **360 KB** — about three quarters of the original file, for
+the copy whose whole purpose is being small. So there is no "copy the picture"
+item; your browser's own right-click menu already offers one if you want it.
 
 Three reasons to prefer it:
 

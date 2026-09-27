@@ -36,6 +36,20 @@
               aria-controls="info">Photo information<span class="menu-key">i</span></button>
       <a class="menu-item" href="/orig/{{ photo.url_relpath }}" download
         >Download original<span class="menu-key">d</span></a>
+      {#- The smaller copy saved to disk rather than handed to a share sheet.
+          Sharing a file is the part many browsers have not got -- Firefox has
+          no share sheet at all -- and saving one is the part they all have,
+          so this is where a reader there can still get the small JPEG, to
+          attach to something themselves.
+
+          The clipboard is not the third way it looks like: it sanitizes what
+          it is given, the only image format it must accept is PNG, and a PNG
+          of one of these averages 2.9 MB against the JPEG's 360 KB. -#}
+      {%- if photo.tiers %}
+      <button type="button" id="save-smaller" class="menu-item" hidden
+        ><span class="label">Download a smaller copy</span
+        ><span class="menu-key">D</span></button>
+      {%- endif %}
       {#- The photograph itself, rather than a link to it. The share button in
           the bar sends this page's address, which is the right thing for
           somebody who can log in here and no use at all to somebody who
@@ -62,7 +76,7 @@
       {%- if photo.tiers %}
       <button type="button" id="share-smaller" class="menu-item" hidden
         ><span class="label">Share a smaller copy</span
-        ><span class="menu-key">c</span></button>
+        ><span class="menu-key">S</span></button>
       {%- endif %}
       {%- if viewer and viewer.is_admin and album %}
       {#- Admins only: this changes what everyone sees. A form rather than a
@@ -219,12 +233,16 @@
     is no more detail to find, only larger pixels.
 
     `name` is the name the shared copy arrives under in whatever application
-    receives it, so it is the file name on disk and not the page's title. -#}
+    receives it, so it is the file name on disk and not the page's title.
+
+    `largeTier` is the size `large` was generated at, which is what tells a
+    smaller copy saved beside its original apart from it by name. -#}
 {{ {"prev": prev.page_url if prev else none,
     "next": next.page_url if next else none,
     "album": album_url,
     "download": "/orig/" ~ photo.url_relpath,
     "name": photo.name,
+    "largeTier": (photo.tiers|max) if photo.tiers else none,
     "large": (photo|img_src(photo.tiers|max)) if photo.tiers else none,
     "full": "/orig/" ~ photo.url_relpath,
     "fullBytes": photo.size or 0,
