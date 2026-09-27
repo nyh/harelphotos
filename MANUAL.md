@@ -342,6 +342,7 @@ below.
 | **Esc** | back to the album, where you left it — or, if zoomed in, back out first |
 | **i** | camera, exposure, place and the rest |
 | **d** | download the original file |
+| **s** | share the original file, where the browser can (see below) |
 | **0** | zoom back out |
 | **double-click**, **Ctrl+wheel** | zoom in and out, around the pointer |
 | **swipe left / right** | previous and next photo — the photo follows your thumb |
@@ -423,6 +424,36 @@ genuinely nothing to offer and it stays hidden.
 A shared link is not a way around the login. Whoever opens it still needs an
 account and still has to be allowed to see that directory; without both they
 get the login page and then a 404, exactly as if they had typed the address.
+
+### Sharing the photograph itself
+
+**Share original**, in a photo's menu, hands the phone the *file* rather than a
+link to it — the full-size original, straight into a message, an email or
+whatever else is on the share sheet. That is the one to use for somebody who
+has no account here, since a link would only show them the login page. The
+keyboard shortcut is **s**.
+
+It is the natural companion to **Download original**, which saves the same
+bytes to the phone's storage and leaves you to find them again.
+
+The item is only there where the browser can do it. Sharing a *file* is a
+later addition to the same mechanism the share button uses, and not every
+browser that can send a link can send a file: it works in Chrome on Android
+and Safari on iOS, and in Chrome and Edge on Windows, but Firefox has no share
+sheet at all and nor does a desktop Linux browser. Rather than offer a control
+that does nothing, the site asks the browser first and shows the item only on
+a yes.
+
+The original has to be fetched before the share sheet can open, so on a slow
+connection there is a pause with the item reading "Preparing…" — a phone
+photograph is usually a few megabytes. If the picture is still on the screen
+from zooming all the way in, it is already in the browser's cache and the
+sheet opens at once.
+
+One wrinkle worth knowing, because it looks like a bug: a browser will only
+open a share sheet in response to a recent tap, and a download slow enough
+outlives that. When it happens the item says **"Ready — share again"** — the
+file is in hand by then, so the second tap opens the sheet immediately.
 
 A photo's date and place are shown next to its filename, without opening
 anything: they are what you want to know while looking at a photo, whereas the

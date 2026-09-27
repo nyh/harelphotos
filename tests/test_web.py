@@ -224,6 +224,29 @@ def test_download_original_is_an_attachment(client):
     assert "a.jpg" in r.headers["Content-Disposition"]
 
 
+def test_share_original_ships_hidden(client):
+    """It is revealed by app.js, and only where the share sheet takes files.
+
+    Sent visible it would be a control that does nothing in every browser
+    without one -- Firefox, and a desktop Linux browser -- which is worse than
+    not offering it, because the reader cannot tell the difference from a
+    failure of the site."""
+    body = client.get("/p/2019/01/a.jpg").get_data(as_text=True)
+    item = body.split('id="share-original"')[1].split(">")[0]
+    assert "hidden" in item
+
+
+def test_share_original_knows_the_file_name(client):
+    """The name the copy arrives under in whatever receives it."""
+    import json as _json
+    body = client.get("/p/2019/01/a.jpg").get_data(as_text=True)
+    nav = _json.loads(body.split('id="nav-data" type="application/json">')[1]
+                      .split("</script>")[0])
+    assert nav["name"] == "a.jpg"
+    # And the bytes it shares are the original, not a resized copy.
+    assert nav["full"] == "/orig/2019/01/a.jpg"
+
+
 def test_inline_original_is_not_an_attachment(client):
     """For a photo smaller than every tier: it must display, not download."""
     r = client.get("/i/orig/2019/01/a.jpg")

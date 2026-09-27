@@ -36,6 +36,19 @@
               aria-controls="info">Photo information<span class="menu-key">i</span></button>
       <a class="menu-item" href="/orig/{{ photo.url_relpath }}" download
         >Download original<span class="menu-key">d</span></a>
+      {#- The photograph itself, rather than a link to it. The share button in
+          the bar sends this page's address, which is the right thing for
+          somebody who can log in here and no use at all to somebody who
+          cannot; what a phone is usually being asked for is the picture, in
+          whichever application is doing the sending.
+
+          Ships hidden, as that button does, and app.js reveals it only where
+          the share sheet accepts files -- Firefox has no share sheet at all,
+          and a desktop Linux browser none either. The label is its own element
+          because it changes to "Preparing" while the original is fetched. -#}
+      <button type="button" id="share-original" class="menu-item" hidden
+        ><span class="label">Share original</span
+        ><span class="menu-key">s</span></button>
       {%- if viewer and viewer.is_admin and album %}
       {#- Admins only: this changes what everyone sees. A form rather than a
           link, so no amount of prefetching or link-scanning can trigger it.
@@ -188,11 +201,15 @@
 
     `fullW` and `fullH` are the original's real pixel dimensions, which decide
     how far zooming is worth going: past one image pixel per screen pixel there
-    is no more detail to find, only larger pixels. -#}
+    is no more detail to find, only larger pixels.
+
+    `name` is the name the shared copy arrives under in whatever application
+    receives it, so it is the file name on disk and not the page's title. -#}
 {{ {"prev": prev.page_url if prev else none,
     "next": next.page_url if next else none,
     "album": album_url,
     "download": "/orig/" ~ photo.url_relpath,
+    "name": photo.name,
     "large": (photo|img_src(photo.tiers|max)) if photo.tiers else none,
     "full": "/orig/" ~ photo.url_relpath,
     "fullBytes": photo.size or 0,

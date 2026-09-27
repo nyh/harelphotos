@@ -516,6 +516,79 @@
       if (wanted) showInfo(true);
     }
 
+    /* Hand the photograph itself to the phone's share sheet.
+     *
+     * The button in the bar shares this page's address; this shares the file.
+     * A link is the better thing to send somebody who can log in here, and
+     * nothing at all to somebody who cannot -- which is most people you would
+     * want to send a photograph to.
+     *
+     * `canShare` is the only honest way to ask whether files can be shared at
+     * all: `navigator.share` exists in places that take text and refuse
+     * files. It is asked about a stand-in carrying this photograph's name and
+     * type but one byte of content, because the question is about the browser
+     * rather than about this photograph -- and not an empty file, which a
+     * share sheet may refuse on its own account and which would then hide the
+     * control on exactly the devices it is for. The item ships hidden and is
+     * revealed only on a yes, so it is never a control that does nothing.
+     *
+     * The bytes have to be in hand before the sheet can open, and an original
+     * is megabytes over whatever connection a phone happens to have. That
+     * runs into the rule that `share` needs a recent tap to open at all: a
+     * download slow enough outlives the permission and the sheet is refused.
+     * So the file is kept once fetched, and a second tap opens the sheet
+     * immediately -- and often the first one does too, because zooming to
+     * full size has already put this exact URL in the browser's cache.
+     */
+    var shareOriginal = null;
+    (function () {
+      var item = document.getElementById("share-original");
+      if (!item || !nav.name || !nav.full) return;
+      if (typeof navigator.share !== "function" ||
+          typeof navigator.canShare !== "function") return;
+      try {
+        var probe = new File([new Uint8Array(1)], nav.name, { type: "image/jpeg" });
+        if (!navigator.canShare({ files: [probe] })) return;
+      } catch (e) { return; }
+
+      var label = item.querySelector(".label");
+      var said = label.textContent;
+      var held = null;                  // the File, once it has been fetched
+      var busy = false;
+
+      function sheet(file) {
+        navigator.share({ files: [file] }).catch(function (err) {
+          // Dismissing the sheet rejects too, and is not a failure.
+          if (err && err.name === "AbortError") return;
+          // The tap that started this has expired while the file was coming.
+          // It is here now, so say so rather than reporting a failure.
+          if (err && err.name === "NotAllowedError") toast("Ready — share again");
+          else toast("Could not share the photograph");
+        });
+      }
+
+      shareOriginal = function () {
+        if (busy) return;
+        if (held) { sheet(held); return; }
+        busy = true;
+        label.textContent = "Preparing…";
+        fetch(nav.full, { credentials: "same-origin" })
+          .then(function (r) {
+            if (!r.ok) throw new Error(r.status);
+            return r.blob();
+          })
+          .then(function (blob) {
+            held = new File([blob], nav.name, { type: blob.type || "image/jpeg" });
+            sheet(held);
+          })
+          .catch(function () { toast("Could not fetch the photograph"); })
+          .then(function () { busy = false; label.textContent = said; });
+      };
+
+      item.hidden = false;
+      item.addEventListener("click", shareOriginal);
+    })();
+
     document.addEventListener("keydown", function (e) {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       var tag = (e.target.tagName || "").toLowerCase();
@@ -526,6 +599,9 @@
         case "Escape":     backToAlbum(); break;
         case "i": case "I": toggleInfo(); break;
         case "d": case "D": go(nav.download); break;
+        // Only where the sheet exists: elsewhere the item is not shown either,
+        // and a key that silently does nothing is worse than no key.
+        case "s": case "S": if (!shareOriginal) return; shareOriginal(); break;
         default: return;
       }
       e.preventDefault();
@@ -1020,6 +1096,27 @@
     }, true);
   }
 
+  /* A line of text that says what just happened and then goes away, for the
+   * things that have no other visible result -- a link put on the clipboard,
+   * a photograph that could not be handed to the share sheet.
+   */
+  function toast(text) {
+    var el = document.createElement("div");
+    el.className = "toast";
+    el.setAttribute("role", "status");
+    el.textContent = text;
+    document.body.appendChild(el);
+    // Two frames: the element has to be in the document at opacity 0 before
+    // the class that raises it, or there is no transition to watch.
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { el.classList.add("show"); });
+    });
+    setTimeout(function () {
+      el.classList.remove("show");
+      setTimeout(function () { el.remove(); }, 300);
+    }, 1600);
+  }
+
   /* Sharing a link to the page you are looking at.
    *
    * Installed to a home screen the site runs with no address bar -- which is
@@ -1043,23 +1140,6 @@
     var canCopy = !!(navigator.clipboard && navigator.clipboard.writeText);
     if (!canShare && !canCopy) return;
     button.hidden = false;
-
-    function toast(text) {
-      var el = document.createElement("div");
-      el.className = "toast";
-      el.setAttribute("role", "status");
-      el.textContent = text;
-      document.body.appendChild(el);
-      // Two frames: the element has to be in the document at opacity 0 before
-      // the class that raises it, or there is no transition to watch.
-      requestAnimationFrame(function () {
-        requestAnimationFrame(function () { el.classList.add("show"); });
-      });
-      setTimeout(function () {
-        el.classList.remove("show");
-        setTimeout(function () { el.remove(); }, 300);
-      }, 1600);
-    }
 
     button.addEventListener("click", function () {
       var url = window.location.href;

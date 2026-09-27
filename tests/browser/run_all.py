@@ -63,12 +63,17 @@ CHECKS = [
     ("check_nav.py", "album"),
     ("check_scroll.py", "album"),
     ("check_retry.py", "album"),
+    ("check_share.py", "photo"),
     ("check_dark.py", "base+path"),
 ]
 
+# The first photograph of the album built below, for the checks that want one
+# rather than the grid.
+PHOTO = "/p/album/p000.jpg"
+
 # Left behind by the checks themselves, which each start their own browser.
 PROFILES = ["/tmp/cdp-profile-nav", "/tmp/cdp-profile", "/tmp/cdp-layout",
-            "/tmp/cdp-dark", "/tmp/cdp-retry"]
+            "/tmp/cdp-dark", "/tmp/cdp-retry", "/tmp/cdp-share"]
 
 
 def free_port() -> int:
@@ -151,7 +156,12 @@ def main() -> int:
         for name, style in CHECKS:
             if args.only and args.only not in name:
                 continue
-            argv = [album] if style == "album" else [base, "/a/album/"]
+            if style == "album":
+                argv = [album]
+            elif style == "photo":
+                argv = [base + PHOTO]
+            else:
+                argv = [base, "/a/album/"]
             print(f"──────── {name}")
             r = subprocess.run([sys.executable, str(HERE / name), *argv], cwd=ROOT)
             if r.returncode != 0:
