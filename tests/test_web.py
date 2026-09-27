@@ -236,6 +236,40 @@ def test_share_original_ships_hidden(client):
     assert "hidden" in item
 
 
+def test_sharing_a_smaller_copy_costs_the_server_no_transcode(client):
+    """app.js fetches a derivative and makes the JPEG in a canvas, so that the
+    server neither encodes anything nor keeps a copy.
+
+    It only works if the request is phrased so the server hands over what it
+    already has. A plain `fetch` sends `Accept: */*`, which this server reads
+    as a client that has promised nothing and answers by transcoding to JPEG
+    -- which is written into the derived tree and kept until the photograph
+    itself is deleted. That is the whole cost the browser-side conversion
+    exists to avoid, and nothing in the browser can detect it happening."""
+    cfg = client.harelphotos_cfg
+    # Any tier this photograph actually has; the fixture's are small, so the
+    # largest configured one was never generated for them.
+    tier = 512
+
+    def transcoded():
+        return sorted(p.name for p in cfg.derived_root.rglob("*.jpeg"))
+
+    assert transcoded() == [], "the fixture already had transcoded copies"
+
+    # What app.js asks: the formats a canvas can decode, AVIF among them.
+    r = client.get(f"/i/{tier}/2019/01/a.jpg",
+                   headers={"Accept": "image/avif,image/webp,image/jpeg"})
+    assert r.status_code == 200
+    assert r.mimetype == "image/avif"
+    assert transcoded() == [], "asking this way still made the server transcode"
+
+    # And the trap it is phrased to avoid, so the test says why it is phrased
+    # that way rather than merely that it is.
+    r = client.get(f"/i/{tier}/2019/01/a.jpg", headers={"Accept": "*/*"})
+    assert r.mimetype == "image/jpeg"
+    assert transcoded() == ["a.jpg.jpeg"]
+
+
 def test_share_original_knows_the_file_name(client):
     """The name the copy arrives under in whatever receives it."""
     import json as _json

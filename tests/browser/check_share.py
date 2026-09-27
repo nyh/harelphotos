@@ -36,7 +36,11 @@ STUB = """
   window.__asked = [];
   window.__shared = [];
   navigator.share = function (data) {
-    window.__shared.push((data && data.files || []).map(function (f) {
+    var files = (data && data.files) || [];
+    // Kept whole, so the bytes themselves can be looked at afterwards: a
+    // file's declared type is what the page put there, not what it holds.
+    window.__lastFile = files[0] || null;
+    window.__shared.push(files.map(function (f) {
       return { name: f.name, type: f.type, size: f.size };
     }));
     return Promise.resolve();
@@ -121,13 +125,18 @@ try:
     results.append(("probe is a non-empty image", probe.get("size", 0) > 0
                     and str(probe.get("type", "")).startswith("image/")))
 
-    # 2. A browser that accepts them: the control is there, and says so.
+    # 2. A browser that accepts them: the controls are there, and say so.
     load("true")
     hidden = js("document.getElementById('share-original').hidden")
     text = js("document.querySelector('#share-original .label').textContent")
-    print(f"accepting files: hidden={hidden}, label={text!r}")
+    small = js("document.getElementById('share-smaller').hidden")
+    stext = js("document.querySelector('#share-smaller .label').textContent")
+    print(f"accepting files: hidden={hidden}/{small}, "
+          f"labels={text!r}, {stext!r}")
     results.append(("shown where files can be shared", hidden is False))
     results.append(("labelled", text == "Share original"))
+    results.append(("smaller copy offered too", small is False))
+    results.append(("smaller copy labelled", stext == "Share a smaller copy"))
 
     # And the label goes back to itself after a share, rather than being left
     # saying "Preparing" for the rest of the page's life.
@@ -147,6 +156,29 @@ try:
                     got.get("name") == "p000.jpg"
                     and str(got.get("type", "")).startswith("image/")
                     and got.get("size", 0) > 1000))
+
+    # 3. The smaller copy. What leaves here has to be a JPEG whatever the
+    #    server stores, because it is going to somebody else's mail client --
+    #    and it has to be smaller than the original, or it is pure loss. The
+    #    first two bytes settle the format: no AVIF starts 0xFF 0xD8.
+    js("window.__shared = []; document.getElementById('share-smaller').click()")
+    time.sleep(3.0)
+    sent = js("window.__shared")
+    copy = sent[0][0] if sent and sent[0] else {}
+    magic = js("""(async () => {
+        const f = window.__lastFile;
+        if (!f) return null;
+        const b = new Uint8Array(await f.slice(0, 2).arrayBuffer());
+        return [b[0], b[1]];
+    })()""")
+    label = js("document.querySelector('#share-smaller .label').textContent")
+    print(f"smaller copy:    {copy}, first bytes {magic}")
+    results.append(("smaller copy is a JPEG",
+                    copy.get("type") == "image/jpeg" and magic == [255, 216]))
+    results.append(("smaller copy is smaller than the original",
+                    0 < copy.get("size", 0) < got.get("size", 1)))
+    results.append(("smaller copy label restored",
+                    label == "Share a smaller copy"))
 
     print()
     for name, ok in results:

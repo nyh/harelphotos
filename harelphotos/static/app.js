@@ -539,22 +539,43 @@
      * So the file is kept once fetched, and a second tap opens the sheet
      * immediately -- and often the first one does too, because zooming to
      * full size has already put this exact URL in the browser's cache.
+     *
+     * Two of them, the original and the largest generated copy.
+     *
+     * The copy goes as JPEG. What a share sheet hands over leaves this site
+     * for somebody whose software we know nothing about: a current phone can
+     * decode AVIF, but a mail client or a messaging app that does not know
+     * the type attaches it as a document instead of showing a picture, and
+     * the whole reason to send a file rather than a link is that the far end
+     * is outside our arrangements.
+     *
+     * The conversion happens here rather than on the server, which has the
+     * derived AVIF and could just as well transcode it. Doing it there leaves
+     * a JPEG on disk for every photograph anybody ever shared, kept until the
+     * photograph itself is deleted, and costs an encode on a machine chosen
+     * for being small. Doing it here costs nothing at either end, and fetches
+     * a third of the bytes: the stored AVIF rather than a JPEG made from it.
+     * It is the same operation either way -- decode, draw, encode at the same
+     * quality -- and safe because derivatives are converted to sRGB with
+     * their profiles stripped, which is exactly what a canvas assumes.
+     *
+     * It is a fetch of its own and not a cache hit on the copy already being
+     * looked at: this asks with an `Accept` of its own, and the response
+     * varies on that header, so it is a different entry.
+     *
+     * The copy carries none of the original's EXIF either -- no camera, no
+     * timestamp, no location -- because it is generated from pixels.
      */
     var shareOriginal = null;
+    var shareSmaller = null;
     (function () {
-      var item = document.getElementById("share-original");
-      if (!item || !nav.name || !nav.full) return;
+      if (!nav.name) return;
       if (typeof navigator.share !== "function" ||
           typeof navigator.canShare !== "function") return;
       try {
         var probe = new File([new Uint8Array(1)], nav.name, { type: "image/jpeg" });
         if (!navigator.canShare({ files: [probe] })) return;
       } catch (e) { return; }
-
-      var label = item.querySelector(".label");
-      var said = label.textContent;
-      var held = null;                  // the File, once it has been fetched
-      var busy = false;
 
       function sheet(file) {
         navigator.share({ files: [file] }).catch(function (err) {
@@ -567,26 +588,78 @@
         });
       }
 
-      shareOriginal = function () {
-        if (busy) return;
-        if (held) { sheet(held); return; }
-        busy = true;
-        label.textContent = "Preparing…";
-        fetch(nav.full, { credentials: "same-origin" })
-          .then(function (r) {
-            if (!r.ok) throw new Error(r.status);
-            return r.blob();
-          })
-          .then(function (blob) {
-            held = new File([blob], nav.name, { type: blob.type || "image/jpeg" });
-            sheet(held);
-          })
-          .catch(function () { toast("Could not fetch the photograph"); })
-          .then(function () { busy = false; label.textContent = said; });
-      };
+      /* Re-encode a fetched derivative as a JPEG, through a canvas. */
+      function toJpeg(blob) {
+        return createImageBitmap(blob).then(function (bmp) {
+          var canvas = document.createElement("canvas");
+          canvas.width = bmp.width;
+          canvas.height = bmp.height;
+          canvas.getContext("2d").drawImage(bmp, 0, 0);
+          bmp.close();
+          return new Promise(function (resolve, reject) {
+            canvas.toBlob(function (out) {
+              // A canvas that could not encode hands back null rather than
+              // throwing, and a null here would become an empty file.
+              if (out) resolve(out); else reject(new Error("toBlob"));
+            }, "image/jpeg", 0.82);
+          });
+        });
+      }
 
-      item.hidden = false;
-      item.addEventListener("click", shareOriginal);
+      /* Wire one of the two items, and hand back the function that runs it so
+       * the keyboard can reach it. `accept` is the header to ask with, and
+       * `convert` re-encodes what arrives; without either, the bytes are
+       * shared exactly as the server sent them.
+       */
+      function wire(id, url, accept, convert) {
+        var item = document.getElementById(id);
+        if (!item || !url) return null;
+        var label = item.querySelector(".label");
+        var said = label.textContent;
+        var held = null;                // the File, once it has been fetched
+        var busy = false;
+
+        function run() {
+          if (busy) return;
+          if (held) { sheet(held); return; }
+          busy = true;
+          label.textContent = "Preparing…";
+          fetch(url, {
+            credentials: "same-origin",
+            headers: accept ? { Accept: accept } : {}
+          })
+            .then(function (r) {
+              if (!r.ok) throw new Error(r.status);
+              return r.blob();
+            })
+            .then(function (blob) { return convert ? convert(blob) : blob; })
+            .then(function (blob) {
+              held = new File([blob], nav.name, { type: blob.type || "image/jpeg" });
+              sheet(held);
+            })
+            .catch(function () { toast("Could not prepare the photograph"); })
+            .then(function () { busy = false; label.textContent = said; });
+        }
+
+        item.hidden = false;
+        item.addEventListener("click", run);
+        return run;
+      }
+
+      shareOriginal = wire("share-original", nav.full, null, null);
+      // No canvas to convert with is no smaller copy: sharing the AVIF as it
+      // stands would be the one thing this is here to avoid.
+      //
+      // The formats named are the ones a canvas can decode, and naming them
+      // matters: a `fetch` sends `Accept: */*` by default, which this server
+      // reads as a client that listed nothing it can be sure of and answers
+      // by transcoding to JPEG -- an encode on the small machine, and a copy
+      // left on its disk, for bytes we were about to re-encode anyway. Asked
+      // this way it hands over the stored derivative and does no work.
+      if (typeof createImageBitmap === "function") {
+        shareSmaller = wire("share-smaller", nav.large,
+                            "image/avif,image/webp,image/jpeg", toJpeg);
+      }
     })();
 
     document.addEventListener("keydown", function (e) {
@@ -599,9 +672,10 @@
         case "Escape":     backToAlbum(); break;
         case "i": case "I": toggleInfo(); break;
         case "d": case "D": go(nav.download); break;
-        // Only where the sheet exists: elsewhere the item is not shown either,
-        // and a key that silently does nothing is worse than no key.
+        // Only where the sheet exists: elsewhere the items are not shown
+        // either, and a key that silently does nothing is worse than no key.
         case "s": case "S": if (!shareOriginal) return; shareOriginal(); break;
+        case "c": case "C": if (!shareSmaller) return; shareSmaller(); break;
         default: return;
       }
       e.preventDefault();

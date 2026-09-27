@@ -343,6 +343,7 @@ below.
 | **i** | camera, exposure, place and the rest |
 | **d** | download the original file |
 | **s** | share the original file, where the browser can (see below) |
+| **c** | share a smaller copy of it, likewise |
 | **0** | zoom back out |
 | **double-click**, **Ctrl+wheel** | zoom in and out, around the pointer |
 | **swipe left / right** | previous and next photo — the photo follows your thumb |
@@ -435,6 +436,32 @@ keyboard shortcut is **s**.
 
 It is the natural companion to **Download original**, which saves the same
 bytes to the phone's storage and leaves you to find them again.
+
+**Share a smaller copy**, below it, is usually the one you want. It sends the
+largest generated copy — 1600 pixels on the long side — as a JPEG, which is a
+few hundred kilobytes against the original's several megabytes. Keyboard **c**.
+
+Three reasons to prefer it:
+
+- **It is a JPEG, so it opens anywhere.** The copies on disk are AVIF, which
+  is smaller and which every current browser reads — but a mail client or a
+  messaging app that does not know the format attaches it as a document
+  instead of showing a picture, and the person you are sending to is by
+  definition outside all of this. The conversion happens in your own browser,
+  so the server neither re-encodes anything nor keeps a second copy of it.
+- **It carries no EXIF.** No camera, no timestamp, and in particular no GPS:
+  the copies are generated from the pixels and nothing is carried across. The
+  original has all of it, so **Share original** hands over the location the
+  photograph was taken at. That is often fine and occasionally not.
+- **It is a fraction of the size**, which matters on a phone's data and on
+  the far end. A messaging app would have re-compressed the original to
+  something like this anyway, after uploading all of it.
+
+Share original when the size or the metadata is the point — sending a picture
+to be printed, or to somebody who wants the file as it came off the camera.
+
+The item is not offered for a photograph small enough that no copy was ever
+generated, which is already as small as it gets.
 
 The item is only there where the browser can do it. Sharing a *file* is a
 later addition to the same mechanism the share button uses, and not every

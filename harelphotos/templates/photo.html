@@ -49,6 +49,21 @@
       <button type="button" id="share-original" class="menu-item" hidden
         ><span class="label">Share original</span
         ><span class="menu-key">s</span></button>
+      {#- The same thing at the largest size that was generated, which is what
+          you usually want to send somebody: a fraction of the bytes, and none
+          of the original's EXIF -- no camera, no timestamp, no location --
+          because the copies are made from the pixels and nothing is carried
+          across.
+
+          Needs a derivative to exist at all; a photograph smaller than every
+          tier has none, and is already as small as it gets. app.js turns it
+          into a JPEG in the browser and hides this if it cannot, so nothing
+          here depends on which formats the server is configured to serve. -#}
+      {%- if photo.tiers %}
+      <button type="button" id="share-smaller" class="menu-item" hidden
+        ><span class="label">Share a smaller copy</span
+        ><span class="menu-key">c</span></button>
+      {%- endif %}
       {%- if viewer and viewer.is_admin and album %}
       {#- Admins only: this changes what everyone sees. A form rather than a
           link, so no amount of prefetching or link-scanning can trigger it.
