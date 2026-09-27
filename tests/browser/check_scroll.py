@@ -20,7 +20,9 @@ from urllib.parse import urlparse
 
 import websocket
 
-PORT = 9333
+import cdp
+
+PORT = cdp.free_port()
 URL = sys.argv[1]
 
 chrome = subprocess.Popen(

@@ -27,7 +27,9 @@ from pathlib import Path
 
 import websocket
 
-PORT = 9340
+import cdp
+
+PORT = cdp.free_port()
 PROFILE = "/tmp/cdp-share"
 DOWNLOADS = "/tmp/cdp-share-downloads"
 URL = sys.argv[1]

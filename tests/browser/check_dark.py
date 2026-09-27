@@ -32,7 +32,9 @@ import urllib.request
 import websocket
 from PIL import Image
 
-PORT = 9360
+import cdp
+
+PORT = cdp.free_port()
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:5090"
 ALBUM = sys.argv[2] if len(sys.argv) > 2 else "/a/"
 PAGES = [("login", "/login"),

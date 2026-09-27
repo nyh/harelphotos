@@ -30,7 +30,9 @@ import urllib.request
 
 import websocket
 
-PORT = 9350
+import cdp
+
+PORT = cdp.free_port()
 URL = sys.argv[1]
 WIDTHS = (1280, 1024, 768, 390)
 

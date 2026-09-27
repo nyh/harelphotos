@@ -34,7 +34,9 @@ import urllib.request
 
 import websocket
 
-PORT = 9333
+import cdp
+
+PORT = cdp.free_port()
 URL = sys.argv[1]
 
 

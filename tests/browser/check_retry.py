@@ -24,7 +24,9 @@ import json, subprocess, time, urllib.request, sys
 
 import websocket
 
-PORT = 9337
+import cdp
+
+PORT = cdp.free_port()
 PROFILE = "/tmp/cdp-retry"
 URL = sys.argv[1]
 

@@ -33,7 +33,6 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
-import socket
 import subprocess
 import sys
 import tempfile
@@ -41,6 +40,11 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+# The checks live beside this file and share `cdp.py`; they find it because a
+# script's own directory leads sys.path, and this puts it there for us too.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from cdp import free_port                   # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
@@ -74,12 +78,6 @@ PHOTO = "/p/album/p000.jpg"
 # Left behind by the checks themselves, which each start their own browser.
 PROFILES = ["/tmp/cdp-profile-nav", "/tmp/cdp-profile", "/tmp/cdp-layout",
             "/tmp/cdp-dark", "/tmp/cdp-retry", "/tmp/cdp-share"]
-
-
-def free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
 
 
 def build_album(root: Path) -> Path:
